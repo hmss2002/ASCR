@@ -169,7 +169,7 @@ Some folders such as `outputs`, `checkpoints`, `logs`, model weights, and datase
 
 ### S1.0 Repository Bootstrap
 
-Status: in progress.
+Status: completed.
 
 Tasks:
 
@@ -362,20 +362,23 @@ Completed:
 - Created this README as the Stage 1 project-control document.
 - Created `.gitignore` for Python, ML, Slurm, artifact, data, secret, and environment files.
 - Initialized Git repository on branch `main`.
-- Configured GitHub remote `origin` for `https://github.com/hmss2002/ASCR.git`.
+- Configured GitHub remote `origin` with SSH URL `git@github.com:hmss2002/ASCR.git`.
+- Created initial commit `59589d3` with README, `.gitignore`, and source planning documents.
+- Pushed initial project-control files to GitHub `main`.
 
 In progress:
 
-- Push initial project-control files to GitHub `main`.
+- Stage 1 implementation batch S1.1-S1.6.
 
 Next implementation batch:
 
-1. Add `.gitignore`.
-2. Initialize Git and remote.
-3. Create dedicated `.venv` and environment scripts.
-4. Add Python package skeleton.
-5. Add schemas and grid projection tests.
+1. Create dedicated `.venv` and environment scripts.
+2. Add Python package skeleton.
+3. Add configs for Stage 1 Show-o local evaluation and cluster partition defaults.
+4. Add schemas and strict parser tests.
+5. Add grid overlay and 4x4-to-16x16 projection tests.
 6. Add mock Stage 1 loop before connecting real Show-o weights.
+7. Add Slurm job templates for `gpu_shared` debug and `gpu` longer runs.
 
 ## Environment Policy
 
