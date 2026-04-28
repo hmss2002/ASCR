@@ -3,6 +3,23 @@ import sys
 from pathlib import Path
 
 
+def _patch_transformers_resize_mean_resizing():
+    try:
+        from transformers import PreTrainedModel
+    except Exception:
+        return
+    original = PreTrainedModel.resize_token_embeddings
+    if getattr(original, "_ascr_mean_resizing_patched", False):
+        return
+
+    def resize_token_embeddings_compat(self, *args, **kwargs):
+        kwargs.setdefault("mean_resizing", False)
+        return original(self, *args, **kwargs)
+
+    resize_token_embeddings_compat._ascr_mean_resizing_patched = True
+    PreTrainedModel.resize_token_embeddings = resize_token_embeddings_compat
+
+
 class ShowONativeEngine:
     def __init__(self, repo_path="external/Show-o", checkpoint_path="models/show-o-512x512", vq_model_path="models/magvitv2", llm_model_path="models/phi-1_5", showo_config_path="configs/showo_local_512x512.yaml", device="cuda", image_size=512, token_grid_size=32, guidance_scale=4.0, generation_timesteps=18):
         self.repo_path = Path(repo_path)
@@ -31,6 +48,7 @@ class ShowONativeEngine:
         from omegaconf import OmegaConf
         from PIL import Image
         from transformers import AutoTokenizer
+        _patch_transformers_resize_mean_resizing()
         from models import MAGVITv2, Showo
         from models.sampling import get_mask_chedule, mask_by_random_topk
         from training.prompting_utils import UniversalPrompting, create_attention_mask_for_mmu, create_attention_mask_predict_next
