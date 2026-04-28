@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+#SBATCH --job-name=ascr-qwen36-compare
+#SBATCH --partition=gpu
+#SBATCH --gres=gpu:4
+#SBATCH --cpus-per-task=24
+#SBATCH --time=24:00:00
+#SBATCH --output=logs/%x-%j.out
+#SBATCH --error=logs/%x-%j.err
+
+set -euo pipefail
+cd /grp01/cds_bdai/JianyuZhang/ASCR
+mkdir -p logs outputs/benchmarks_qwen36
+source .venv/bin/activate
+
+export CONFIG=${CONFIG:-configs/stage1_showo_qwen36.yaml}
+export OUTPUT_DIR=${OUTPUT_DIR:-outputs/benchmarks_qwen36}
+export PROMPT=${PROMPT:-A red cube left of a blue sphere}
+export GENERATION_TIMESTEPS=${GENERATION_TIMESTEPS:-18}
+export GUIDANCE_SCALE=${GUIDANCE_SCALE:-4}
+export MAX_ITERATIONS=${MAX_ITERATIONS:-3}
+export HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-0}
+export TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-0}
+export HF_HUB_DISABLE_TELEMETRY=${HF_HUB_DISABLE_TELEMETRY:-1}
+export TOKENIZERS_PARALLELISM=${TOKENIZERS_PARALLELISM:-false}
+
+bash scripts/run_stage1_showo_compare.sh

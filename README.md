@@ -555,3 +555,22 @@ Current comparison evidence for prompt `A red cube left of a blue sphere`:
 - 18-step `gpu` run: baseline 0.9584777638352246, ASCR 0.9584777638352246, verdict `tie_or_unclear`.
 
 Interpretation: Stage 1 is now wired according to the original ASCR mechanism at the code-interface level: confidence block, `M_conf`, token confidence map, semantic mask, and continued native denoising are all explicit. The remaining blocker before making result claims is broader multi-prompt and multi-seed evaluation on prompts where the baseline visibly violates the prompt.
+
+### 2026-04-28 Qwen3.6 Evaluator Path
+
+Added a Qwen-VL evaluator backend for `Qwen/Qwen3.6-35B-A3B` as the stronger Stage 1 semantic judge. The backend lazily loads the HuggingFace image-text model, asks for strict JSON with 4x4 grid localization, normalizes common JSON variants, and converts the result into the existing `SemanticEvaluation` schema.
+
+New entry points:
+
+- `configs/stage1_showo_qwen36.yaml`: native Show-o generator plus Qwen3.6 evaluator.
+- `jobs/stage1_compare_qwen36_gpu.sbatch`: 4-GPU Slurm compare run using the Qwen3.6 config.
+- `requirements-qwen-vl.txt`: Qwen evaluator runtime dependencies.
+
+Environment status on 2026-04-28:
+
+- Installed Qwen evaluator dependencies into `.venv`: `transformers 4.57.6`, `accelerate 1.10.1`, `qwen-vl-utils 0.0.14`, `sentencepiece 0.2.1`, and related packages.
+- Verified `AutoModelForImageTextToText` import under the updated environment.
+- Verified Qwen3.6 processor image-tokenization works with `processor_use_fast: false`; fast preprocessing hits a `torch.compiler.is_compiling` compatibility issue under the current `torch 2.2.1` environment.
+- Verified HuggingFace model metadata for `Qwen/Qwen3.6-35B-A3B`; the repository is public and contains 26 safetensors shards.
+- The large Qwen3.6 weights are not committed and were not yet downloaded into `models/`; set `QWEN_MODEL_PATH=models/qwen3.6-35b-a3b` and `QWEN_LOCAL_FILES_ONLY=1` after downloading a local snapshot for offline Slurm runs.
+- Validation after adding this backend: syntax checks passed and `python -m unittest discover -s tests -v` reports 28 tests passed.

@@ -13,7 +13,8 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = []
-local-vlm = []
+local-vlm = ["pillow"]
+qwen-vl = ["transformers>=4.57.0", "accelerate>=1.1.0", "qwen-vl-utils>=0.0.14", "safetensors>=0.4.5", "sentencepiece>=0.2.0"]
 showo = []
 
 [project.scripts]
