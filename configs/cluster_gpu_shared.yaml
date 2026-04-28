@@ -1,0 +1,8 @@
+partition: gpu_shared
+job_name: ascr-stage1-debug
+time: "02:00:00"
+gpus: 1
+cpus_per_task: 8
+mem: 32G
+config: configs/stage1_showo_local.yaml
+output_dir: outputs/slurm_gpu_shared

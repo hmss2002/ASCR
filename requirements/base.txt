@@ -1,0 +1,2 @@
+# Stage 1 core is intentionally stdlib-only for bootstrap reliability.
+# Add pinned runtime packages here when the concrete local VLM and Show-o stack is selected.

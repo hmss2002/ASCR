@@ -1,0 +1,5 @@
+# Optional local VLM or LLM backend dependencies will be added after backend selection.
+# transformers
+# accelerate
+# torch
+# pillow

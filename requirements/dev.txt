@@ -1,0 +1,3 @@
+# Optional developer tools. The current tests run with stdlib unittest.
+# pytest>=7
+# ruff>=0.4

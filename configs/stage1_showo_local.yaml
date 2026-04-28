@@ -1,0 +1,32 @@
+stage: 1
+run_name: stage1_showo_local
+seed: 1234
+max_iterations: 3
+image_size: 256
+coarse_grid_size: 4
+token_grid_size: 16
+dilation: 1
+output_dir: outputs/stage1
+
+generator:
+  name: showo
+  repo_path: null
+  checkpoint_path: null
+  device: cuda
+
+evaluator:
+  name: local_vlm
+  model_path: null
+  device: cuda
+  strict_json: true
+  abstain_on_parse_error: true
+
+selector:
+  name: grid_semantic
+  max_selected_cells: 6
+  min_confidence: 0.0
+
+tracing:
+  enabled: true
+  save_hidden_states: false
+  save_confidence_maps: true

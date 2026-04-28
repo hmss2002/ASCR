@@ -181,7 +181,7 @@ Tasks:
 
 ### S1.1 Dedicated Environment
 
-Status: planned.
+Status: completed for the Stage 1 scaffold.
 
 Tasks:
 
@@ -199,7 +199,7 @@ Acceptance:
 
 ### S1.2 Core Data Contracts
 
-Status: planned.
+Status: completed for the Stage 1 scaffold.
 
 Tasks:
 
@@ -217,7 +217,7 @@ Acceptance:
 
 ### S1.3 Show-o Generator Adapter
 
-Status: planned.
+Status: scaffold completed; real Show-o backend pending checkpoint and repo paths.
 
 Tasks:
 
@@ -234,7 +234,7 @@ Acceptance:
 
 ### S1.4 Local Semantic Evaluator Adapter
 
-Status: planned.
+Status: scaffold completed; concrete local VLM/LLM backend pending model selection.
 
 Tasks:
 
@@ -251,7 +251,7 @@ Acceptance:
 
 ### S1.5 Grid Overlay and Projection
 
-Status: planned.
+Status: completed for the Stage 1 scaffold.
 
 Tasks:
 
@@ -267,7 +267,7 @@ Acceptance:
 
 ### S1.6 ASCR Loop Orchestration
 
-Status: planned.
+Status: completed for mock dry-run; real generator/evaluator execution pending.
 
 Tasks:
 
@@ -284,7 +284,7 @@ Acceptance:
 
 ### S1.7 Trace Collection for Stage 2
 
-Status: planned.
+Status: completed for JSONL Stage 1 traces.
 
 Tasks:
 
@@ -298,7 +298,7 @@ Acceptance:
 
 ### S1.8 Benchmark and Baselines
 
-Status: planned.
+Status: scaffold completed.
 
 Tasks:
 
@@ -334,7 +334,7 @@ Acceptance:
 
 ### S1.10 Documentation and Reproducibility
 
-Status: planned.
+Status: ongoing; initial docs and validation notes added.
 
 Tasks:
 
@@ -349,6 +349,24 @@ Acceptance:
 - A future reader can reproduce what was run from the artifact folder alone.
 
 ## Current Progress Log
+
+Latest Stage 1 scaffold status:
+
+- Added the Python package scaffold, config loader, schemas, artifact writer, trace writer, grid projection, grid overlay, prompt composer, selector, generator/evaluator registries, mock generator, mock evaluator, and real-backend placeholders.
+- Added CLI entry points: `ascr-stage1` and `ascr-train-selector`.
+- Added dedicated environment scripts and a legacy-pip compatible `setup.py` path for this cluster.
+- Created `.venv` and verified local development installation with `python setup.py develop`.
+- Added Stage 1 unit tests and verified `python -m unittest discover -s tests -v` passes 11 tests.
+- Verified mock Stage 1 dry-run creates a summary and trace under `outputs/smoke/...`.
+- Added Slurm templates for `gpu_shared` Stage 1 debug, `gpu` Stage 1 formal runs, and reserved multi-GPU Stage 2 selector training.
+- Added docs for Stage 1 design, cluster usage, benchmark planning, and data policy.
+
+Remaining Stage 1 integration work:
+
+- Wire the real Show-o backend once checkpoint/repository paths are chosen.
+- Wire the concrete local VLM/LLM evaluator backend once the model target is chosen.
+- Run a `gpu_shared` smoke job, then promote stable settings to the `gpu` formal run template.
+
 
 ### 2026-04-28
 
@@ -366,19 +384,18 @@ Completed:
 - Created initial commit `59589d3` with README, `.gitignore`, and source planning documents.
 - Pushed initial project-control files to GitHub `main`.
 
-In progress:
+Stage 1 scaffold validated:
 
-- Stage 1 implementation batch S1.1-S1.6.
+- Dedicated `.venv` created and local development install verified with `python setup.py develop`.
+- `python -m unittest discover -s tests -v` passed 11 tests.
+- Mock dry-run generated a summary and trace under `outputs/smoke/...`.
 
 Next implementation batch:
 
-1. Create dedicated `.venv` and environment scripts.
-2. Add Python package skeleton.
-3. Add configs for Stage 1 Show-o local evaluation and cluster partition defaults.
-4. Add schemas and strict parser tests.
-5. Add grid overlay and 4x4-to-16x16 projection tests.
-6. Add mock Stage 1 loop before connecting real Show-o weights.
-7. Add Slurm job templates for `gpu_shared` debug and `gpu` longer runs.
+1. Connect the real Show-o repository and checkpoint paths behind `GeneratorAdapter`.
+2. Connect the selected local VLM/LLM backend behind `SemanticEvaluator`.
+3. Run `jobs/stage1_debug_gpu_shared.sbatch` as the first Slurm smoke job.
+4. Promote stable settings to `jobs/stage1_run_gpu.sbatch` for longer formal Stage 1 runs.
 
 ## Environment Policy
 
@@ -437,10 +454,17 @@ Policy:
 The first runnable milestones will be:
 
 ```bash
+source .venv/bin/activate
 python -m ascr.cli.run_stage1 --help
-python -m ascr.cli.run_stage1 --config configs/stage1_showo_local.yaml --dry-run
-python -m pytest tests
+python -m unittest discover -s tests -v
+python -m ascr.cli.run_stage1 --dry-run --config configs/stage1_showo_local.yaml --output-dir outputs/smoke --prompt A-red-cube-left-of-a-blue-sphere
 ```
+
+Validated result on the cluster:
+
+- Unit tests: 11 passed.
+- Dry-run: `stop_reason` was `no_semantic_error` after one recorded iteration.
+- Example artifact root: `outputs/smoke/stage1_showo_local-20260428-034010-528555`.
 
 The first Slurm milestones will be:
 
@@ -449,7 +473,7 @@ sbatch jobs/stage1_debug_gpu_shared.sbatch
 sbatch jobs/stage1_run_gpu.sbatch
 ```
 
-These commands are not expected to work until the corresponding implementation files are added.
+These Slurm commands are ready as templates; run `gpu_shared` first for a smoke check before promoting to the formal `gpu` path.
 
 ## Stage 1 Acceptance Criteria
 

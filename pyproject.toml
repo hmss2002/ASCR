@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ascr"
+version = "0.1.0"
+description = "Alternating Semantic-Confidence Revision research prototype"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{name = "ASCR contributors"}]
+dependencies = []
+
+[project.optional-dependencies]
+dev = []
+local-vlm = []
+showo = []
+
+[project.scripts]
+ascr-stage1 = "ascr.cli.run_stage1:main"
+ascr-train-selector = "ascr.training.train_selector:main"
+
+[tool.setuptools.packages.find]
+include = ["ascr*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
