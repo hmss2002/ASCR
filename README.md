@@ -563,7 +563,8 @@ Added a Qwen-VL evaluator backend for `Qwen/Qwen3.6-35B-A3B` as the stronger Sta
 New entry points:
 
 - `configs/stage1_showo_qwen36.yaml`: native Show-o generator plus Qwen3.6 evaluator.
-- `jobs/stage1_compare_qwen36_gpu.sbatch`: 4-GPU Slurm compare run using the Qwen3.6 config.
+- `scripts/download_qwen36_snapshot.sh`: download the full Qwen3.6 snapshot to `models/qwen3.6-35b-a3b` from the login node.
+- `jobs/stage1_compare_qwen36_gpu.sbatch`: 4-GPU Slurm compare run using the local offline Qwen3.6 snapshot.
 - `requirements-qwen-vl.txt`: Qwen evaluator runtime dependencies.
 
 Environment status on 2026-04-28:
@@ -572,5 +573,5 @@ Environment status on 2026-04-28:
 - Verified `AutoModelForImageTextToText` import under the updated environment.
 - Verified Qwen3.6 processor image-tokenization works with `processor_use_fast: false`; fast preprocessing hits a `torch.compiler.is_compiling` compatibility issue under the current `torch 2.2.1` environment.
 - Verified HuggingFace model metadata for `Qwen/Qwen3.6-35B-A3B`; the repository is public and contains 26 safetensors shards.
-- The large Qwen3.6 weights are not committed and were not yet downloaded into `models/`; set `QWEN_MODEL_PATH=models/qwen3.6-35b-a3b` and `QWEN_LOCAL_FILES_ONLY=1` after downloading a local snapshot for offline Slurm runs.
+- The full Qwen3.6 snapshot is about 67 GiB and is not committed. Compute nodes cannot resolve `huggingface.co`, so download it first on the login node with `bash scripts/download_qwen36_snapshot.sh`; the Slurm job defaults to `QWEN_MODEL_PATH=models/qwen3.6-35b-a3b`, `QWEN_LOCAL_FILES_ONLY=1`, and offline HuggingFace mode.
 - Validation after adding this backend: syntax checks passed and `python -m unittest discover -s tests -v` reports 28 tests passed.

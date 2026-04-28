@@ -18,8 +18,14 @@ export PROMPT=${PROMPT:-A red cube left of a blue sphere}
 export GENERATION_TIMESTEPS=${GENERATION_TIMESTEPS:-18}
 export GUIDANCE_SCALE=${GUIDANCE_SCALE:-4}
 export MAX_ITERATIONS=${MAX_ITERATIONS:-3}
-export HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-0}
-export TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-0}
+export QWEN_MODEL_PATH=${QWEN_MODEL_PATH:-models/qwen3.6-35b-a3b}
+export QWEN_LOCAL_FILES_ONLY=${QWEN_LOCAL_FILES_ONLY:-1}
+if [[ "$QWEN_MODEL_PATH" != Qwen/* && ! -f "$QWEN_MODEL_PATH/config.json" ]]; then
+  echo "Missing local Qwen3.6 snapshot at $QWEN_MODEL_PATH. Run scripts/download_qwen36_snapshot.sh before submitting this job." >&2
+  exit 2
+fi
+export HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-1}
+export TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-1}
 export HF_HUB_DISABLE_TELEMETRY=${HF_HUB_DISABLE_TELEMETRY:-1}
 export TOKENIZERS_PARALLELISM=${TOKENIZERS_PARALLELISM:-false}
 
