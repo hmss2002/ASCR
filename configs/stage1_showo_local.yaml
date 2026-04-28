@@ -4,7 +4,7 @@ seed: 1234
 max_iterations: 3
 image_size: 512
 coarse_grid_size: 4
-token_grid_size: 16
+token_grid_size: 32
 dilation: 1
 output_dir: outputs/stage1
 
@@ -16,12 +16,17 @@ generator:
   vq_model_path: models/magvitv2
   llm_model_path: models/phi-1_5
   device: cuda
+  guidance_scale: 4
+  generation_timesteps: 18
+  seed: 1234
 
 evaluator:
   name: local_vlm
   model_path: null
   device: cuda
   strict_json: true
+  backend: heuristic
+  pass_threshold: 0.62
   abstain_on_parse_error: true
 
 selector:

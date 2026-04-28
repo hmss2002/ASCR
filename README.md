@@ -37,9 +37,9 @@ Default choices confirmed for this project:
 
 - First generator: Show-o.
 - Semantic evaluator: local VLM or local LLM/VLM stack first, with an adapter interface so the backend can be replaced.
-- Localization interface: visible 4x4 grid over the decoded 256x256 image.
-- Token grid target: 16x16 discrete image-token grid.
-- Reopening rule: project selected 4x4 cells to 16x16 token regions and use fixed one-token dilation for Stage 1.
+- Localization interface: visible 4x4 grid over the decoded 512x512 image.
+- Token grid target: 32x32 discrete image-token grid for the local Show-o 512 checkpoint.
+- Reopening rule: project selected 4x4 cells to 32x32 token regions and use fixed one-token dilation for Stage 1.
 - Error handling: conservative abstention is preferred over noisy localization.
 - Cluster target: Slurm jobs compatible with both `gpu_shared` and `gpu` partitions.
 
@@ -78,7 +78,7 @@ The practical Stage 1 loop is:
 4. Overlay a visible 4x4 grid to create `I_grid`.
 5. Ask a local semantic evaluator to compare `P_orig` and `I_grid`.
 6. Parse and validate structured semantic output `A_eval`.
-7. Convert selected 4x4 cells into a 16x16 token reopening mask.
+7. Convert selected 4x4 cells into a 32x32 token reopening mask.
 8. Apply fixed one-token dilation around selected token cells.
 9. Compose a correction-conditioned prompt `P_cur`.
 10. Reopen selected image-token regions and continue denoising.
@@ -217,7 +217,7 @@ Acceptance:
 
 ### S1.3 Show-o Generator Adapter
 
-Status: scaffold completed; real Show-o backend pending checkpoint and repo paths.
+Status: completed for local Show-o subprocess integration.
 
 Tasks:
 
@@ -234,7 +234,7 @@ Acceptance:
 
 ### S1.4 Local Semantic Evaluator Adapter
 
-Status: scaffold completed; concrete local VLM/LLM backend pending model selection.
+Status: completed for a local heuristic image evaluator; concrete VLM/LLM backend remains the formal-evaluation target.
 
 Tasks:
 
@@ -255,9 +255,9 @@ Status: completed for the Stage 1 scaffold.
 
 Tasks:
 
-- Implement visible 4x4 grid overlay for 256x256 images.
+- Implement visible 4x4 grid overlay for 512x512 images.
 - Add labels that match the evaluator coordinate vocabulary.
-- Implement projection from selected 4x4 cells to 16x16 token cells.
+- Implement projection from selected 4x4 cells to 32x32 token cells.
 - Add fixed one-token dilation for Stage 1.
 - Keep image size and token grid size configurable.
 
@@ -267,7 +267,7 @@ Acceptance:
 
 ### S1.6 ASCR Loop Orchestration
 
-Status: completed for mock dry-run; real generator/evaluator execution pending.
+Status: completed for mock dry-run and local Show-o execution.
 
 Tasks:
 
@@ -298,7 +298,7 @@ Acceptance:
 
 ### S1.8 Benchmark and Baselines
 
-Status: scaffold completed; original Show-o baseline local smoke validated.
+Status: completed for a fair single-prompt Show-o-vs-ASCR comparison CLI; formal multi-prompt benchmarks remain pending.
 
 Tasks:
 
@@ -315,7 +315,7 @@ Acceptance:
 
 ### S1.9 Cluster Jobs and Multi-GPU Readiness
 
-Status: planned.
+Status: completed for Stage 1 single-GPU jobs; multi-GPU is reserved for sweeps and Stage 2 training.
 
 Tasks:
 
@@ -360,7 +360,7 @@ Latest Stage 1 scaffold status:
 - Added CLI entry points: `ascr-stage1` and `ascr-train-selector`.
 - Added dedicated environment scripts and a legacy-pip compatible `setup.py` path for this cluster.
 - Created `.venv` and verified local development installation with `python setup.py develop`.
-- Added Stage 1 unit tests and verified `python -m unittest discover -s tests -v` passes 11 tests.
+- Added Stage 1 unit tests and verified `python -m unittest discover -s tests -v` passes 14 tests.
 - Verified mock Stage 1 dry-run creates a summary and trace under `outputs/smoke/...`.
 - Added Slurm templates for `gpu_shared` Stage 1 debug, `gpu` Stage 1 formal runs, and reserved multi-GPU Stage 2 selector training.
 - Added docs for Stage 1 design, cluster usage, benchmark planning, and data policy.
@@ -373,13 +373,13 @@ Latest local Show-o validation:
 - Installed project-local `rg` under `.venv/bin/rg` because the server has no system ripgrep.
 - Added local Show-o download and text-to-image helper scripts.
 - Verified direct original Show-o generation with 4-step smoke and 50-step baseline image runs; generated images are runtime artifacts under `outputs/` and ignored by Git.
-- Current generated images are original Show-o baseline samples only. ASCR improvement cannot be claimed until the real Show-o adapter and semantic evaluator are wired into the ASCR loop.
+- Current generated images now include original Show-o baselines and fair ASCR comparison artifacts. The current heuristic single-prompt comparison is tie_or_unclear, so improvement still cannot be claimed until a real VLM evaluator and broader benchmark are in place.
 
 Remaining Stage 1 integration work:
 
-- Wire the real Show-o backend behind `GeneratorAdapter` using the validated local paths.
-- Wire the concrete local VLM/LLM evaluator backend once the model target is chosen.
-- Run a `gpu_shared` smoke job, then promote stable settings to the `gpu` formal run template.
+- Replace the heuristic local evaluator with the selected concrete VLM/LLM backend before making scientific claims.
+- Run multi-prompt and multi-seed benchmark sweeps on `gpu_shared` for debug and `gpu` for formal results.
+- Add batch parallelism for prompt sweeps; single-image Show-o inference remains single-GPU.
 
 
 ### 2026-04-28
@@ -476,18 +476,18 @@ python -m ascr.cli.run_stage1 --dry-run --config configs/stage1_showo_local.yaml
 
 Validated result on the cluster:
 
-- Unit tests: 11 passed.
+- Unit tests: 14 passed.
 - Dry-run: `stop_reason` was `no_semantic_error` after one recorded iteration.
 - Example artifact root: `outputs/smoke/stage1_showo_local-20260428-034010-528555`.
 
-The first Slurm milestones will be:
+Current Slurm entry points include:
 
 ```bash
 sbatch jobs/stage1_debug_gpu_shared.sbatch
 sbatch jobs/stage1_run_gpu.sbatch
 ```
 
-These Slurm commands are ready as templates; run `gpu_shared` first for a smoke check before promoting to the formal `gpu` path.
+These Slurm commands are ready as templates; use `gpu_shared` for smoke checks and `gpu` for longer formal runs.
 
 ## Stage 1 Acceptance Criteria
 
@@ -497,7 +497,7 @@ Stage 1 is considered complete when all of the following are true:
 - A dry-run mode can run without Show-o weights using mock adapters.
 - The local semantic evaluator produces schema-validated JSON.
 - Malformed evaluator output triggers safe fallback rather than remasking.
-- 4x4 grid cells project correctly into 16x16 token masks.
+- 4x4 grid cells project correctly into 32x32 token masks.
 - Fixed one-token dilation is implemented and tested.
 - Each run saves decoded images, grid images, evaluator JSON, selected masks, prompts, configs, and trace JSONL.
 - A small benchmark subset can compare ASCR with core baselines.
@@ -515,3 +515,32 @@ These decisions are not blocking the repository bootstrap:
 ## Design Rule
 
 Keep Stage 1 simple enough to prove the mechanism, but structure it so Stage 2 and Stage 3 do not require rewriting the project. The grid and JSON interface are implementation devices for the first prototype, not the final scientific claim.
+
+## Latest Stage 1 Real Show-o Status
+
+Completed on 2026-04-28:
+
+- Wired the real local Show-o source at `external/Show-o` through `ShowOAdapter` using subprocess helper scripts.
+- Added a Show-o inpainting helper so ASCR can reopen selected image regions.
+- Updated the local Show-o Stage 1 config to 512x512 images and a 32x32 token grid, matching the 1024 VQ-token Show-o checkpoint.
+- Added a local heuristic evaluator for runnable Stage 1 smoke tests. It currently supports color presence and the `red left of blue` spatial relation; it is not a substitute for a formal VLM judge.
+- Added `ascr-compare-showo` / `python -m ascr.cli.compare_showo_ascr`, which now compares ASCR fairly by starting the ASCR loop from the same baseline Show-o image state.
+- Added compare scripts and Slurm job entries for both `gpu_shared` smoke and `gpu` longer runs.
+- Added a regression test to ensure a supplied initial baseline state is reused instead of generating a second random image.
+
+Validated commands:
+
+```bash
+source .venv/bin/activate
+python -m unittest discover -s tests -v
+GENERATION_TIMESTEPS=4 MAX_ITERATIONS=2 OUTPUT_DIR=outputs/benchmarks_smoke_fair bash scripts/run_stage1_showo_compare.sh
+GENERATION_TIMESTEPS=18 MAX_ITERATIONS=2 OUTPUT_DIR=outputs/benchmarks_fair bash scripts/run_stage1_showo_compare.sh
+```
+
+Current heuristic comparison evidence for prompt `A red cube left of a blue sphere`:
+
+- 4-step fair smoke: baseline 0.992772, ASCR 0.992772, verdict `tie_or_unclear`.
+- 18-step fair run: baseline 0.874457, ASCR 0.874457, verdict `tie_or_unclear`.
+- Strict-threshold diagnostic runs also returned `tie_or_unclear` on the sampled outputs.
+
+Interpretation: Stage 1 is now runnable end to end with local Show-o, but this simple heuristic single-prompt test does not prove an improvement over original Show-o. The honest next step is a real local VLM evaluator plus a multi-prompt, multi-seed benchmark focused on cases where the baseline output has measurable semantic errors.
