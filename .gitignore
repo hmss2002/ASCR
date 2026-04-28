@@ -1,0 +1,94 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+.ipynb_checkpoints/
+
+# Build and package outputs
+build/
+dist/
+*.egg-info/
+.eggs/
+site/
+
+# Local environments
+.venv/
+venv/
+env/
+ENV/
+.conda/
+
+# Local editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Secrets and local credentials
+.env
+.env.*
+*.env
+secrets/
+credentials/
+*.pem
+*.key
+*.token
+*.secret
+
+# Slurm and cluster outputs
+slurm-*.out
+*.out
+*.err
+*.log
+logs/
+
+# Runtime artifacts
+outputs/
+runs/
+artifacts/
+results/
+reports/generated/
+wandb/
+tensorboard/
+lightning_logs/
+
+# Data and benchmark payloads
+data/raw/
+data/processed/
+data/cache/
+data/downloads/
+datasets/
+
+# Model weights and checkpoints
+checkpoints/
+models/
+weights/
+pretrained/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.bin
+*.onnx
+
+# Generated media
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+*.mp4
+*.mov
+*.avi
+
+# Keep source planning docs and hand-written docs trackable
+!ASCR_Paper_Blueprint_EN.docx
+!ASCR_Workflow_Playbook_EN.docx
+!docs/**/*.md
+!data/README.md
