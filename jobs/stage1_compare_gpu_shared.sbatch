@@ -11,7 +11,7 @@ set -euo pipefail
 cd /grp01/cds_bdai/JianyuZhang/ASCR
 mkdir -p logs outputs/benchmarks_gpu_shared
 source .venv/bin/activate
-OUTPUT_DIR=${OUTPUT_DIR:-outputs/benchmarks_gpu_shared}
-GENERATION_TIMESTEPS=${GENERATION_TIMESTEPS:-4}
-MAX_ITERATIONS=${MAX_ITERATIONS:-2}
+export OUTPUT_DIR=${OUTPUT_DIR:-outputs/benchmarks_gpu_shared}
+export GENERATION_TIMESTEPS=${GENERATION_TIMESTEPS:-4}
+export MAX_ITERATIONS=${MAX_ITERATIONS:-2}
 bash scripts/run_stage1_showo_compare.sh

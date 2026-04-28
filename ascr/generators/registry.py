@@ -21,5 +21,7 @@ def build_generator(name, config):
             guidance_scale=float(generator_config.get('guidance_scale', 4.0)),
             generation_timesteps=int(generator_config.get('generation_timesteps', 18)),
             seed=int(config.get('seed', generator_config.get('seed', 1234))),
+            native_token_loop=bool(generator_config.get('native_token_loop', True)),
+            confidence_steps=int(generator_config.get('confidence_steps', 2)),
         )
     raise ValueError(f'Unknown generator: {name}')

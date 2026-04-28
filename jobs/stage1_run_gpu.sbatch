@@ -11,4 +11,4 @@ set -euo pipefail
 cd /grp01/cds_bdai/JianyuZhang/ASCR
 mkdir -p logs outputs/slurm_gpu
 source .venv/bin/activate
-python -m ascr.cli.run_stage1 --generator showo --evaluator local_vlm --config configs/stage1_showo_local.yaml --output-dir outputs/slurm_gpu
+python -m ascr.cli.run_stage1 --generator showo --evaluator showo_mmu --config configs/stage1_showo_local.yaml --output-dir outputs/slurm_gpu

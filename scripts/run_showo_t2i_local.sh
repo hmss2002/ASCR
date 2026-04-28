@@ -23,6 +23,9 @@ fi
 
 export WANDB_MODE=${WANDB_MODE:-offline}
 export TOKENIZERS_PARALLELISM=${TOKENIZERS_PARALLELISM:-false}
+export HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-1}
+export TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-1}
+export HF_HUB_DISABLE_TELEMETRY=${HF_HUB_DISABLE_TELEMETRY:-1}
 
 latest_before=$(find "${SHOWO_REPO_DIR}/wandb" -type f -name '*.png' -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2- || true)
 

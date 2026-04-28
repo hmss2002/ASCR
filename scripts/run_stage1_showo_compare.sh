@@ -8,6 +8,11 @@ if [ -d .venv ]; then
   source .venv/bin/activate
 fi
 
+export HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-1}
+export TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-1}
+export HF_HUB_DISABLE_TELEMETRY=${HF_HUB_DISABLE_TELEMETRY:-1}
+export TOKENIZERS_PARALLELISM=${TOKENIZERS_PARALLELISM:-false}
+
 PROMPT=${PROMPT:-A red cube left of a blue sphere}
 CONFIG=${CONFIG:-configs/stage1_showo_local.yaml}
 OUTPUT_DIR=${OUTPUT_DIR:-outputs/benchmarks}

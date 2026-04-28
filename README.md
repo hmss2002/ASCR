@@ -217,7 +217,7 @@ Acceptance:
 
 ### S1.3 Show-o Generator Adapter
 
-Status: completed for local Show-o subprocess integration.
+Status: completed for native local Show-o token-grid integration, with subprocess helper scripts retained as fallback.
 
 Tasks:
 
@@ -234,7 +234,7 @@ Acceptance:
 
 ### S1.4 Local Semantic Evaluator Adapter
 
-Status: completed for a local heuristic image evaluator; concrete VLM/LLM backend remains the formal-evaluation target.
+Status: completed for the local heuristic evaluator and the local Show-o MMU evaluator backend; GPU smoke validation completed through Slurm.
 
 Tasks:
 
@@ -298,14 +298,14 @@ Acceptance:
 
 ### S1.8 Benchmark and Baselines
 
-Status: completed for a fair single-prompt Show-o-vs-ASCR comparison CLI; formal multi-prompt benchmarks remain pending.
+Status: completed for a native Show-o-vs-ASCR comparison CLI that preserves the baseline token state; formal multi-prompt benchmarks remain pending.
 
 Tasks:
 
 - Create targeted benchmark prompt subsets for counting, spatial relations, color binding, negation, attribute binding, OCR, missing objects, and extra objects.
 - Add baseline runners for whole-image retry, best-of-N reranking, verifier-only selection, generic inpainting adapter, confidence-only remask, semantic-only repair, and ASCR alternating.
 - Add metrics for semantic improvement and collateral damage.
-- Compare original Show-o baseline and ASCR only after the real Show-o `GeneratorAdapter` and concrete evaluator are wired. Current direct Show-o samples are baseline evidence, not ASCR improvement evidence.
+- Compare original Show-o baseline and ASCR using the same prompt, seed, and native Show-o token state. The ASCR branch starts from the baseline state and only reopens semantic mask regions before continuing denoising.
 - For formal evaluation, run the same prompts, seeds, and settings for baseline and ASCR, then report prompt-category breakdowns and save paired artifacts.
 
 Acceptance:
@@ -373,11 +373,10 @@ Latest local Show-o validation:
 - Installed project-local `rg` under `.venv/bin/rg` because the server has no system ripgrep.
 - Added local Show-o download and text-to-image helper scripts.
 - Verified direct original Show-o generation with 4-step smoke and 50-step baseline image runs; generated images are runtime artifacts under `outputs/` and ignored by Git.
-- Current generated images now include original Show-o baselines and fair ASCR comparison artifacts. The current heuristic single-prompt comparison is tie_or_unclear, so improvement still cannot be claimed until a real VLM evaluator and broader benchmark are in place.
+- Native Show-o integration now exposes the image-token state `u`, token confidence map, confidence remask `M_conf`, semantic force-mask, and continued denoising path. A Show-o MMU semantic evaluator is wired locally with a compact yes/no prompt path, raw-output preservation, and fallback parsers for natural-language answers and grid-cell labels.
 
 Remaining Stage 1 integration work:
 
-- Replace the heuristic local evaluator with the selected concrete VLM/LLM backend before making scientific claims.
 - Run multi-prompt and multi-seed benchmark sweeps on `gpu_shared` for debug and `gpu` for formal results.
 - Add batch parallelism for prompt sweeps; single-image Show-o inference remains single-GPU.
 
@@ -520,27 +519,39 @@ Keep Stage 1 simple enough to prove the mechanism, but structure it so Stage 2 a
 
 Completed on 2026-04-28:
 
-- Wired the real local Show-o source at `external/Show-o` through `ShowOAdapter` using subprocess helper scripts.
-- Added a Show-o inpainting helper so ASCR can reopen selected image regions.
-- Updated the local Show-o Stage 1 config to 512x512 images and a 32x32 token grid, matching the 1024 VQ-token Show-o checkpoint.
-- Added a local heuristic evaluator for runnable Stage 1 smoke tests. It currently supports color presence and the `red left of blue` spatial relation; it is not a substitute for a formal VLM judge.
-- Added `ascr-compare-showo` / `python -m ascr.cli.compare_showo_ascr`, which now compares ASCR fairly by starting the ASCR loop from the same baseline Show-o image state.
-- Added compare scripts and Slurm job entries for both `gpu_shared` smoke and `gpu` longer runs.
-- Added a regression test to ensure a supplied initial baseline state is reused instead of generating a second random image.
+- Wired the real local Show-o source at `external/Show-o` through `ShowOAdapter`. The adapter now defaults to a native in-process token loop rather than only calling the official text-to-image/inpainting scripts.
+- Added `ShowONativeEngine`, which loads local Show-o, MAGVITv2, and Phi in process and exposes the discrete image-token state `u`, decoded token grid, token confidence map, and confidence remask `M_conf`.
+- Implemented semantic reopening as a direct force-mask on selected Show-o image-token positions followed by continued native denoising. The old subprocess T2I/inpainting helpers remain available as fallback paths.
+- Added `ShowOMMUEvaluator`, which asks local Show-o MMU to judge whether the gridded image violates the original prompt and to return a compact yes/no semantic judgment, with JSON and natural-language fallback parsing for 4x4 grid localization.
+- Updated `configs/stage1_showo_local.yaml` to use `native_token_loop: true`, `confidence_steps: 2`, and `evaluator.name: showo_mmu` by default.
+- Updated trace/artifact wiring so decoded images, grid images, evaluation JSON, reopening masks, token state JSON, and confidence JSON can be inspected per iteration.
+- Updated `python -m ascr.cli.compare_showo_ascr` so the baseline is generated as a native Show-o state and ASCR starts from that same token state instead of reconstructing a zero-token placeholder.
+- Added local-offline loading controls so ASCR uses `models/phi-1_5` directly and sets `HF_HUB_OFFLINE` / `TRANSFORMERS_OFFLINE` for Slurm runs.
+- Updated Slurm entry points for `gpu_shared` smoke and `gpu` longer runs.
 
-Validated commands:
+Validated commands before GPU smoke:
 
 ```bash
 source .venv/bin/activate
+python -m py_compile ascr/generators/showo_native.py ascr/generators/showo.py ascr/generators/registry.py ascr/evaluators/showo_mmu.py ascr/evaluators/registry.py ascr/core/loop.py ascr/cli/run_stage1.py ascr/cli/compare_showo_ascr.py
 python -m unittest discover -s tests -v
-GENERATION_TIMESTEPS=4 MAX_ITERATIONS=2 OUTPUT_DIR=outputs/benchmarks_smoke_fair bash scripts/run_stage1_showo_compare.sh
-GENERATION_TIMESTEPS=18 MAX_ITERATIONS=2 OUTPUT_DIR=outputs/benchmarks_fair bash scripts/run_stage1_showo_compare.sh
+git diff --check
 ```
 
-Current heuristic comparison evidence for prompt `A red cube left of a blue sphere`:
+Validation result so far:
 
-- 4-step fair smoke: baseline 0.992772, ASCR 0.992772, verdict `tie_or_unclear`.
-- 18-step fair run: baseline 0.874457, ASCR 0.874457, verdict `tie_or_unclear`.
-- Strict-threshold diagnostic runs also returned `tie_or_unclear` on the sampled outputs.
+- Unit tests: 24 passed.
+- Syntax checks: passed.
+- Diff whitespace check: passed.
+- Login-node CUDA check: `torch.cuda.is_available()` returned `False`; real Show-o validation must run through Slurm on a GPU node.
+- `gpu_shared` smoke job `66508` completed in 00:02:14 and produced `outputs/benchmarks_gpu_shared/showo_ascr-20260428-132546/comparison.json`.
+- Formal `gpu` compare job `66513` completed in 00:02:12 and produced `outputs/benchmarks/showo_ascr-20260428-132908/comparison.json`.
+- Offline-loading smoke job `66515` completed in 00:00:21 with no HuggingFace DNS retry. Show-o MMU probe job `66521` confirmed that the local MMU answers simple image questions and yes/no prompt checks. Final yes/no MMU smoke job `66523` completed in 00:00:11 with `stop_reason: no_semantic_error`, raw `showo_eval_text: " Yes"`, and token/confidence/trace artifacts written.
 
-Interpretation: Stage 1 is now runnable end to end with local Show-o, but this simple heuristic single-prompt test does not prove an improvement over original Show-o. The honest next step is a real local VLM evaluator plus a multi-prompt, multi-seed benchmark focused on cases where the baseline output has measurable semantic errors.
+Current comparison evidence for prompt `A red cube left of a blue sphere`:
+
+- 4-step `gpu_shared` smoke: baseline 1.0, ASCR 1.0, verdict `tie_or_unclear`.
+- Final exact yes/no Show-o MMU smoke `66523`: baseline 1.0, ASCR 1.0, `stop_reason: no_semantic_error`, native token state and confidence artifacts saved.
+- 18-step `gpu` run: baseline 0.9584777638352246, ASCR 0.9584777638352246, verdict `tie_or_unclear`.
+
+Interpretation: Stage 1 is now wired according to the original ASCR mechanism at the code-interface level: confidence block, `M_conf`, token confidence map, semantic mask, and continued native denoising are all explicit. The remaining blocker before making result claims is broader multi-prompt and multi-seed evaluation on prompts where the baseline visibly violates the prompt.

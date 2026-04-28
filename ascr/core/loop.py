@@ -60,6 +60,11 @@ class ASCRLoop:
                 "evaluation": str(evaluation_path),
                 "reopen_mask": str(mask_path),
             }
+            if getattr(state, "metadata", None):
+                if state.metadata.get("token_state_path"):
+                    artifact_paths["token_state"] = state.metadata["token_state_path"]
+                if state.metadata.get("confidence_path"):
+                    artifact_paths["confidence"] = state.metadata["confidence_path"]
             trace_writer.write(make_trace_record(iteration, prompt, current_prompt, evaluation, mask, artifact_paths))
             if evaluation.should_abstain:
                 stop_reason = "semantic_evaluator_abstained"

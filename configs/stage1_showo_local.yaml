@@ -19,14 +19,16 @@ generator:
   guidance_scale: 4
   generation_timesteps: 18
   seed: 1234
+  native_token_loop: true
+  confidence_steps: 2
 
 evaluator:
-  name: local_vlm
+  name: showo_mmu
   model_path: null
   device: cuda
   strict_json: true
-  backend: heuristic
-  pass_threshold: 0.62
+  backend: showo_mmu
+  max_new_tokens: 192
   abstain_on_parse_error: true
 
 selector:

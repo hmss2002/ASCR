@@ -16,7 +16,7 @@ def build_parser():
     parser.add_argument("--output-dir", default=None, help="Override output directory.")
     parser.add_argument("--max-iterations", type=int, default=None, help="Override max ASCR iterations.")
     parser.add_argument("--generator", default=None, choices=["mock", "showo"], help="Generator adapter.")
-    parser.add_argument("--evaluator", default=None, choices=["mock", "local_vlm", "local-vlm"], help="Semantic evaluator adapter.")
+    parser.add_argument("--evaluator", default=None, choices=["mock", "local_vlm", "local-vlm", "showo_mmu", "showo-mmu", "showo_vlm", "showo-vlm"], help="Semantic evaluator adapter.")
     parser.add_argument("--dry-run", action="store_true", help="Force mock generator and mock evaluator.")
     return parser
 
