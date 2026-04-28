@@ -18,6 +18,7 @@ dist/
 site/
 
 # Local environments
+.hf_home/
 .venv/
 venv/
 env/
@@ -92,3 +93,7 @@ pretrained/
 !ASCR_Workflow_Playbook_EN.docx
 !docs/**/*.md
 !data/README.md
+
+# Local third-party source checkouts
+external/*
+!external/README.md

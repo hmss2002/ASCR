@@ -2,7 +2,7 @@ stage: 1
 run_name: stage1_showo_local
 seed: 1234
 max_iterations: 3
-image_size: 256
+image_size: 512
 coarse_grid_size: 4
 token_grid_size: 16
 dilation: 1
@@ -10,8 +10,11 @@ output_dir: outputs/stage1
 
 generator:
   name: showo
-  repo_path: null
-  checkpoint_path: null
+  repo_path: external/Show-o
+  showo_config_path: configs/showo_local_512x512.yaml
+  checkpoint_path: models/show-o-512x512
+  vq_model_path: models/magvitv2
+  llm_model_path: models/phi-1_5
   device: cuda
 
 evaluator:

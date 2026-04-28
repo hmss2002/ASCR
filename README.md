@@ -298,13 +298,15 @@ Acceptance:
 
 ### S1.8 Benchmark and Baselines
 
-Status: scaffold completed.
+Status: scaffold completed; original Show-o baseline local smoke validated.
 
 Tasks:
 
 - Create targeted benchmark prompt subsets for counting, spatial relations, color binding, negation, attribute binding, OCR, missing objects, and extra objects.
 - Add baseline runners for whole-image retry, best-of-N reranking, verifier-only selection, generic inpainting adapter, confidence-only remask, semantic-only repair, and ASCR alternating.
 - Add metrics for semantic improvement and collateral damage.
+- Compare original Show-o baseline and ASCR only after the real Show-o `GeneratorAdapter` and concrete evaluator are wired. Current direct Show-o samples are baseline evidence, not ASCR improvement evidence.
+- For formal evaluation, run the same prompts, seeds, and settings for baseline and ASCR, then report prompt-category breakdowns and save paired artifacts.
 
 Acceptance:
 
@@ -325,8 +327,10 @@ Tasks:
 
 Recommended usage:
 
-- Use `gpu_shared` for short debugging, smoke tests, and interface validation.
-- Use `gpu` for formal runs, long benchmark sweeps, and future multi-GPU training.
+- Use the interactive GPU shell for dependency checks, import checks, and one or two image smoke tests.
+- Use `gpu_shared` for short debugging, smoke tests, and small prompt sweeps.
+- Use `gpu` for formal baseline-vs-ASCR runs, long benchmark sweeps, and future multi-GPU training.
+- Single-image Show-o inference does not need multi-GPU; multi-GPU becomes useful for parallel benchmark batches and Stage 2 training.
 
 Acceptance:
 
@@ -361,9 +365,19 @@ Latest Stage 1 scaffold status:
 - Added Slurm templates for `gpu_shared` Stage 1 debug, `gpu` Stage 1 formal runs, and reserved multi-GPU Stage 2 selector training.
 - Added docs for Stage 1 design, cluster usage, benchmark planning, and data policy.
 
+Latest local Show-o validation:
+
+- Cloned Show-o source into `external/Show-o/` and kept it out of Git.
+- Downloaded local model snapshots into `models/show-o-512x512`, `models/magvitv2`, and `models/phi-1_5`; these are ignored by Git.
+- Installed Show-o inference dependencies in `.venv` and verified PyTorch CUDA on the interactive L40S.
+- Installed project-local `rg` under `.venv/bin/rg` because the server has no system ripgrep.
+- Added local Show-o download and text-to-image helper scripts.
+- Verified direct original Show-o generation with 4-step smoke and 50-step baseline image runs; generated images are runtime artifacts under `outputs/` and ignored by Git.
+- Current generated images are original Show-o baseline samples only. ASCR improvement cannot be claimed until the real Show-o adapter and semantic evaluator are wired into the ASCR loop.
+
 Remaining Stage 1 integration work:
 
-- Wire the real Show-o backend once checkpoint/repository paths are chosen.
+- Wire the real Show-o backend behind `GeneratorAdapter` using the validated local paths.
 - Wire the concrete local VLM/LLM evaluator backend once the model target is chosen.
 - Run a `gpu_shared` smoke job, then promote stable settings to the `gpu` formal run template.
 
@@ -392,7 +406,7 @@ Stage 1 scaffold validated:
 
 Next implementation batch:
 
-1. Connect the real Show-o repository and checkpoint paths behind `GeneratorAdapter`.
+1. Wire the real Show-o repository and checkpoint paths behind `GeneratorAdapter`.
 2. Connect the selected local VLM/LLM backend behind `SemanticEvaluator`.
 3. Run `jobs/stage1_debug_gpu_shared.sbatch` as the first Slurm smoke job.
 4. Promote stable settings to `jobs/stage1_run_gpu.sbatch` for longer formal Stage 1 runs.
@@ -494,8 +508,7 @@ Stage 1 is considered complete when all of the following are true:
 
 These decisions are not blocking the repository bootstrap:
 
-- Exact Show-o repository and checkpoint path.
-- Exact local VLM/LLM backend for semantic evaluation.
+- Concrete local VLM/LLM evaluator backend and checkpoint path.
 - Final dataset storage path for large benchmarks.
 - Whether generated paper figures should be tracked as lightweight examples or stored only as artifacts.
 
