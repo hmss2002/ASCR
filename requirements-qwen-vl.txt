@@ -1,5 +1,21 @@
-transformers>=4.57.0
+# Qwen3.6/qwen3_5_moe requires native Transformers support.
+# Install torch and torchvision from a matching PyTorch CUDA wheel index on GPU clusters.
+transformers @ git+https://github.com/huggingface/transformers.git@fc91372258
+torch>=2.4
+torchvision>=0.19
 accelerate>=1.1.0
 qwen-vl-utils>=0.0.14
 safetensors>=0.4.5
 sentencepiece>=0.2.0
+pillow>=10.0.0
+av>=15.0.0
+
+# Native Show-o compare dependencies used by stage1_showo_qwen36.yaml.
+omegaconf==2.3.0
+einops==0.6.0
+diffusers==0.30.1
+webdataset==0.2.86
+timm==1.0.3
+ml-collections>=0.1.1
+jaxtyping==0.2.28
+typeguard==2.13.3

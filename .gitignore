@@ -19,6 +19,7 @@ site/
 
 # Local environments
 .hf_home/
+.deps/
 .venv/
 venv/
 env/

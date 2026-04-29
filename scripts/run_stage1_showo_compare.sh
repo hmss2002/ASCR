@@ -4,8 +4,9 @@ set -euo pipefail
 PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.."; pwd)
 cd "${PROJECT_ROOT}"
 
-if [ -d .venv ]; then
-  source .venv/bin/activate
+ASCR_ENV=${ASCR_ENV:-.venv}
+if [ -n "${ASCR_ENV}" ] && [ -d "${ASCR_ENV}" ]; then
+  source "${ASCR_ENV}/bin/activate"
 fi
 
 export HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-1}
@@ -20,7 +21,8 @@ GENERATION_TIMESTEPS=${GENERATION_TIMESTEPS:-18}
 GUIDANCE_SCALE=${GUIDANCE_SCALE:-4}
 MAX_ITERATIONS=${MAX_ITERATIONS:-2}
 
-python -m ascr.cli.compare_showo_ascr \
+PYTHON_BIN=${PYTHON_BIN:-python}
+"${PYTHON_BIN}" -m ascr.cli.compare_showo_ascr \
   --config "${CONFIG}" \
   --prompt "${PROMPT}" \
   --output-dir "${OUTPUT_DIR}" \

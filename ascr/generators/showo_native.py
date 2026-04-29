@@ -20,6 +20,34 @@ def _patch_transformers_resize_mean_resizing():
     PreTrainedModel.resize_token_embeddings = resize_token_embeddings_compat
 
 
+def _patch_phi_config_rope_theta():
+    try:
+        from transformers import AutoConfig
+        from transformers.models.phi.configuration_phi import PhiConfig
+    except Exception:
+        return
+    if not hasattr(PhiConfig, "rope_theta"):
+
+        def rope_theta(self):
+            rope_parameters = getattr(self, "rope_parameters", None) or getattr(self, "rope_scaling", None) or {}
+            return rope_parameters.get("rope_theta", 10000.0)
+
+        PhiConfig.rope_theta = property(rope_theta)
+    if getattr(AutoConfig, "_ascr_phi_showo_patched", False):
+        return
+    original = AutoConfig.from_pretrained
+
+    def from_pretrained_compat(cls, *args, **kwargs):
+        config = original(*args, **kwargs)
+        if isinstance(config, PhiConfig):
+            rope_scaling = getattr(config, "rope_scaling", None)
+            if isinstance(rope_scaling, dict) and "type" not in rope_scaling and rope_scaling.get("rope_type") == "default":
+                config.rope_scaling = None
+        return config
+
+    AutoConfig.from_pretrained = classmethod(from_pretrained_compat)
+    AutoConfig._ascr_phi_showo_patched = True
+
 class ShowONativeEngine:
     def __init__(self, repo_path="external/Show-o", checkpoint_path="models/show-o-512x512", vq_model_path="models/magvitv2", llm_model_path="models/phi-1_5", showo_config_path="configs/showo_local_512x512.yaml", device="cuda", image_size=512, token_grid_size=32, guidance_scale=4.0, generation_timesteps=18):
         self.repo_path = Path(repo_path)
@@ -49,6 +77,7 @@ class ShowONativeEngine:
         from PIL import Image
         from transformers import AutoTokenizer
         _patch_transformers_resize_mean_resizing()
+        _patch_phi_config_rope_theta()
         from models import MAGVITv2, Showo
         from models.sampling import get_mask_chedule, mask_by_random_topk
         from training.prompting_utils import UniversalPrompting, create_attention_mask_for_mmu, create_attention_mask_predict_next

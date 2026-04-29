@@ -10,7 +10,14 @@
 set -euo pipefail
 cd /grp01/cds_bdai/JianyuZhang/ASCR
 mkdir -p logs outputs/benchmarks_qwen36
-source .venv/bin/activate
+export ASCR_ENV=${ASCR_ENV:-.venv-qwen36}
+if [[ ! -x "$ASCR_ENV/bin/python" ]]; then
+  echo "Missing ASCR environment at $ASCR_ENV. Build the official Qwen3.6 evaluator env before submitting this job." >&2
+  exit 2
+fi
+source "$ASCR_ENV/bin/activate"
+export PYTHON_BIN="$ASCR_ENV/bin/python"
+"$PYTHON_BIN" -c "import torch, torchvision, transformers; print(transformers.__version__, transformers.__file__)"
 
 export CONFIG=${CONFIG:-configs/stage1_showo_qwen36.yaml}
 export OUTPUT_DIR=${OUTPUT_DIR:-outputs/benchmarks_qwen36}

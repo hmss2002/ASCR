@@ -52,6 +52,7 @@ def _build_qwen_vl(config):
         top_p=float(evaluator_config.get("top_p", 1.0)),
         attn_implementation=evaluator_config.get("attn_implementation"),
         processor_use_fast=_as_bool(evaluator_config.get("processor_use_fast", False), False),
+        enable_thinking=_as_bool(evaluator_config.get("enable_thinking", True), True),
     )
 
 

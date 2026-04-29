@@ -25,15 +25,16 @@ generator:
 evaluator:
   name: qwen_vl
   backend: qwen3_6
-  model_path: Qwen/Qwen3.6-35B-A3B
+  model_path: models/qwen3.6-35b-a3b
   device: cuda
   device_map: auto
   torch_dtype: bfloat16
   processor_use_fast: false
   trust_remote_code: true
-  local_files_only: false
+  local_files_only: true
   strict_json: true
-  max_new_tokens: 768
+  enable_thinking: true
+  max_new_tokens: 1536
   max_selected_cells: 6
   temperature: 0.0
   top_p: 1.0
