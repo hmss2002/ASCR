@@ -5,6 +5,32 @@ from ascr.core.schemas import SemanticEvaluation, parse_semantic_evaluation
 from ascr.evaluators.base import SemanticEvaluator
 
 
+_QWEN35_MOE_CONFIG_CLASS = None
+
+
+def _register_qwen35_moe_compat():
+    global _QWEN35_MOE_CONFIG_CLASS
+    try:
+        from transformers import AutoConfig
+        from transformers.models.auto.configuration_auto import CONFIG_MAPPING
+        from transformers.models.qwen3_vl_moe.configuration_qwen3_vl_moe import Qwen3VLMoeConfig
+        from transformers.models.qwen3_vl_moe.modeling_qwen3_vl_moe import Qwen3VLMoeForConditionalGeneration
+    except Exception as exc:
+        raise RuntimeError("Qwen3.6 qwen3_5_moe checkpoints need a Transformers build with qwen3_vl_moe support") from exc
+    if _QWEN35_MOE_CONFIG_CLASS is not None:
+        return Qwen3VLMoeForConditionalGeneration
+    if "qwen3_5_moe" in CONFIG_MAPPING.keys():
+        return None
+    if _QWEN35_MOE_CONFIG_CLASS is None:
+        _QWEN35_MOE_CONFIG_CLASS = type("Qwen35MoeCompatConfig", (Qwen3VLMoeConfig,), {"model_type": "qwen3_5_moe"})
+        try:
+            AutoConfig.register("qwen3_5_moe", _QWEN35_MOE_CONFIG_CLASS)
+        except ValueError as exc:
+            if "already registered" not in str(exc):
+                raise
+    return Qwen3VLMoeForConditionalGeneration
+
+
 def _extract_json_object(text):
     cleaned = str(text or "").strip()
     if cleaned.startswith("```"):
@@ -151,7 +177,7 @@ class QwenVLEvaluator(SemanticEvaluator):
             return
         try:
             import torch
-            from transformers import AutoProcessor
+            from transformers import AutoConfig, AutoProcessor
             try:
                 from transformers import AutoModelForImageTextToText as AutoModel
             except ImportError:
@@ -170,6 +196,12 @@ class QwenVLEvaluator(SemanticEvaluator):
                 model_kwargs["torch_dtype"] = getattr(torch, self.torch_dtype)
         if self.attn_implementation:
             model_kwargs["attn_implementation"] = self.attn_implementation
+        compat_model_class = _register_qwen35_moe_compat()
+        config = AutoConfig.from_pretrained(self.model_path, trust_remote_code=self.trust_remote_code, local_files_only=self.local_files_only)
+        if compat_model_class is not None and getattr(config, "model_type", None) == "qwen3_5_moe":
+            processor_kwargs["config"] = config
+            model_kwargs["config"] = config
+            AutoModel = compat_model_class
         self._processor = AutoProcessor.from_pretrained(self.model_path, **processor_kwargs)
         self._model = AutoModel.from_pretrained(self.model_path, **model_kwargs)
         if not self.device_map and self.device:
