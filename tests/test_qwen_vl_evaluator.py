@@ -49,6 +49,10 @@ class QwenVLEvaluatorHelpersTest(unittest.TestCase):
         self.assertEqual(payload["regions"][0]["error_type"], "attribute")
         self.assertEqual(payload["correction_instruction"], "make the object red")
 
+    def test_normalize_payload_caps_cells_round_robin(self):
+        payload = _normalize_payload({"has_error": True, "regions": [{"cells": ["A1", "A2", "A3"], "reason": "first"}, {"cells": ["B1", "B2"], "reason": "second"}, {"cells": ["C1"], "reason": "third"}]}, max_selected_cells=4)
+        self.assertEqual([region["cells"] for region in payload["regions"]], [["A1", "A2"], ["B1"], ["C1"]])
+
     def test_question_demands_json_only(self):
         question = QwenVLEvaluator()._build_question("A red cube left of a blue sphere")
         self.assertNotIn("/no_think", question)
@@ -65,14 +69,21 @@ class QwenVLEvaluatorHelpersTest(unittest.TestCase):
         self.assertIn("Do not include prose or analysis", question)
 
     def test_evaluate_repairs_non_json_response(self):
-        evaluator = QwenVLEvaluator(model_path="local-qwen", strict_json=True)
+        evaluator = QwenVLEvaluator(model_path="local-qwen", strict_json=True, max_new_tokens=64, repair_max_new_tokens=512)
         raw_text = "The red cube is to the left of the blue sphere, so the image satisfies the prompt."
         repaired = json.dumps({"has_error": False, "summary": "The relation is correct.", "regions": [], "correction_instruction": ""})
-        with patch.object(evaluator, "_generate_text", side_effect=[raw_text, repaired]):
+        with patch.object(evaluator, "_generate_text", side_effect=[raw_text, repaired]) as generate:
             evaluation = evaluator.evaluate("A red cube left of a blue sphere", Path(__file__), 0)
         self.assertFalse(evaluation.should_abstain)
         self.assertFalse(evaluation.has_error)
         self.assertEqual(evaluation.raw["qwen_vl_json_text"], repaired)
+        self.assertEqual(generate.call_args_list[1].kwargs["max_new_tokens"], 512)
+
+    def test_repair_budget_defaults_to_at_least_384(self):
+        evaluator = QwenVLEvaluator(max_new_tokens=128)
+        self.assertEqual(evaluator.repair_max_new_tokens, 384)
+        evaluator = QwenVLEvaluator(max_new_tokens=768)
+        self.assertEqual(evaluator.repair_max_new_tokens, 768)
 
     def test_apply_chat_template_enables_thinking_by_default(self):
         class Processor:
@@ -152,9 +163,10 @@ class QwenVLEvaluatorHelpersTest(unittest.TestCase):
         self.assertTrue(evaluator.enable_thinking)
 
     def test_registry_can_disable_qwen_thinking(self):
-        evaluator = build_evaluator("local_vlm", {"coarse_grid_size": 4, "image_size": 512, "evaluator": {"backend": "qwen3_6", "model_path": "Qwen/Qwen3.6-35B-A3B", "enable_thinking": False}})
+        evaluator = build_evaluator("local_vlm", {"coarse_grid_size": 4, "image_size": 512, "evaluator": {"backend": "qwen3_6", "model_path": "Qwen/Qwen3.6-35B-A3B", "enable_thinking": False, "repair_max_new_tokens": 512}})
         self.assertIsInstance(evaluator, QwenVLEvaluator)
         self.assertFalse(evaluator.enable_thinking)
+        self.assertEqual(evaluator.repair_max_new_tokens, 512)
 
 
 if __name__ == "__main__":

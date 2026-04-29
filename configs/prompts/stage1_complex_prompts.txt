@@ -1,0 +1,5 @@
+# Complex prompts intended to make Stage One ASCR evaluator feedback useful.
+A red cube on the left, a blue sphere on the right, a small green cone above the sphere, and a yellow cylinder behind the cube on a plain white table.
+Three objects on a gray surface: a red cube in front of a blue sphere, a green cone to the far right, and a short shadow falling toward the viewer.
+A symmetric arrangement with a blue sphere in the center, two small red cubes on the left and right, a yellow pyramid above, and a green cylinder below.
+A glossy blue sphere partly occluding a red cube, with a tiny purple star on top of the cube and an orange ring behind both objects.

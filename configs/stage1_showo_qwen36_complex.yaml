@@ -1,0 +1,53 @@
+stage: 1
+run_name: stage1_showo_qwen36_complex
+seed: 1234
+max_iterations: 4
+ascr_start_mode: partial
+image_size: 512
+coarse_grid_size: 4
+token_grid_size: 32
+dilation: 1
+output_dir: outputs/stage1_qwen36_complex
+
+generator:
+  name: showo
+  repo_path: external/Show-o
+  showo_config_path: configs/showo_local_512x512.yaml
+  checkpoint_path: models/show-o-512x512
+  vq_model_path: models/magvitv2
+  llm_model_path: models/phi-1_5
+  device: cuda
+  guidance_scale: 4
+  generation_timesteps: 18
+  seed: 1234
+  native_token_loop: true
+  confidence_steps: 3
+
+evaluator:
+  name: qwen_vl
+  backend: qwen3_6
+  model_path: models/qwen3.6-35b-a3b
+  device: cuda
+  device_map: auto
+  torch_dtype: bfloat16
+  processor_use_fast: false
+  trust_remote_code: true
+  local_files_only: true
+  strict_json: true
+  enable_thinking: true
+  max_new_tokens: 128
+  repair_max_new_tokens: 512
+  max_selected_cells: 8
+  temperature: 0.0
+  top_p: 1.0
+  attn_implementation: null
+
+selector:
+  name: grid_semantic
+  max_selected_cells: 8
+  min_confidence: 0.0
+
+tracing:
+  enabled: true
+  save_hidden_states: false
+  save_confidence_maps: true

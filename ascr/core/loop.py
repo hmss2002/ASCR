@@ -38,6 +38,7 @@ class ASCRLoop:
         trace_writer = TraceWriter(artifacts.root / "trace.jsonl")
         state = initial_state if initial_state is not None else self.generator.initialize(prompt, artifacts)
         records = []
+        evaluator_calls = 0
         stop_reason = "max_iterations"
         current_prompt = prompt
         final_decoded_image = None
@@ -51,6 +52,7 @@ class ASCRLoop:
             create_grid_overlay(decoded_path, grid_path, image_size=self.config.image_size, grid_size=self.config.coarse_grid_size)
             final_grid_image = str(grid_path)
             evaluation = self.evaluator.evaluate(prompt, str(grid_path), iteration, current_prompt=current_prompt)
+            evaluator_calls += 1
             mask = self.selector.select(evaluation)
             evaluation_path = artifacts.write_json(f"iterations/{iteration:03d}/evaluation.json", evaluation.to_dict())
             mask_path = artifacts.write_json(f"iterations/{iteration:03d}/reopen_mask.json", mask.to_dict())
@@ -65,15 +67,17 @@ class ASCRLoop:
                     artifact_paths["token_state"] = state.metadata["token_state_path"]
                 if state.metadata.get("confidence_path"):
                     artifact_paths["confidence"] = state.metadata["confidence_path"]
-            trace_writer.write(make_trace_record(iteration, prompt, current_prompt, evaluation, mask, artifact_paths))
             if evaluation.should_abstain:
                 stop_reason = "semantic_evaluator_abstained"
+                trace_writer.write(make_trace_record(iteration, prompt, current_prompt, evaluation, mask, artifact_paths))
                 break
             if not evaluation.has_error:
                 stop_reason = "no_semantic_error"
+                trace_writer.write(make_trace_record(iteration, prompt, current_prompt, evaluation, mask, artifact_paths))
                 break
             if not mask.any():
                 stop_reason = "no_actionable_region"
+                trace_writer.write(make_trace_record(iteration, prompt, current_prompt, evaluation, mask, artifact_paths))
                 break
             current_prompt = compose_correction_prompt(prompt, evaluation)
             correction_prompt_path = artifacts.write_text(f"iterations/{iteration:03d}/correction_prompt.txt", current_prompt)
@@ -84,11 +88,14 @@ class ASCRLoop:
                 "evaluation_summary": evaluation.summary,
                 "correction_prompt": str(correction_prompt_path),
             })
+            trace_writer.write(make_trace_record(iteration, prompt, current_prompt, evaluation, mask, artifact_paths))
             state = self.generator.reopen_and_continue(state, mask, current_prompt, artifacts)
         summary = {
             "prompt": prompt,
             "stop_reason": stop_reason,
             "iterations_recorded": len(records),
+            "evaluator_calls": evaluator_calls,
+            "revision_records": records,
             "artifact_root": str(artifacts.root),
             "trace_path": str(artifacts.root / "trace.jsonl"),
             "final_decoded_image": final_decoded_image,

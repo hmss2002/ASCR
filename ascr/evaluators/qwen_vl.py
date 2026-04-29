@@ -136,6 +136,43 @@ def _normalize_region(region, default_reason="semantic mismatch", default_error_
     return normalized
 
 
+def _budget_regions(regions, max_selected_cells):
+    normalized_regions = [region for region in regions if isinstance(region, dict)]
+    budget = int(max_selected_cells)
+    if budget <= 0:
+        return []
+    selected = [[] for _ in normalized_regions]
+    seen = set()
+    selected_count = 0
+    while selected_count < budget:
+        changed = False
+        for index, region in enumerate(normalized_regions):
+            for cell in _as_list(region.get("cells")):
+                try:
+                    key = json.dumps(cell, sort_keys=True)
+                except TypeError:
+                    key = str(cell).upper()
+                if key in seen:
+                    continue
+                selected[index].append(cell)
+                seen.add(key)
+                selected_count += 1
+                changed = True
+                break
+            if selected_count >= budget:
+                break
+        if not changed:
+            break
+    budgeted = []
+    for region, cells in zip(normalized_regions, selected):
+        if not cells:
+            continue
+        budgeted_region = dict(region)
+        budgeted_region["cells"] = cells
+        budgeted.append(budgeted_region)
+    return budgeted
+
+
 def _normalize_payload(payload, max_selected_cells=6):
     if not isinstance(payload, dict):
         raise ValueError("Qwen-VL JSON payload must be an object")
@@ -164,7 +201,8 @@ def _normalize_payload(payload, max_selected_cells=6):
         if candidates:
             regions = candidates
     if regions is not None:
-        normalized["regions"] = [_normalize_region(region, normalized["summary"], normalized.get("error_type", "semantic")) for region in _as_list(regions)]
+        normalized_regions = [_normalize_region(region, normalized["summary"], normalized.get("error_type", "semantic")) for region in _as_list(regions)]
+        normalized["regions"] = _budget_regions(normalized_regions, max_selected_cells)
     if "correction_instruction" not in normalized:
         normalized["correction_instruction"] = str(normalized.get("suggested_fix", "Regenerate the selected grid cells so the image satisfies the original prompt while preserving correct content."))
     normalized["max_selected_cells"] = int(max_selected_cells)
@@ -172,7 +210,7 @@ def _normalize_payload(payload, max_selected_cells=6):
 
 
 class QwenVLEvaluator(SemanticEvaluator):
-    def __init__(self, model_path="Qwen/Qwen3.6-35B-A3B", device="cuda", device_map="auto", torch_dtype="bfloat16", trust_remote_code=True, local_files_only=False, strict_json=True, grid_size=4, image_size=512, max_new_tokens=768, max_selected_cells=6, temperature=0.0, top_p=1.0, attn_implementation=None, processor_use_fast=False, enable_thinking=True):
+    def __init__(self, model_path="Qwen/Qwen3.6-35B-A3B", device="cuda", device_map="auto", torch_dtype="bfloat16", trust_remote_code=True, local_files_only=False, strict_json=True, grid_size=4, image_size=512, max_new_tokens=768, repair_max_new_tokens=None, max_selected_cells=6, temperature=0.0, top_p=1.0, attn_implementation=None, processor_use_fast=False, enable_thinking=True):
         self.model_path = model_path
         self.device = device
         self.device_map = device_map
@@ -183,6 +221,7 @@ class QwenVLEvaluator(SemanticEvaluator):
         self.grid_size = int(grid_size)
         self.image_size = int(image_size)
         self.max_new_tokens = int(max_new_tokens)
+        self.repair_max_new_tokens = int(repair_max_new_tokens) if repair_max_new_tokens is not None else max(self.max_new_tokens, 384)
         self.max_selected_cells = int(max_selected_cells)
         self.temperature = float(temperature)
         self.top_p = float(top_p)
@@ -206,7 +245,7 @@ class QwenVLEvaluator(SemanticEvaluator):
             except ValueError:
                 if not self.strict_json:
                     raise
-                json_text = self._generate_text(self._build_json_repair_question(original_prompt, raw_text), grid_image_path, enable_thinking=False)
+                json_text = self._generate_text(self._build_json_repair_question(original_prompt, raw_text), grid_image_path, enable_thinking=False, max_new_tokens=self.repair_max_new_tokens)
                 raw_payload = _extract_json_object(json_text)
             payload = _normalize_payload(raw_payload, max_selected_cells=self.max_selected_cells)
             evaluation = parse_semantic_evaluation(payload, grid_size=self.grid_size, max_selected_cells=self.max_selected_cells)
@@ -291,7 +330,7 @@ class QwenVLEvaluator(SemanticEvaluator):
                 raise
             return self._processor.apply_chat_template(messages, **kwargs)
 
-    def _generate_text(self, question, image_path, enable_thinking=None):
+    def _generate_text(self, question, image_path, enable_thinking=None, max_new_tokens=None):
         self._load()
         from PIL import Image
         image = Image.open(image_path).convert("RGB")
@@ -303,7 +342,7 @@ class QwenVLEvaluator(SemanticEvaluator):
             inputs = self._processor(text=[text], images=[image], return_tensors="pt")
         if hasattr(inputs, "to"):
             inputs = inputs.to(self._first_device())
-        generation_kwargs = {"max_new_tokens": self.max_new_tokens, "do_sample": self.temperature > 0}
+        generation_kwargs = {"max_new_tokens": int(max_new_tokens or self.max_new_tokens), "do_sample": self.temperature > 0}
         if self.temperature > 0:
             generation_kwargs["temperature"] = self.temperature
             generation_kwargs["top_p"] = self.top_p
@@ -317,16 +356,19 @@ class QwenVLEvaluator(SemanticEvaluator):
         return self._processor.batch_decode(trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0].strip()
 
     def _build_json_repair_question(self, original_prompt, previous_text):
+        previous_text = " ".join(str(previous_text).split())[:1800]
         return " ".join([
             "/no_think",
-            "Convert the previous semantic evaluation into exactly one valid JSON object.",
-            "Your entire response must be only that JSON object.",
+            "Return one compact valid JSON object for this semantic evaluation.",
+            "Your entire response must be only the JSON object and must end with }.",
             f"Original text-to-image prompt: {original_prompt}",
             "Do not add prose, markdown, code fences, or analysis.",
-            'Use this schema: {"has_error": boolean, "summary": string, "regions": array, "correction_instruction": string}.',
-            "If the image satisfies the prompt, set has_error to false and regions to an empty array.",
-            f"If there is an error, include at most {self.max_selected_cells} regions; each region needs cells, reason, confidence, error_type, and action set to reopen.",
-            "Previous evaluation text:",
+            "Use this schema: {\"has_error\": boolean, \"summary\": string, \"regions\": array, \"correction_instruction\": string}.",
+            "Keep summary under 25 words and each reason under 10 words.",
+            "If the image satisfies the prompt, return has_error false and regions [].",
+            f"If there is an error, select at most {self.max_selected_cells} total grid cells across all regions; each region needs cells, reason, confidence, error_type, and action set to reopen.",
+            "If the previous text is incomplete, finish the judgment instead of copying it.",
+            "Previous incomplete evaluation text:",
             previous_text,
         ])
 

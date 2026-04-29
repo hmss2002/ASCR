@@ -47,6 +47,7 @@ def _build_qwen_vl(config):
         grid_size=int(config.get("coarse_grid_size", evaluator_config.get("grid_size", 4))),
         image_size=int(config.get("image_size", evaluator_config.get("image_size", 512))),
         max_new_tokens=int(evaluator_config.get("max_new_tokens", 768)),
+        repair_max_new_tokens=evaluator_config.get("repair_max_new_tokens"),
         max_selected_cells=int(evaluator_config.get("max_selected_cells", config.get("selector", {}).get("max_selected_cells", 6))),
         temperature=float(evaluator_config.get("temperature", 0.0)),
         top_p=float(evaluator_config.get("top_p", 1.0)),
