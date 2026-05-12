@@ -1,5 +1,6 @@
 import argparse
 import copy
+import gc
 import json
 import re
 from datetime import datetime
@@ -74,6 +75,16 @@ def apply_cli_overrides(config, args):
         generator_config["guidance_scale"] = args.guidance_scale
     return config
 
+
+def release_cuda_cache():
+    gc.collect()
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
+    except Exception:
+        pass
 
 def trace_record_count(trace_path):
     try:
@@ -208,6 +219,7 @@ def main(argv=None):
         result["result_path"] = str(result_path)
         result["markdown_path"] = str(markdown_path)
         results.append(result)
+        release_cuda_cache()
     if len(results) == 1:
         print(json.dumps({"result_path": results[0]["result_path"], "markdown_path": results[0]["markdown_path"], "comparison": results[0]["comparison"]}, indent=2, sort_keys=True))
     else:
