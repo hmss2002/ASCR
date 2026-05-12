@@ -29,6 +29,7 @@ evaluator:
   model_path: models/qwen3.6-35b-a3b
   device: cuda
   device_map: auto
+  max_memory: 40GiB
   torch_dtype: bfloat16
   processor_use_fast: false
   trust_remote_code: true

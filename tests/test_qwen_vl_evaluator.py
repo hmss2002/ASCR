@@ -155,6 +155,25 @@ class QwenVLEvaluatorHelpersTest(unittest.TestCase):
         with self._patch_torchvision_available(True):
             _require_native_qwen35_moe_support(NativeConfig(), AutoModel)
 
+    def test_qwen_max_memory_builds_cuda_map(self):
+        class Cuda:
+            @staticmethod
+            def is_available():
+                return True
+
+            @staticmethod
+            def device_count():
+                return 2
+
+        torch = type("Torch", (), {"cuda": Cuda})()
+        evaluator = QwenVLEvaluator(max_memory="40GiB")
+        self.assertEqual(evaluator._model_max_memory(torch), {0: "40GiB", 1: "40GiB"})
+
+    def test_registry_passes_qwen_max_memory(self):
+        evaluator = build_evaluator("qwen", {"coarse_grid_size": 4, "image_size": 512, "evaluator": {"model_path": "Qwen/Qwen3.6-35B-A3B", "max_memory": "39GiB"}})
+        self.assertIsInstance(evaluator, QwenVLEvaluator)
+        self.assertEqual(evaluator.max_memory, "39GiB")
+
     def test_registry_accepts_qwen_backend(self):
         evaluator = build_evaluator("local_vlm", {"coarse_grid_size": 4, "image_size": 512, "evaluator": {"backend": "qwen3_6", "model_path": "Qwen/Qwen3.6-35B-A3B"}})
         self.assertIsInstance(evaluator, QwenVLEvaluator)

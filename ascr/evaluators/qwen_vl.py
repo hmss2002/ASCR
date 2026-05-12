@@ -1,3 +1,4 @@
+import gc
 import json
 from pathlib import Path
 
@@ -210,7 +211,7 @@ def _normalize_payload(payload, max_selected_cells=6):
 
 
 class QwenVLEvaluator(SemanticEvaluator):
-    def __init__(self, model_path="Qwen/Qwen3.6-35B-A3B", device="cuda", device_map="auto", torch_dtype="bfloat16", trust_remote_code=True, local_files_only=False, strict_json=True, grid_size=4, image_size=512, max_new_tokens=768, repair_max_new_tokens=None, max_selected_cells=6, temperature=0.0, top_p=1.0, attn_implementation=None, processor_use_fast=False, enable_thinking=True):
+    def __init__(self, model_path="Qwen/Qwen3.6-35B-A3B", device="cuda", device_map="auto", torch_dtype="bfloat16", trust_remote_code=True, local_files_only=False, strict_json=True, grid_size=4, image_size=512, max_new_tokens=768, repair_max_new_tokens=None, max_selected_cells=6, temperature=0.0, top_p=1.0, attn_implementation=None, processor_use_fast=False, enable_thinking=True, max_memory=None):
         self.model_path = model_path
         self.device = device
         self.device_map = device_map
@@ -228,6 +229,7 @@ class QwenVLEvaluator(SemanticEvaluator):
         self.attn_implementation = attn_implementation
         self.processor_use_fast = bool(processor_use_fast)
         self.enable_thinking = enable_thinking
+        self.max_memory = max_memory
         self._processor = None
         self._model = None
         self._torch = None
@@ -290,6 +292,9 @@ class QwenVLEvaluator(SemanticEvaluator):
         model_kwargs["config"] = config
         if self.device_map:
             model_kwargs["device_map"] = self.device_map
+        max_memory = self._model_max_memory(torch)
+        if max_memory:
+            model_kwargs["max_memory"] = max_memory
         if self.torch_dtype:
             if self.torch_dtype == "auto":
                 model_kwargs["torch_dtype"] = "auto"
@@ -319,6 +324,32 @@ class QwenVLEvaluator(SemanticEvaluator):
         except Exception:
             return self.device
 
+    def _model_max_memory(self, torch):
+        if not self.max_memory:
+            return None
+        if isinstance(self.max_memory, dict):
+            return self.max_memory
+        value = str(self.max_memory).strip()
+        if not value:
+            return None
+        if value.isdigit():
+            value = f"{value}GiB"
+        if hasattr(torch, "cuda") and torch.cuda.is_available():
+            return {index: value for index in range(torch.cuda.device_count())}
+        return {"cpu": value}
+
+    def _release_generation_cache(self):
+        gc.collect()
+        torch = self._torch
+        if torch is None or not hasattr(torch, "cuda"):
+            return
+        try:
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.ipc_collect()
+        except Exception:
+            pass
+
     def _apply_chat_template(self, messages, enable_thinking=None, **kwargs):
         thinking = self.enable_thinking if enable_thinking is None else enable_thinking
         if thinking is None:
@@ -332,28 +363,46 @@ class QwenVLEvaluator(SemanticEvaluator):
 
     def _generate_text(self, question, image_path, enable_thinking=None, max_new_tokens=None):
         self._load()
-        from PIL import Image
-        image = Image.open(image_path).convert("RGB")
-        messages = [{"role": "user", "content": [{"type": "image", "image": image}, {"type": "text", "text": question}]}]
+        image = None
+        messages = None
+        inputs = None
+        generated_ids = None
+        trimmed = None
         try:
-            inputs = self._apply_chat_template(messages, enable_thinking=enable_thinking, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt")
-        except Exception:
-            text = self._apply_chat_template(messages, enable_thinking=enable_thinking, tokenize=False, add_generation_prompt=True)
-            inputs = self._processor(text=[text], images=[image], return_tensors="pt")
-        if hasattr(inputs, "to"):
-            inputs = inputs.to(self._first_device())
-        generation_kwargs = {"max_new_tokens": int(max_new_tokens or self.max_new_tokens), "do_sample": self.temperature > 0}
-        if self.temperature > 0:
-            generation_kwargs["temperature"] = self.temperature
-            generation_kwargs["top_p"] = self.top_p
-        tokenizer = getattr(self._processor, "tokenizer", None)
-        if tokenizer is not None and getattr(tokenizer, "eos_token_id", None) is not None:
-            generation_kwargs["pad_token_id"] = tokenizer.eos_token_id
-        with self._torch.inference_mode():
-            generated_ids = self._model.generate(**inputs, **generation_kwargs)
-        input_length = inputs["input_ids"].shape[-1]
-        trimmed = generated_ids[:, input_length:]
-        return self._processor.batch_decode(trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0].strip()
+            from PIL import Image
+            image = Image.open(image_path).convert("RGB")
+            messages = [{"role": "user", "content": [{"type": "image", "image": image}, {"type": "text", "text": question}]}]
+            try:
+                inputs = self._apply_chat_template(messages, enable_thinking=enable_thinking, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt")
+            except Exception:
+                text = self._apply_chat_template(messages, enable_thinking=enable_thinking, tokenize=False, add_generation_prompt=True)
+                inputs = self._processor(text=[text], images=[image], return_tensors="pt")
+            if hasattr(inputs, "to"):
+                inputs = inputs.to(self._first_device())
+            generation_kwargs = {"max_new_tokens": int(max_new_tokens or self.max_new_tokens), "do_sample": self.temperature > 0}
+            if self.temperature > 0:
+                generation_kwargs["temperature"] = self.temperature
+                generation_kwargs["top_p"] = self.top_p
+            tokenizer = getattr(self._processor, "tokenizer", None)
+            if tokenizer is not None and getattr(tokenizer, "eos_token_id", None) is not None:
+                generation_kwargs["pad_token_id"] = tokenizer.eos_token_id
+            with self._torch.inference_mode():
+                generated_ids = self._model.generate(**inputs, **generation_kwargs)
+            input_length = inputs["input_ids"].shape[-1]
+            trimmed = generated_ids[:, input_length:]
+            return self._processor.batch_decode(trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0].strip()
+        finally:
+            if image is not None:
+                try:
+                    image.close()
+                except Exception:
+                    pass
+            image = None
+            messages = None
+            inputs = None
+            generated_ids = None
+            trimmed = None
+            self._release_generation_cache()
 
     def _build_json_repair_question(self, original_prompt, previous_text):
         previous_text = " ".join(str(previous_text).split())[:1800]

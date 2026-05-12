@@ -54,6 +54,7 @@ def _build_qwen_vl(config):
         attn_implementation=evaluator_config.get("attn_implementation"),
         processor_use_fast=_as_bool(evaluator_config.get("processor_use_fast", False), False),
         enable_thinking=_as_bool(evaluator_config.get("enable_thinking", True), True),
+        max_memory=os.environ.get("QWEN_MAX_MEMORY", evaluator_config.get("max_memory")),
     )
 
 
