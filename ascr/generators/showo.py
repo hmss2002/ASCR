@@ -119,6 +119,26 @@ class ShowOAdapter(GeneratorAdapter):
             )
         return self._native_engine
 
+    def share_engine_from(self, other):
+        if not isinstance(other, ShowOAdapter):
+            return False
+        same_engine_config = (
+            self.repo_path == other.repo_path
+            and self.checkpoint_path == other.checkpoint_path
+            and self.vq_model_path == other.vq_model_path
+            and self.llm_model_path == other.llm_model_path
+            and self.showo_config_path == other.showo_config_path
+            and self.device == other.device
+            and self.image_size == other.image_size
+            and self.token_grid_size == other.token_grid_size
+            and self.guidance_scale == other.guidance_scale
+            and self.generation_timesteps == other.generation_timesteps
+        )
+        if not same_engine_config:
+            return False
+        self._native_engine = other._engine()
+        return True
+
     def _state_from_payload(self, prompt, iteration, payload, image_path, extra_metadata=None):
         metadata = {
             "generator": "showo",

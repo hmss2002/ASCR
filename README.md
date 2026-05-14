@@ -633,3 +633,36 @@ Latest public-benchmark smoke status:
 - Heuristic comparison: baseline 1.0, ASCR 1.0, verdict `tie_or_unclear`.
 - DrawBench 8-prompt / 8-GPU smoke job `68439` is submitted but still `PENDING (Resources)`.
 - This smoke validates the public prompt path, not a fair benchmark claim; the final independent judge protocol is still pending.
+
+## 2026-05-14 T2I-CompBench, Clean Judge, and Runtime Reuse
+
+T2I-CompBench is now wired as the harder compositional prompt suite for Stage 1 baseline-vs-ASCR checks.
+
+New benchmark and judge entry points:
+
+- `scripts/prepare_t2i_compbench_prompts.py`: exports T2I-CompBench prompt files from `NinaKarine/t2i-compbench`.
+- `configs/prompts/t2i_compbench_hard_smoke8.txt`: 8 unique hard smoke prompts.
+- `configs/prompts/t2i_compbench_hard64.txt`: 64-prompt harder follow-up subset.
+- `jobs/stage1_t2i_compbench_qwen35_9b_smoke1.sbatch`: 1-GPU smoke and sequential fallback runner.
+- `jobs/stage1_t2i_compbench_qwen35_9b_smoke8.sbatch`: 8-GPU process-per-prompt runner.
+- `scripts/judge_showo_ascr_pairs_qwen.py`: clean final-image paired judge for baseline vs ASCR.
+
+The final judge compares only clean generated images: baseline `baseline_showo.png` against ASCR `ascr_final_image` / `final_decoded_image`. ASCR grid images remain diagnostic artifacts for localization and must not be treated as final benchmark images.
+
+Run the T2I prompt preparation and smoke jobs:
+
+```bash
+python scripts/prepare_t2i_compbench_prompts.py
+sbatch jobs/stage1_t2i_compbench_qwen35_9b_smoke1.sbatch
+sbatch jobs/stage1_t2i_compbench_qwen35_9b_smoke8.sbatch
+```
+
+Runtime reuse is enabled for the single-process path with `--reuse-models` or `REUSE_MODELS=1`. This keeps the baseline generator, ASCR generator, and Qwen evaluator alive across prompts in the same process; compatible baseline and ASCR Show-o adapters also share the same underlying native Show-o engine.
+
+Validated T2I smoke status:
+
+- T2I 1-prompt / 1-GPU smoke job `68441` completed.
+- T2I 8-prompt / 1-GPU fallback job `68443` completed and produced `outputs/benchmarks_t2i_compbench_qwen35_smoke8_1gpu/showo_ascr-20260514-040615/suite.json`.
+- Clean final-image judge job `68444` completed on that suite with `baseline_pass=8`, `ascr_pass=8`, `both_pass=8`.
+- T2I 2-prompt `REUSE_MODELS=1` validation job `68445` completed with `COMPLETED 0:0` in `00:02:21`; clean final-image judge counts were `baseline_pass=2`, `ascr_pass=2`, `both_pass=2`.
+- The 8-prompt smoke is useful as a pipeline regression check but does not separate baseline from ASCR under the current Qwen clean-final judge. The next meaningful result run should use the hard64 subset or a more independent judge.

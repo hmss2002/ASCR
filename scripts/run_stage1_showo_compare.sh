@@ -23,6 +23,7 @@ OUTPUT_DIR=${OUTPUT_DIR:-outputs/benchmarks_qwen35_9b}
 GENERATION_TIMESTEPS=${GENERATION_TIMESTEPS:-18}
 GUIDANCE_SCALE=${GUIDANCE_SCALE:-4}
 MAX_ITERATIONS=${MAX_ITERATIONS:-8}
+REUSE_MODELS=${REUSE_MODELS:-0}
 
 PYTHON_BIN=${PYTHON_BIN:-python}
 ARGS=(
@@ -42,5 +43,8 @@ if [ -n "${PROMPT_LIMIT}" ]; then
 fi
 if [ -n "${ASCR_START_MODE}" ]; then
   ARGS+=(--ascr-start-mode "${ASCR_START_MODE}")
+fi
+if [ "${REUSE_MODELS}" = "1" ]; then
+  ARGS+=(--reuse-models)
 fi
 "${PYTHON_BIN}" "${ARGS[@]}"

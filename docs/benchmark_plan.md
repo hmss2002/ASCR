@@ -8,9 +8,9 @@ Stage 1 benchmarks should answer a narrower question than generic image quality:
 - Default evaluator inside the ASCR loop: `Qwen/Qwen3.5-9B`, stored locally at `models/qwen3.5-9b`.
 - Default config: `configs/stage1_showo_qwen35_9b.yaml`.
 - Development smoke prompts: `configs/prompts/stage1_complex_prompts.txt`.
-- Public prompt suite now prepared: DrawBench, exported to `configs/prompts/drawbench_smoke8.txt` and `configs/prompts/drawbench_all.txt`.
+- Public prompt suites now prepared: DrawBench and T2I-CompBench smoke/hard subsets.
 
-The original heuristic metric in `ascr/benchmarks/metrics.py` is intentionally small. It can catch simple color and spatial regressions, but it is not a fair public benchmark judge. Treat `comparison.verdict` as a smoke-test signal until an independent prompt-following judge is added.
+The original heuristic metric in `ascr/benchmarks/metrics.py` is intentionally small. It can catch simple color and spatial regressions, but it is not a fair public benchmark judge. Treat `comparison.verdict` as a smoke-test signal. Use the clean final-image judge for automated prompt-following checks, and disclose that Qwen is not independent when reused as both repair evaluator and final judge.
 
 ## Verified Qwen3.5-9B Feasibility
 
@@ -70,7 +70,7 @@ Candidate judges:
 
 ## Other Public Benchmarks
 
-- T2I-CompBench is available on HuggingFace in parquet form, but the current environment is missing `pandas`, `pyarrow`, and `fastparquet`.
+- T2I-CompBench is wired through `scripts/prepare_t2i_compbench_prompts.py`; the parquet path works in `.venv-qwen36` with `pyarrow==24.0.0`.
 - GenEval and TIFA are better aligned with prompt-following claims, but require additional code and model downloads.
 - The repository should not claim ASCR improves DrawBench/T2I-CompBench until the judge protocol above is implemented and run beyond the smoke subset.
 
@@ -85,3 +85,30 @@ Each benchmark run should report:
 - evaluator parser errors and abstains.
 - baseline wins, ASCR wins, ties, and category breakdown.
 - representative image grid stored as an artifact, not committed unless intentionally small.
+
+## T2I-CompBench Smoke Protocol
+
+Prepared files:
+
+- `scripts/prepare_t2i_compbench_prompts.py`: exports prompts from `NinaKarine/t2i-compbench`.
+- `configs/prompts/t2i_compbench_hard_smoke8.txt`: 8 unique smoke prompts across harder categories.
+- `configs/prompts/t2i_compbench_hard64.txt`: 64-prompt follow-up subset.
+- `jobs/stage1_t2i_compbench_qwen35_9b_smoke1.sbatch`: 1-GPU smoke/sequential runner with `REUSE_MODELS=1` by default.
+- `jobs/stage1_t2i_compbench_qwen35_9b_smoke8.sbatch`: 8-GPU process-per-prompt runner.
+- `scripts/judge_showo_ascr_pairs_qwen.py`: clean final-image paired judge.
+
+Run a small sequential smoke:
+
+```bash
+PROMPT_LIMIT=2 REUSE_MODELS=1 sbatch jobs/stage1_t2i_compbench_qwen35_9b_smoke1.sbatch
+```
+
+Run the 8-prompt process-per-GPU smoke:
+
+```bash
+sbatch jobs/stage1_t2i_compbench_qwen35_9b_smoke8.sbatch
+```
+
+Important scoring rule: ASCR grid images are only localization diagnostics. Final scoring uses clean baseline and ASCR final images.
+
+Latest smoke interpretation: job `68444` judged the completed 8-prompt fallback suite and found `baseline_pass=8`, `ascr_pass=8`, and `both_pass=8`. Job `68445` validated the 2-prompt `REUSE_MODELS=1` path with `both_pass=2`. These validate the pipeline but do not support an improvement claim; use hard64 or a more independent judge for the next evidence-producing run.

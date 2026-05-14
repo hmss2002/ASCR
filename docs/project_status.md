@@ -10,6 +10,9 @@ Last updated: 2026-05-14.
 - Qwen3.5-9B is now the default evaluator in the main config, CLI defaults, registry fallback, and run scripts.
 - Historical Qwen3.6/AWQ experiment files are grouped under `configs/experiments/qwen36/` and `jobs/experiments/qwen36/`.
 - DrawBench public prompts are prepared as `configs/prompts/drawbench_smoke8.txt` and `configs/prompts/drawbench_all.txt`.
+- T2I-CompBench prompts are prepared as `configs/prompts/t2i_compbench_hard_smoke8.txt` and `configs/prompts/t2i_compbench_hard64.txt`.
+- Clean final-image paired judging is implemented in `scripts/judge_showo_ascr_pairs_qwen.py`.
+- Single-process comparison supports `--reuse-models`; the shell wrapper enables it with `REUSE_MODELS=1`.
 - Raw and processed benchmark payload folders are ignored by git.
 
 ## Ready To Run
@@ -18,14 +21,17 @@ Last updated: 2026-05-14.
 - `bash scripts/run_stage1_showo_compare.sh` runs the default single-process comparison path.
 - `bash scripts/run_stage1_showo_compare_parallel.sh` runs the default parallel comparison path.
 - `python scripts/prepare_drawbench_prompts.py --smoke-limit 8` prepares DrawBench prompt files.
+- `python scripts/prepare_t2i_compbench_prompts.py` prepares T2I-CompBench prompt files.
 - `sbatch jobs/stage1_drawbench_qwen35_9b_smoke8.sbatch` runs the public DrawBench smoke subset.
+- `REUSE_MODELS=1 PROMPT_LIMIT=2 sbatch jobs/stage1_t2i_compbench_qwen35_9b_smoke1.sbatch` runs a sequential T2I reuse smoke.
+- `sbatch jobs/stage1_t2i_compbench_qwen35_9b_smoke8.sbatch` runs the 8-GPU T2I smoke subset.
 
 ## Not Yet Done
 
-- DrawBench smoke results need to be generated and summarized.
-- A final independent judge protocol is still needed before making public benchmark claims.
+- DrawBench 8-prompt smoke remains pending resources.
+- A final judge independent of the ASCR repair evaluator is still needed before making public benchmark claims.
 - Full DrawBench and T2I-CompBench sweeps have not been run.
-- T2I-CompBench import needs parquet dependencies such as `pandas` plus `pyarrow` or `fastparquet`.
+- T2I-CompBench hard64 has not been run yet.
 - README and benchmark docs should be kept updated after each run with job ids and exact counts.
 
 ## Interpretation Notes
@@ -45,3 +51,22 @@ Last updated: 2026-05-14.
 - 2026-05-14 job `68439`: 8 DrawBench prompts on 8 GPUs, submitted and still pending resources.
 
 This confirms the public DrawBench prompt path runs end to end. It does not yet establish benchmark superiority because the current comparison verdict remains heuristic.
+
+## T2I-CompBench Smoke Results
+
+- 2026-05-14 job `68441`: 1 T2I-CompBench prompt on 1 GPU, completed.
+- 2026-05-14 job `68443`: 8 T2I-CompBench prompts on 1 GPU fallback, completed and wrote `outputs/benchmarks_t2i_compbench_qwen35_smoke8_1gpu/showo_ascr-20260514-040615/suite.json`.
+- Heuristic suite summary for job `68443`: `ascr_improved=1`, `ascr_regressed=1`, `tie_or_unclear=6`, `total_evaluator_calls=14`, `total_ascr_insertions=6`.
+- 2026-05-14 job `68444`: clean final-image Qwen judge over the 8-prompt suite, `COMPLETED 0:0` in `00:00:50`.
+- Clean final-image judge counts for job `68444`: `baseline_pass=8`, `ascr_pass=8`, `both_pass=8`.
+- 2026-05-14 job `68445`: 2-prompt `REUSE_MODELS=1` validation, `COMPLETED 0:0` in `00:02:21`; suite verdicts were `ascr_improved=1`, `tie_or_unclear=1`, with `total_evaluator_calls=3` and `total_ascr_insertions=1`.
+- Clean final-image judge counts for job `68445`: `baseline_pass=2`, `ascr_pass=2`, `both_pass=2`.
+- 2026-05-14 job `68442`: 8-GPU T2I smoke submitted and pending priority/resources.
+
+The smoke8 set confirms that the harder public prompt path, suite aggregation, reuse path, and clean final-image judge work. It does not establish ASCR superiority because baseline and ASCR both pass every clean-final prompt under this judge.
+
+## Runtime Cleanup Results
+
+- `--reuse-models` reuses the baseline generator, ASCR generator, and Qwen evaluator across prompts in the single-process comparison path.
+- Compatible baseline and ASCR `ShowOAdapter` instances share one underlying native Show-o engine, avoiding a second Show-o weight load in sequential runs.
+- `jobs/stage1_t2i_compbench_qwen35_9b_smoke1.sbatch` now defaults `REUSE_MODELS=1` and judges the latest `suite.json` when running multiple prompts, falling back to `comparison.json` for single-prompt outputs.

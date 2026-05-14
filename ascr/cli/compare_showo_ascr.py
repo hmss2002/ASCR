@@ -28,6 +28,7 @@ def build_parser():
     parser.add_argument("--guidance-scale", type=float, default=None)
     parser.add_argument("--max-iterations", type=int, default=2)
     parser.add_argument("--ascr-start-mode", choices=["baseline", "partial"], default=None, help="baseline starts ASCR from a completed native Show-o sample; partial starts from the configured confidence block so evaluator feedback is inserted during denoising.")
+    parser.add_argument("--reuse-models", action="store_true", help="Reuse loaded Show-o/Qwen objects across prompts in this process and share the Show-o engine between baseline and ASCR adapters.")
     return parser
 
 
@@ -93,23 +94,9 @@ def trace_record_count(trace_path):
         return 0
 
 
-def build_loop(config):
-    generator_config = dict(config)
-    generator_config["token_grid_size"] = int(config.get("token_grid_size", 32))
-    generator_config["image_size"] = int(config.get("image_size", 512))
-    generator = build_generator(config.get("generator", {}).get("name", "showo"), generator_config)
-    evaluator = build_evaluator(config.get("evaluator", {}).get("name", "local_vlm"), config)
-    selector = GridSemanticReopeningSelector(
-        coarse_grid_size=int(config.get("coarse_grid_size", 4)),
-        token_grid_size=int(config.get("token_grid_size", 32)),
-        dilation=int(config.get("dilation", 1)),
-    )
-    return ASCRLoop(generator, evaluator, selector, run_config_from_mapping(config))
-
-
-def build_native_baseline(config, prompt, root):
+def build_baseline_generator(config):
     generator_config = config.get("generator", {})
-    baseline_generator = ShowOAdapter(
+    return ShowOAdapter(
         repo_path=generator_config.get("repo_path"),
         checkpoint_path=generator_config.get("checkpoint_path"),
         vq_model_path=generator_config.get("vq_model_path"),
@@ -124,6 +111,39 @@ def build_native_baseline(config, prompt, root):
         native_token_loop=True,
         confidence_steps=int(generator_config.get("generation_timesteps", 18)),
     )
+
+
+def build_loop_components(config):
+    generator_config = dict(config)
+    generator_config["token_grid_size"] = int(config.get("token_grid_size", 32))
+    generator_config["image_size"] = int(config.get("image_size", 512))
+    generator = build_generator(config.get("generator", {}).get("name", "showo"), generator_config)
+    evaluator = build_evaluator(config.get("evaluator", {}).get("name", "local_vlm"), config)
+    return generator, evaluator
+
+
+def share_generator_engine(source, target):
+    share = getattr(target, "share_engine_from", None)
+    if not callable(share):
+        return False
+    return bool(share(source))
+
+
+def build_loop(config, generator=None, evaluator=None):
+    if generator is None or evaluator is None:
+        built_generator, built_evaluator = build_loop_components(config)
+        generator = generator or built_generator
+        evaluator = evaluator or built_evaluator
+    selector = GridSemanticReopeningSelector(
+        coarse_grid_size=int(config.get("coarse_grid_size", 4)),
+        token_grid_size=int(config.get("token_grid_size", 32)),
+        dilation=int(config.get("dilation", 1)),
+    )
+    return ASCRLoop(generator, evaluator, selector, run_config_from_mapping(config))
+
+
+def build_native_baseline(config, prompt, root, baseline_generator=None):
+    baseline_generator = baseline_generator or build_baseline_generator(config)
     artifacts = RunArtifacts(root / "baseline_native_state")
     baseline_state = baseline_generator.initialize(prompt, artifacts)
     baseline_path = root / "baseline_showo.png"
@@ -131,15 +151,14 @@ def build_native_baseline(config, prompt, root):
     baseline_state.metadata["source"] = "native_showo_baseline_compare"
     return baseline_state, baseline_path
 
-
-def run_prompt_comparison(base_config, prompt, root, args):
+def run_prompt_comparison(base_config, prompt, root, args, baseline_generator=None, ascr_generator=None, evaluator=None):
     config = apply_cli_overrides(base_config, args)
     start_mode = resolve_ascr_start_mode(config, args.ascr_start_mode)
-    baseline_state, baseline_path = build_native_baseline(config, prompt, root)
+    baseline_state, baseline_path = build_native_baseline(config, prompt, root, baseline_generator=baseline_generator)
     config["output_dir"] = str(root / "ascr")
     config["run_name"] = "stage1_showo_ascr"
     initial_state = baseline_state if start_mode == "baseline" else None
-    summary = build_loop(config).run(prompt, project_root=Path.cwd(), initial_state=initial_state)
+    summary = build_loop(config, generator=ascr_generator, evaluator=evaluator).run(prompt, project_root=Path.cwd(), initial_state=initial_state)
     grid_size = int(config.get("coarse_grid_size", 4))
     image_size = int(config.get("image_size", 512))
     baseline_score = score_image(prompt, baseline_path, grid_size=grid_size, image_size=image_size)
@@ -212,14 +231,31 @@ def main(argv=None):
     root = Path(args.output_dir) / datetime.utcnow().strftime("showo_ascr-%Y%m%d-%H%M%S")
     root.mkdir(parents=True, exist_ok=True)
     results = []
+    baseline_generator = None
+    ascr_generator = None
+    evaluator = None
+    if args.reuse_models:
+        shared_config = apply_cli_overrides(base_config, args)
+        baseline_generator = build_baseline_generator(shared_config)
+        ascr_generator, evaluator = build_loop_components(shared_config)
+        share_generator_engine(baseline_generator, ascr_generator)
     for index, prompt in enumerate(prompts):
         prompt_root = prompt_run_dir(root, prompt, index, len(prompts))
         prompt_root.mkdir(parents=True, exist_ok=True)
-        result, result_path, markdown_path = run_prompt_comparison(base_config, prompt, prompt_root, args)
+        result, result_path, markdown_path = run_prompt_comparison(
+            base_config,
+            prompt,
+            prompt_root,
+            args,
+            baseline_generator=baseline_generator,
+            ascr_generator=ascr_generator,
+            evaluator=evaluator,
+        )
         result["result_path"] = str(result_path)
         result["markdown_path"] = str(markdown_path)
         results.append(result)
-        release_cuda_cache()
+        if not args.reuse_models:
+            release_cuda_cache()
     if len(results) == 1:
         print(json.dumps({"result_path": results[0]["result_path"], "markdown_path": results[0]["markdown_path"], "comparison": results[0]["comparison"]}, indent=2, sort_keys=True))
     else:
