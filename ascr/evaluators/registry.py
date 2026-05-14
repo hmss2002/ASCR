@@ -37,7 +37,7 @@ def _build_showo_mmu(config):
 def _build_qwen_vl(config):
     evaluator_config = config.get("evaluator", config)
     return QwenVLEvaluator(
-        model_path=os.environ.get("QWEN_MODEL_PATH", evaluator_config.get("model_path", "Qwen/Qwen3.6-35B-A3B")),
+        model_path=os.environ.get("QWEN_MODEL_PATH", evaluator_config.get("model_path", "models/qwen3.5-9b")),
         device=evaluator_config.get("device", "cuda"),
         device_map=evaluator_config.get("device_map", "auto"),
         torch_dtype=evaluator_config.get("torch_dtype", "bfloat16"),

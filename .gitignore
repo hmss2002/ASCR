@@ -98,3 +98,6 @@ pretrained/
 # Local third-party source checkouts
 external/*
 !external/README.md
+
+data/benchmarks/raw/
+data/benchmarks/processed/

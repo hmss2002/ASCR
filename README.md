@@ -575,3 +575,50 @@ Environment status on 2026-04-28:
 - Verified HuggingFace model metadata for `Qwen/Qwen3.6-35B-A3B`; the repository is public and contains 26 safetensors shards.
 - The full Qwen3.6 snapshot is about 67 GiB and is not committed. Compute nodes cannot resolve `huggingface.co`, so download it first on the login node with `bash scripts/download_qwen36_snapshot.sh`; the Slurm job defaults to `QWEN_MODEL_PATH=models/qwen3.6-35b-a3b`, `QWEN_LOCAL_FILES_ONLY=1`, and offline HuggingFace mode.
 - Validation after adding this backend: syntax checks passed and `python -m unittest discover -s tests -v` reports 28 tests passed.
+
+## 2026-05-14 Qwen3.5-9B Default Evaluator
+
+Qwen3.5-9B is now the default Stage 1 evaluator path. The validated local checkpoint is `models/qwen3.5-9b`, downloaded from `Qwen/Qwen3.5-9B`; model weights, generated outputs, and benchmark raw payloads remain outside git.
+
+New default entry points:
+
+- `configs/stage1_showo_qwen35_9b.yaml`: default full-cap Stage 1 config.
+- `scripts/download_qwen35_9b_snapshot.sh`: reproducible Qwen3.5-9B snapshot download.
+- `scripts/run_stage1_showo_compare.sh`: single-process comparison runner, defaulting to Qwen3.5-9B.
+- `scripts/run_stage1_showo_compare_parallel.sh`: one-worker-per-GPU comparison runner, defaulting to Qwen3.5-9B.
+- `jobs/stage1_qwen35_9b_smoke1gpu.sbatch`: single-GPU full-flow smoke.
+- `jobs/stage1_qwen35_9b_parallel8.sbatch`: 8-GPU parallel smoke.
+
+Validated Qwen3.5-9B runs:
+
+| Run | Job | Result | Notes |
+| --- | --- | --- | --- |
+| Single GPU full-flow smoke | `68379` | `COMPLETED 0:0` in `00:02:43` | produced `comparison.json` |
+| 8-GPU parallel smoke | `68386` | `COMPLETED 0:0` in `00:07:32` | 8 comparisons, 29 evaluator calls, 0 parser errors, 0 abstains |
+
+Historical Qwen3.6/AWQ configs and jobs are kept under `configs/experiments/qwen36/` and `jobs/experiments/qwen36/`. They are not the default path anymore.
+
+## 2026-05-14 Public Benchmark Prompt Suites
+
+The original `configs/prompts/stage1_complex_prompts.txt` suite is now treated as an internal development smoke suite only. It is useful for regression checks, but it is not a public benchmark and should not be used for result claims by itself.
+
+DrawBench has been added as the first public prompt-only suite:
+
+- `scripts/prepare_drawbench_prompts.py` downloads or reuses the public `sayakpaul/drawbench` CSV and exports ASCR prompt text files.
+- `configs/prompts/drawbench_smoke8.txt` contains an 8-prompt smoke subset covering major DrawBench categories.
+- `configs/prompts/drawbench_all.txt` contains all 200 DrawBench prompts.
+- `jobs/stage1_drawbench_qwen35_9b_smoke8.sbatch` runs the 8-prompt DrawBench smoke across 8 GPUs.
+
+Prepare prompts:
+
+```bash
+python scripts/prepare_drawbench_prompts.py --smoke-limit 8
+```
+
+Run the DrawBench smoke:
+
+```bash
+sbatch jobs/stage1_drawbench_qwen35_9b_smoke8.sbatch
+```
+
+Important interpretation rule: DrawBench supplies prompts, not reference images. The current `comparison.verdict` field is still heuristic and should be read as a development signal only. A fair prompt-following comparison needs an independent judge protocol over the generated baseline and ASCR images, such as a Qwen3.5-9B final judge, TIFA/VQA-style judge, VQAScore, GenEval-style object checks, or a human/audited subset.

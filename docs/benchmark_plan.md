@@ -1,47 +1,87 @@
 # Benchmark Plan
 
-Stage 1 benchmarks should target confidence-semantic inconsistency rather than generic image quality. Initial subsets include counting, spatial relations, color binding, negation, attribute binding, OCR, missing objects, and extra objects.
+Stage 1 benchmarks should answer a narrower question than generic image quality: does ASCR improve prompt following over the same Show-o baseline image state after semantic-confidence repair?
 
-Baselines should include whole-image retry, best-of-N reranking, verifier-only selection, generic inpainting adapters, confidence-only remask, semantic-only repair, and the full ASCR alternating loop.
+## Current Baseline State
 
-## Current Runnable Comparison
+- Generator: local Show-o native token loop.
+- Default evaluator inside the ASCR loop: `Qwen/Qwen3.5-9B`, stored locally at `models/qwen3.5-9b`.
+- Default config: `configs/stage1_showo_qwen35_9b.yaml`.
+- Development smoke prompts: `configs/prompts/stage1_complex_prompts.txt`.
+- Public prompt suite now prepared: DrawBench, exported to `configs/prompts/drawbench_smoke8.txt` and `configs/prompts/drawbench_all.txt`.
 
-The current local comparison path is:
+The original heuristic metric in `ascr/benchmarks/metrics.py` is intentionally small. It can catch simple color and spatial regressions, but it is not a fair public benchmark judge. Treat `comparison.verdict` as a smoke-test signal until an independent prompt-following judge is added.
 
-```bash
-source .venv/bin/activate
-bash scripts/run_stage1_showo_compare.sh
-```
+## Verified Qwen3.5-9B Feasibility
 
-It generates one original Show-o baseline image, then starts ASCR from that same baseline image state. This avoids comparing two independent random samples.
+| Scope | Job | Result | Evidence |
+| --- | --- | --- | --- |
+| Single GPU full-flow smoke | `68379` | completed in `00:02:43` | wrote `comparison.json` |
+| 8-GPU parallel smoke | `68386` | completed in `00:07:32` | 8 comparisons, 29 evaluator JSON files, 0 parser errors, 0 abstains |
 
-Current local evaluator status:
+This means Qwen3.5-9B is practical as the default Stage 1 evaluator on the current cluster, including the one-worker-per-GPU parallel path.
 
-- Backend: heuristic image evaluator.
-- Supported smoke checks: color presence and red-left-of-blue spatial relation.
-- Not yet suitable for paper-quality claims.
+## DrawBench
 
-Latest fair single-prompt results for `A red cube left of a blue sphere`:
+DrawBench is the first public prompt-only suite wired into this repository. It provides prompts but not reference images, so the benchmark protocol must generate paired baseline/ASCR images and then judge prompt following.
 
-| Setting | Baseline | ASCR | Verdict |
-| --- | ---: | ---: | --- |
-| 4 steps | 0.992772 | 0.992772 | tie_or_unclear |
-| 18 steps | 0.874457 | 0.874457 | tie_or_unclear |
+Prepared files:
 
-Interpretation: the Stage 1 code path is runnable, logs artifacts, and compares fairly, but the current heuristic single-prompt evidence does not show improvement over original Show-o. The next benchmark milestone is a VLM-backed evaluator and a multi-prompt, multi-seed sweep.
+- `scripts/prepare_drawbench_prompts.py`: downloads or reuses the public `sayakpaul/drawbench` CSV and writes ASCR prompt text files.
+- `configs/prompts/drawbench_smoke8.txt`: 8-prompt smoke subset across major categories.
+- `configs/prompts/drawbench_all.txt`: all 200 DrawBench prompts.
+- `jobs/stage1_drawbench_qwen35_9b_smoke8.sbatch`: 8-GPU smoke job.
 
-## Slurm Entry Points
-
-Use `gpu_shared` for smoke/debug:
-
-```bash
-sbatch jobs/stage1_compare_gpu_shared.sbatch
-```
-
-Use `gpu` for longer comparison runs:
+Prepare prompts:
 
 ```bash
-sbatch jobs/stage1_compare_gpu.sbatch
+python scripts/prepare_drawbench_prompts.py --smoke-limit 8
 ```
 
-Runtime knobs are exposed through environment variables in `scripts/run_stage1_showo_compare.sh`, including `PROMPT`, `CONFIG`, `OUTPUT_DIR`, `GENERATION_TIMESTEPS`, `GUIDANCE_SCALE`, and `MAX_ITERATIONS`.
+Run the 8-prompt smoke:
+
+```bash
+sbatch jobs/stage1_drawbench_qwen35_9b_smoke8.sbatch
+```
+
+Scale to the full suite after smoke succeeds:
+
+```bash
+PROMPTS_FILE=configs/prompts/drawbench_all.txt PROMPT_LIMIT=200 REPEAT_COUNT=1 sbatch jobs/stage1_qwen35_9b_parallel8.sbatch
+```
+
+## Fair Scoring Protocol
+
+Minimum credible protocol:
+
+1. Generate a baseline image and ASCR image from the same initial Show-o state for each prompt and seed.
+2. Run a judge that has not been used to decide the final comparison verdict during generation, or at least report that Qwen is both the repair evaluator and judge if reusing it.
+3. Score baseline and ASCR independently for prompt following.
+4. Report win/tie/loss, parser failures, abstains, and per-category breakdowns.
+5. Keep generated media under `outputs/` and commit only configs, scripts, and summarized metrics.
+
+Candidate judges:
+
+- Qwen3.5-9B final judge: easiest immediate path, consistent with the repair evaluator, but must disclose that it is not independent if reused.
+- TIFA/VQA-style judge: stronger semantic question answering, requires extra implementation and model dependencies.
+- VQAScore or CLIP-derived metrics: useful as auxiliary signals, not sufficient alone for spatial/counting/OCR claims.
+- GenEval-style object checks: stronger for object/count/spatial categories, heavier setup.
+- Human/audited subset: best sanity check for a small sample, especially DrawBench text and rare-word cases.
+
+## Other Public Benchmarks
+
+- T2I-CompBench is available on HuggingFace in parquet form, but the current environment is missing `pandas`, `pyarrow`, and `fastparquet`.
+- GenEval and TIFA are better aligned with prompt-following claims, but require additional code and model downloads.
+- The repository should not claim ASCR improves DrawBench/T2I-CompBench until the judge protocol above is implemented and run beyond the smoke subset.
+
+## Reporting Template
+
+Each benchmark run should report:
+
+- config path and git commit.
+- model checkpoint path for Show-o and Qwen.
+- prompt suite, prompt count, repeat count, and seed policy.
+- number of successful comparisons and failed runs.
+- evaluator parser errors and abstains.
+- baseline wins, ASCR wins, ties, and category breakdown.
+- representative image grid stored as an artifact, not committed unless intentionally small.

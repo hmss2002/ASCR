@@ -26,25 +26,26 @@ def _is_qwen35_moe_config(config):
     return getattr(config, "model_type", None) == _QWEN35_MOE_MODEL_TYPE
 
 
-def _require_native_qwen35_moe_support(config, auto_model_class):
+def _resolve_qwen_model_class(config, auto_model_class):
     if not _is_qwen35_moe_config(config):
-        return
+        return auto_model_class
     config_name = type(config).__name__
     if config_name != _QWEN35_MOE_NATIVE_CONFIG:
         raise RuntimeError(_qwen35_moe_native_error(f"loaded config class {config_name}, expected {_QWEN35_MOE_NATIVE_CONFIG}"))
     try:
-        model_class = auto_model_class._model_mapping[type(config)]
+        from transformers.models.qwen3_5_moe.modeling_qwen3_5_moe import Qwen3_5MoeForConditionalGeneration
     except Exception as exc:
-        raise RuntimeError(_qwen35_moe_native_error("AutoModelForImageTextToText does not map qwen3_5_moe to the native model class")) from exc
-    model_name = getattr(model_class, "__name__", "")
+        raise RuntimeError(_qwen35_moe_native_error(f"could not import {_QWEN35_MOE_NATIVE_MODEL}: {exc}")) from exc
+    model_name = getattr(Qwen3_5MoeForConditionalGeneration, "__name__", "")
     if model_name != _QWEN35_MOE_NATIVE_MODEL:
-        raise RuntimeError(_qwen35_moe_native_error(f"AutoModel maps qwen3_5_moe to {model_name}, expected {_QWEN35_MOE_NATIVE_MODEL}"))
+        raise RuntimeError(_qwen35_moe_native_error(f"native Qwen3.5 MoE import resolved to {model_name}, expected {_QWEN35_MOE_NATIVE_MODEL}"))
     try:
         from transformers.utils import is_torchvision_available
     except Exception as exc:
         raise RuntimeError(_qwen35_moe_native_error("could not verify torchvision availability for the Qwen3VL processor")) from exc
     if not is_torchvision_available():
         raise RuntimeError(_qwen35_moe_native_error("torchvision is required for the Qwen3VL video processor used by Qwen3.6"))
+    return Qwen3_5MoeForConditionalGeneration
 
 
 def _final_answer_text(text):
@@ -211,7 +212,7 @@ def _normalize_payload(payload, max_selected_cells=6):
 
 
 class QwenVLEvaluator(SemanticEvaluator):
-    def __init__(self, model_path="Qwen/Qwen3.6-35B-A3B", device="cuda", device_map="auto", torch_dtype="bfloat16", trust_remote_code=True, local_files_only=False, strict_json=True, grid_size=4, image_size=512, max_new_tokens=768, repair_max_new_tokens=None, max_selected_cells=6, temperature=0.0, top_p=1.0, attn_implementation=None, processor_use_fast=False, enable_thinking=True, max_memory=None):
+    def __init__(self, model_path="models/qwen3.5-9b", device="cuda", device_map="auto", torch_dtype="bfloat16", trust_remote_code=True, local_files_only=False, strict_json=True, grid_size=4, image_size=512, max_new_tokens=768, repair_max_new_tokens=None, max_selected_cells=6, temperature=0.0, top_p=1.0, attn_implementation=None, processor_use_fast=False, enable_thinking=True, max_memory=None):
         self.model_path = model_path
         self.device = device
         self.device_map = device_map
@@ -282,13 +283,15 @@ class QwenVLEvaluator(SemanticEvaluator):
         except Exception as exc:
             raise RuntimeError("Qwen-VL evaluator needs torch, transformers with image-text model support, and a compatible processor") from exc
         self._torch = torch
+        if not hasattr(torch.nn, "Buffer"):
+            torch.nn.Buffer = torch.Tensor
         processor_kwargs = {"trust_remote_code": self.trust_remote_code, "local_files_only": self.local_files_only, "use_fast": self.processor_use_fast}
         model_kwargs = {"trust_remote_code": self.trust_remote_code, "local_files_only": self.local_files_only}
         try:
             config = AutoConfig.from_pretrained(self.model_path, trust_remote_code=self.trust_remote_code, local_files_only=self.local_files_only)
         except Exception as exc:
             raise RuntimeError(_qwen35_moe_native_error(f"AutoConfig could not load {self.model_path}: {exc}")) from exc
-        _require_native_qwen35_moe_support(config, AutoModel)
+        ModelClass = _resolve_qwen_model_class(config, AutoModel)
         model_kwargs["config"] = config
         if self.device_map:
             model_kwargs["device_map"] = self.device_map
@@ -309,7 +312,7 @@ class QwenVLEvaluator(SemanticEvaluator):
                 raise RuntimeError(_qwen35_moe_native_error(f"AutoProcessor failed for {self.model_path}: {exc}")) from exc
             raise
         try:
-            self._model = AutoModel.from_pretrained(self.model_path, **model_kwargs)
+            self._model = ModelClass.from_pretrained(self.model_path, **model_kwargs)
         except Exception as exc:
             if _is_qwen35_moe_config(config):
                 raise RuntimeError(_qwen35_moe_native_error(f"AutoModel failed for {self.model_path}: {exc}")) from exc
