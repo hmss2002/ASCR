@@ -33,3 +33,15 @@ Last updated: 2026-05-14.
 - `configs/prompts/stage1_complex_prompts.txt` is an internal development smoke suite, not a public benchmark.
 - Current `comparison.verdict` values come from a small heuristic metric and should not be presented as a fair benchmark result.
 - Qwen3.5-9B is reliable enough for the ASCR repair loop on this cluster, but using the same model as both repair evaluator and final judge should be disclosed.
+
+## DrawBench Smoke Results
+
+- 2026-05-14 job `68440`: 1 DrawBench prompt on 1 GPU, `COMPLETED 0:0` in `00:00:56`.
+- Prompt: `A red colored car.`
+- Output: `outputs/benchmarks_drawbench_qwen35_smoke1gpu/showo_ascr-20260514-034344/comparison.json`.
+- Counts: 1 comparison, 1 evaluator JSON, 0 parser errors, 0 abstains.
+- ASCR summary: `stop_reason: no_semantic_error`, `evaluator_calls: 1`, `ascr_insertions: 0`.
+- Heuristic comparison: baseline 1.0, ASCR 1.0, verdict `tie_or_unclear`.
+- 2026-05-14 job `68439`: 8 DrawBench prompts on 8 GPUs, submitted and still pending resources.
+
+This confirms the public DrawBench prompt path runs end to end. It does not yet establish benchmark superiority because the current comparison verdict remains heuristic.

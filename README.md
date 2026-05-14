@@ -622,3 +622,14 @@ sbatch jobs/stage1_drawbench_qwen35_9b_smoke8.sbatch
 ```
 
 Important interpretation rule: DrawBench supplies prompts, not reference images. The current `comparison.verdict` field is still heuristic and should be read as a development signal only. A fair prompt-following comparison needs an independent judge protocol over the generated baseline and ASCR images, such as a Qwen3.5-9B final judge, TIFA/VQA-style judge, VQAScore, GenEval-style object checks, or a human/audited subset.
+
+Latest public-benchmark smoke status:
+
+- DrawBench 1-prompt / 1-GPU smoke job `68440` completed with `COMPLETED 0:0` in `00:00:56`.
+- Prompt: `A red colored car.`
+- Artifacts: `outputs/benchmarks_drawbench_qwen35_smoke1gpu/showo_ascr-20260514-034344/comparison.json`.
+- Counts: 1 `comparison.json`, 1 `evaluation.json`, 0 parser errors, 0 abstains.
+- ASCR loop status: `stop_reason: no_semantic_error`, `evaluator_calls: 1`, `ascr_insertions: 0`.
+- Heuristic comparison: baseline 1.0, ASCR 1.0, verdict `tie_or_unclear`.
+- DrawBench 8-prompt / 8-GPU smoke job `68439` is submitted but still `PENDING (Resources)`.
+- This smoke validates the public prompt path, not a fair benchmark claim; the final independent judge protocol is still pending.
