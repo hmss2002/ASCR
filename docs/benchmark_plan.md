@@ -94,7 +94,6 @@ Prepared files:
 - `configs/prompts/t2i_compbench_hard_smoke8.txt`: 8 unique smoke prompts across harder categories.
 - `configs/prompts/t2i_compbench_hard64.txt`: 64-prompt follow-up subset.
 - `jobs/stage1_t2i_compbench_qwen35_9b_smoke1.sbatch`: 1-GPU smoke/sequential runner with `REUSE_MODELS=1` by default.
-- `jobs/stage1_t2i_compbench_qwen35_9b_smoke8.sbatch`: 8-GPU process-per-prompt runner.
 - `scripts/judge_showo_ascr_pairs_qwen.py`: clean final-image paired judge.
 
 Run a small sequential smoke:
@@ -103,12 +102,26 @@ Run a small sequential smoke:
 PROMPT_LIMIT=2 REUSE_MODELS=1 sbatch jobs/stage1_t2i_compbench_qwen35_9b_smoke1.sbatch
 ```
 
-Run the 8-prompt process-per-GPU smoke:
+Run the default hard64 checkpoint:
 
 ```bash
-sbatch jobs/stage1_t2i_compbench_qwen35_9b_smoke8.sbatch
+sbatch jobs/stage1_t2i_compbench_qwen35_9b_hard64_8gpu_reuse.sbatch
 ```
 
 Important scoring rule: ASCR grid images are only localization diagnostics. Final scoring uses clean baseline and ASCR final images.
 
-Latest smoke interpretation: job `68444` judged the completed 8-prompt fallback suite and found `baseline_pass=8`, `ascr_pass=8`, and `both_pass=8`. Job `68445` validated the 2-prompt `REUSE_MODELS=1` path with `both_pass=2`. These validate the pipeline but do not support an improvement claim; use hard64 or a more independent judge for the next evidence-producing run.
+Latest hard64 interpretation: job `68660` completed 64 prompts with 8 model-reuse shards inside one 8-GPU Slurm allocation. Pairwise Qwen judge found `ascr_win=13`, `ascr_loss=6`, `pairwise_tie=45` for net `+7`. Clean final-image Qwen pass/fail found `ascr_pass=57/64` and `baseline_pass=53/64` for net `+4`. This is the Stage 1 Phase 1 checkpoint; future config exploration should report deltas against it.
+
+## Stage 1 Phase 1 Default Settings
+
+Use these settings as the default anchor for follow-up experiments:
+
+- Command: sbatch jobs/stage1_t2i_compbench_qwen35_9b_hard64_8gpu_reuse.sbatch.
+- Slurm: one job with #SBATCH --gres=gpu:8.
+- Workers: SHARD_WORKERS=8, one CUDA_VISIBLE_DEVICES shard per worker.
+- Prompt suite: configs/prompts/t2i_compbench_hard64.txt, PROMPT_LIMIT=64.
+- Runtime: REUSE_MODELS=1.
+- ASCR start: ASCR_START_MODE=baseline.
+- Generation: GENERATION_TIMESTEPS=18, GUIDANCE_SCALE=4, MAX_ITERATIONS=8, REPEAT_COUNT=1, SEED_STEP=1.
+- Judges: report both Qwen clean pass/fail and Qwen side-by-side pairwise counts.
+- Current checkpoint: job 68660, pairwise net +7 and clean pass net +4 on hard64.

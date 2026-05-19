@@ -644,7 +644,6 @@ New benchmark and judge entry points:
 - `configs/prompts/t2i_compbench_hard_smoke8.txt`: 8 unique hard smoke prompts.
 - `configs/prompts/t2i_compbench_hard64.txt`: 64-prompt harder follow-up subset.
 - `jobs/stage1_t2i_compbench_qwen35_9b_smoke1.sbatch`: 1-GPU smoke and sequential fallback runner.
-- `jobs/stage1_t2i_compbench_qwen35_9b_smoke8.sbatch`: 8-GPU smoke runner for quick pipeline checks.
 - `jobs/stage1_t2i_compbench_qwen35_9b_hard64_8gpu_reuse.sbatch`: recommended hard64 runner; one Slurm job requests `gres/gpu=8`, then launches 8 model-reuse workers.
 - `scripts/run_stage1_showo_compare_sharded_reuse.sh`: shards prompts inside one allocation and keeps models loaded within each worker.
 - `scripts/shard_prompts.py` and `scripts/aggregate_showo_ascr_suites.py`: split prompts and merge worker suites.
@@ -652,12 +651,17 @@ New benchmark and judge entry points:
 
 The final judge compares only clean generated images: baseline `baseline_showo.png` against ASCR `ascr_final_image` / `final_decoded_image`. ASCR grid images remain diagnostic artifacts for localization and must not be treated as final benchmark images.
 
-Run the T2I prompt preparation and smoke jobs:
+Run the default T2I hard64 benchmark:
 
 ```bash
 python scripts/prepare_t2i_compbench_prompts.py
-sbatch jobs/stage1_t2i_compbench_qwen35_9b_smoke1.sbatch
-sbatch jobs/stage1_t2i_compbench_qwen35_9b_smoke8.sbatch
+sbatch jobs/stage1_t2i_compbench_qwen35_9b_hard64_8gpu_reuse.sbatch
+```
+
+For a tiny regression check only:
+
+```bash
+REUSE_MODELS=1 PROMPT_LIMIT=2 sbatch jobs/stage1_t2i_compbench_qwen35_9b_smoke1.sbatch
 ```
 
 Runtime reuse is enabled for the single-process path with `--reuse-models` or `REUSE_MODELS=1`. This keeps the baseline generator, ASCR generator, and Qwen evaluator alive across prompts in the same process; compatible baseline and ASCR Show-o adapters also share the same underlying native Show-o engine.
@@ -668,7 +672,7 @@ Validated T2I smoke status:
 - T2I 8-prompt / 1-GPU fallback job `68443` completed and produced `outputs/benchmarks_t2i_compbench_qwen35_smoke8_1gpu/showo_ascr-20260514-040615/suite.json`.
 - Clean final-image judge job `68444` completed on that suite with `baseline_pass=8`, `ascr_pass=8`, `both_pass=8`.
 - T2I 2-prompt `REUSE_MODELS=1` validation job `68445` completed with `COMPLETED 0:0` in `00:02:21`; clean final-image judge counts were `baseline_pass=2`, `ascr_pass=2`, `both_pass=2`.
-- The 8-prompt smoke is useful as a pipeline regression check but does not separate baseline from ASCR under the current Qwen clean-final judge. The next meaningful result run should use the hard64 subset or a more independent judge.
+- The 8-prompt smoke validated the early pipeline but is no longer the default result path. The 2026-05-19 hard64 run is the current Stage 1 checkpoint and should be used as the reference when exploring new configs.
 
 ## 2026-05-19 Fair T2I-CompBench Judge and ASCR Safety Plan
 
@@ -706,3 +710,34 @@ python scripts/judge_showo_ascr_pairwise_qwen.py path/to/suite.json --config con
 ```
 
 Interpretation rule: primary claims should come from `qwen_pairwise_judge.json` and clean pass/fail counts, not from the heuristic `comparison.verdict`. `comparison.verdict` remains in JSON for backward compatibility and quick color-rule smoke debugging only.
+
+## 2026-05-19 Stage 1 Phase 1 Default Checkpoint
+
+The current default Stage 1 flow is the T2I-CompBench hard64 sharded-reuse run. It is now the baseline for further configuration exploration.
+
+Default command:
+
+```bash
+sbatch jobs/stage1_t2i_compbench_qwen35_9b_hard64_8gpu_reuse.sbatch
+```
+
+Default settings:
+
+- One Slurm job requests 8 GPUs with #SBATCH --gres=gpu:8.
+- Inside the allocation, SHARD_WORKERS=8 starts eight workers; each worker receives one CUDA_VISIBLE_DEVICES shard.
+- PROMPTS_FILE=configs/prompts/t2i_compbench_hard64.txt and PROMPT_LIMIT=64.
+- REUSE_MODELS=1 keeps the baseline generator, ASCR generator, and Qwen evaluator loaded across each worker shard.
+- ASCR_START_MODE=baseline starts ASCR from the exact native Show-o baseline token state.
+- GENERATION_TIMESTEPS=18, GUIDANCE_SCALE=4, MAX_ITERATIONS=8, REPEAT_COUNT=1, and SEED_STEP=1 are the default sweep anchor.
+- return_initial_on_max_error=true keeps unresolved ASCR loops conservative.
+
+Completed hard64 checkpoint:
+
+- Job 68660 completed with exit code 0:0 in 00:16:38.
+- Verified allocation: billing=32,cpu=32,gres/gpu=8,mem=192G,node=1.
+- Run root: outputs/benchmarks_t2i_compbench_qwen35_hard64_slurm8gpu_reuse_20260519_191652.
+- Pairwise Qwen judge: ASCR win 13, ASCR loss 6, tie 45, net +7.
+- Clean Qwen pass/fail: ASCR pass 57/64, baseline pass 53/64, net +4.
+- Detailed summary: docs/stage1_phase1_summary_20260519.md.
+
+Interpretation: this is a Stage 1 automated benchmark signal, not independent human evidence, because Qwen3.5-9B is also the ASCR loop evaluator. Future experiments should report deltas against this default and keep pairwise and clean pass/fail counts separate.

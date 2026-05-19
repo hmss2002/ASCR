@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-05-14.
+Last updated: 2026-05-19.
 
 ## Completed
 
@@ -19,20 +19,19 @@ Last updated: 2026-05-14.
 
 - `bash scripts/download_qwen35_9b_snapshot.sh` downloads or refreshes the default evaluator snapshot.
 - `bash scripts/run_stage1_showo_compare.sh` runs the default single-process comparison path.
-- `bash scripts/run_stage1_showo_compare_parallel.sh` runs the default parallel comparison path.
+- `bash scripts/run_stage1_showo_compare_sharded_reuse.sh` runs the default hard64 multi-GPU comparison path inside one Slurm allocation.
+- `bash scripts/run_stage1_showo_compare_parallel.sh` remains a legacy/debug parallel path and should not be used for primary hard64 claims.
 - `python scripts/prepare_drawbench_prompts.py --smoke-limit 8` prepares DrawBench prompt files.
 - `python scripts/prepare_t2i_compbench_prompts.py` prepares T2I-CompBench prompt files.
 - `sbatch jobs/stage1_drawbench_qwen35_9b_smoke8.sbatch` runs the public DrawBench smoke subset.
 - `REUSE_MODELS=1 PROMPT_LIMIT=2 sbatch jobs/stage1_t2i_compbench_qwen35_9b_smoke1.sbatch` runs a sequential T2I reuse smoke.
-- `sbatch jobs/stage1_t2i_compbench_qwen35_9b_smoke8.sbatch` runs the 8-GPU T2I smoke subset.
 
 ## Not Yet Done
 
-- DrawBench 8-prompt smoke remains pending resources.
 - A final judge independent of the ASCR repair evaluator is still needed before making public benchmark claims.
-- Full DrawBench and T2I-CompBench sweeps have not been run.
-- T2I-CompBench hard64 has not been run yet.
-- README and benchmark docs should be kept updated after each run with job ids and exact counts.
+- Full DrawBench and larger T2I-CompBench sweeps have not been run.
+- Official T2I-CompBench metrics have not yet been layered on top of the clean image outputs.
+- Future config sweeps should start from the 2026-05-19 hard64 default settings and report deltas against that checkpoint.
 
 ## Interpretation Notes
 
@@ -70,3 +69,12 @@ The smoke8 set confirms that the harder public prompt path, suite aggregation, r
 - `--reuse-models` reuses the baseline generator, ASCR generator, and Qwen evaluator across prompts in the single-process comparison path.
 - Compatible baseline and ASCR `ShowOAdapter` instances share one underlying native Show-o engine, avoiding a second Show-o weight load in sequential runs.
 - `jobs/stage1_t2i_compbench_qwen35_9b_smoke1.sbatch` now defaults `REUSE_MODELS=1` and judges the latest `suite.json` when running multiple prompts, falling back to `comparison.json` for single-prompt outputs.
+
+## Stage 1 Phase 1 Hard64 Result
+
+- 2026-05-19 job 68660: T2I-CompBench hard64 on one Slurm allocation with gres/gpu=8, 8 internal model-reuse workers, ASCR_START_MODE=baseline, REUSE_MODELS=1, GENERATION_TIMESTEPS=18, GUIDANCE_SCALE=4, and MAX_ITERATIONS=8.
+- Pairwise Qwen judge: ascr_win=13, ascr_loss=6, pairwise_tie=45, net ASCR wins +7.
+- Clean final-image Qwen pass/fail: ascr_pass=57/64, baseline_pass=53/64, net ASCR pass gain +4.
+- Detailed summary: docs/stage1_phase1_summary_20260519.md.
+- Default command: sbatch jobs/stage1_t2i_compbench_qwen35_9b_hard64_8gpu_reuse.sbatch.
+- Legacy process-per-prompt T2I 8-GPU smoke is no longer the default path; use the sharded reuse job for primary Stage 1 checks.
