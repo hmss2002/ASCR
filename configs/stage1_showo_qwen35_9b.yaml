@@ -2,7 +2,8 @@ stage: 1
 run_name: stage1_showo_qwen35_9b
 seed: 1234
 max_iterations: 8
-ascr_start_mode: partial
+ascr_start_mode: baseline
+return_initial_on_max_error: true
 image_size: 512
 coarse_grid_size: 4
 token_grid_size: 32

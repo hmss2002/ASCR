@@ -15,6 +15,7 @@ class ASCRRunConfig:
     coarse_grid_size: int = 4
     token_grid_size: int = 16
     output_dir: str = "outputs/stage1"
+    return_initial_on_max_error: bool = False
 
 
 class ASCRLoop:
@@ -43,14 +44,23 @@ class ASCRLoop:
         current_prompt = prompt
         final_decoded_image = None
         final_grid_image = None
+        initial_decoded_image = None
+        initial_grid_image = None
+        raw_final_decoded_image = None
+        raw_final_grid_image = None
         for iteration in range(self.config.max_iterations):
             iteration_dir = artifacts.iteration_dir(iteration)
             decoded_path = iteration_dir / "decoded.ppm"
             state = self.generator.decode(state, decoded_path)
             final_decoded_image = str(decoded_path)
+            raw_final_decoded_image = str(decoded_path)
             grid_path = iteration_dir / "grid.ppm"
             create_grid_overlay(decoded_path, grid_path, image_size=self.config.image_size, grid_size=self.config.coarse_grid_size)
             final_grid_image = str(grid_path)
+            raw_final_grid_image = str(grid_path)
+            if iteration == 0:
+                initial_decoded_image = str(decoded_path)
+                initial_grid_image = str(grid_path)
             evaluation = self.evaluator.evaluate(prompt, str(grid_path), iteration, current_prompt=current_prompt)
             evaluator_calls += 1
             mask = self.selector.select(evaluation)
@@ -90,9 +100,16 @@ class ASCRLoop:
             })
             trace_writer.write(make_trace_record(iteration, prompt, current_prompt, evaluation, mask, artifact_paths))
             state = self.generator.reopen_and_continue(state, mask, current_prompt, artifacts)
+        fallback_applied = False
+        if stop_reason == "max_iterations" and self.config.return_initial_on_max_error and initial_decoded_image:
+            final_decoded_image = initial_decoded_image
+            final_grid_image = initial_grid_image
+            fallback_applied = True
         summary = {
             "prompt": prompt,
             "stop_reason": stop_reason,
+            "final_selection_policy": "initial_on_max_error" if self.config.return_initial_on_max_error else "last_candidate",
+            "fallback_applied": fallback_applied,
             "iterations_recorded": len(records),
             "evaluator_calls": evaluator_calls,
             "revision_records": records,
@@ -100,6 +117,10 @@ class ASCRLoop:
             "trace_path": str(artifacts.root / "trace.jsonl"),
             "final_decoded_image": final_decoded_image,
             "final_grid_image": final_grid_image,
+            "raw_final_decoded_image": raw_final_decoded_image,
+            "raw_final_grid_image": raw_final_grid_image,
+            "initial_decoded_image": initial_decoded_image,
+            "initial_grid_image": initial_grid_image,
             "started_from_initial_state": initial_state is not None,
         }
         artifacts.write_json("summary.json", summary)
@@ -114,4 +135,5 @@ def run_config_from_mapping(mapping):
         coarse_grid_size=int(mapping.get("coarse_grid_size", 4)),
         token_grid_size=int(mapping.get("token_grid_size", 16)),
         output_dir=str(mapping.get("output_dir", "outputs/stage1")),
+        return_initial_on_max_error=bool(mapping.get("return_initial_on_max_error", False)),
     )

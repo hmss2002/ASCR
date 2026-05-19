@@ -666,3 +666,42 @@ Validated T2I smoke status:
 - Clean final-image judge job `68444` completed on that suite with `baseline_pass=8`, `ascr_pass=8`, `both_pass=8`.
 - T2I 2-prompt `REUSE_MODELS=1` validation job `68445` completed with `COMPLETED 0:0` in `00:02:21`; clean final-image judge counts were `baseline_pass=2`, `ascr_pass=2`, `both_pass=2`.
 - The 8-prompt smoke is useful as a pipeline regression check but does not separate baseline from ASCR under the current Qwen clean-final judge. The next meaningful result run should use the hard64 subset or a more independent judge.
+
+## 2026-05-19 Fair T2I-CompBench Judge and ASCR Safety Plan
+
+This update makes the Stage 1 comparison stricter without deleting the existing working pieces.
+
+Evaluation plan:
+
+1. Use `ascr_start_mode: baseline` as the default for Qwen3.5-9B comparison configs and Qwen3.5 Slurm jobs. In this mode, ASCR starts from the exact native Show-o baseline token state, so unchanged outputs remain attributable to the baseline and changed outputs are attributable to reopening.
+2. Keep `partial` as an explicit experimental mode only. It is useful for denoising-time intervention experiments, but its outputs mix ASCR behavior with independent sampling noise and should not be used for primary baseline-vs-ASCR claims.
+3. Treat `comparison` / `heuristic_comparison` in `suite.json` as a development-only heuristic. The current `score_image` path only supports simple color-presence and red-left-blue checks, so hard compositional prompts require VLM or official metric judging.
+4. Use `scripts/judge_showo_ascr_pairs_qwen.py` for clean single-image pass/fail judging. It compares clean `baseline_showo.png` against clean `ascr_final_image`; grid overlays remain localization artifacts only.
+5. Use `scripts/judge_showo_ascr_pairwise_qwen.py` as the primary VLM pairwise judge. It builds a side-by-side clean image with LEFT as baseline and RIGHT as ASCR, then asks Qwen3.5-9B which image better follows the prompt.
+6. For unresolved ASCR loops, set `return_initial_on_max_error: true`. If the loop reaches `max_iterations`, the report returns the initial decoded image as the conservative final image and stores the raw last candidate under `raw_final_decoded_image`. This prevents an unresolved final repair candidate from silently replacing the safer starting image.
+7. Future official T2I-CompBench metrics should be layered on top of the same clean image outputs and reported separately from both Qwen judges. The expected report layout is heuristic development signal, Qwen clean pass/fail, Qwen side-by-side pairwise, then official T2I-CompBench metric when available.
+
+New and updated entry points:
+
+- `scripts/judge_showo_ascr_pairwise_qwen.py`: side-by-side Qwen3.5-9B pairwise judge. Outputs `qwen_pairwise_judge.json`, `qwen_pairwise_judge.md`, and paired comparison images under `qwen_pairwise_judge/pairwise_images/`.
+- `configs/stage1_showo_qwen35_9b.yaml` and `configs/stage1_showo_qwen35_9b_fullcap_parallel.yaml`: default to `ascr_start_mode: baseline` and `return_initial_on_max_error: true`.
+- Qwen3.5 smoke and T2I jobs now default to `ASCR_START_MODE=baseline`; T2I smoke jobs run both clean pass/fail and side-by-side pairwise judges.
+
+Recommended hard benchmark flow:
+
+```bash
+export CONFIG=configs/stage1_showo_qwen35_9b_fullcap_parallel.yaml
+export PROMPTS_FILE=configs/prompts/t2i_compbench_hard64.txt
+export ASCR_START_MODE=baseline
+export REUSE_MODELS=1
+sbatch jobs/stage1_t2i_compbench_qwen35_9b_smoke1.sbatch
+```
+
+Manual judge rerun on an existing suite:
+
+```bash
+python scripts/judge_showo_ascr_pairs_qwen.py path/to/suite.json --config configs/stage1_showo_qwen35_9b_fullcap_parallel.yaml --output path/to/qwen_clean_final_pair_judge.json
+python scripts/judge_showo_ascr_pairwise_qwen.py path/to/suite.json --config configs/stage1_showo_qwen35_9b_fullcap_parallel.yaml --output path/to/qwen_pairwise_judge.json
+```
+
+Interpretation rule: primary claims should come from `qwen_pairwise_judge.json` and clean pass/fail counts, not from the heuristic `comparison.verdict`. `comparison.verdict` remains in JSON for backward compatibility and quick color-rule smoke debugging only.

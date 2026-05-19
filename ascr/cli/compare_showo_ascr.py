@@ -28,6 +28,7 @@ def build_parser():
     parser.add_argument("--guidance-scale", type=float, default=None)
     parser.add_argument("--max-iterations", type=int, default=2)
     parser.add_argument("--ascr-start-mode", choices=["baseline", "partial"], default=None, help="baseline starts ASCR from a completed native Show-o sample; partial starts from the configured confidence block so evaluator feedback is inserted during denoising.")
+    parser.add_argument("--return-initial-on-max-error", action="store_true", help="If ASCR reaches max_iterations with unresolved errors, report the initial decoded image as the conservative final image and keep the raw last candidate in summary metadata.")
     parser.add_argument("--reuse-models", action="store_true", help="Reuse loaded Show-o/Qwen objects across prompts in this process and share the Show-o engine between baseline and ASCR adapters.")
     return parser
 
@@ -69,6 +70,8 @@ def prompt_run_dir(root, prompt, index, total):
 def apply_cli_overrides(config, args):
     config = copy.deepcopy(config)
     config["max_iterations"] = args.max_iterations
+    if getattr(args, "return_initial_on_max_error", False):
+        config["return_initial_on_max_error"] = True
     generator_config = config.setdefault("generator", {})
     if args.generation_timesteps is not None:
         generator_config["generation_timesteps"] = args.generation_timesteps
@@ -163,7 +166,7 @@ def run_prompt_comparison(base_config, prompt, root, args, baseline_generator=No
     image_size = int(config.get("image_size", 512))
     baseline_score = score_image(prompt, baseline_path, grid_size=grid_size, image_size=image_size)
     ascr_score = score_image(prompt, summary["final_decoded_image"], grid_size=grid_size, image_size=image_size)
-    comparison = compare_scores(baseline_score, ascr_score)
+    heuristic_comparison = compare_scores(baseline_score, ascr_score)
     result = {
         "prompt": prompt,
         "ascr_start_mode": start_mode,
@@ -174,7 +177,10 @@ def run_prompt_comparison(base_config, prompt, root, args, baseline_generator=No
         "ascr_insertions": int(summary.get("iterations_recorded", 0)),
         "baseline_score": baseline_score,
         "ascr_score": ascr_score,
-        "comparison": comparison,
+        "comparison": heuristic_comparison,
+        "heuristic_comparison": heuristic_comparison,
+        "primary_metric": "qwen_clean_final_pairwise_judge",
+        "primary_metric_status": "pending_external_judge",
         "native_baseline_metadata": {
             "confidence_steps": baseline_state.metadata.get("confidence_steps"),
             "confidence_remask_count": baseline_state.metadata.get("confidence_remask_count"),
@@ -205,7 +211,7 @@ def build_suite(results):
 
 def suite_to_markdown(suite):
     lines = [
-        "| Index | Prompt | Start | Evaluator calls | ASCR insertions | Stop reason | Baseline | ASCR | Delta | Verdict |",
+        "| Index | Prompt | Start | Evaluator calls | ASCR insertions | Stop reason | Heuristic baseline | Heuristic ASCR | Heuristic delta | Heuristic verdict |",
         "| ---: | --- | --- | ---: | ---: | --- | ---: | ---: | ---: | --- |",
     ]
     for index, result in enumerate(suite["results"]):

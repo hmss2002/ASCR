@@ -28,7 +28,7 @@ export PROMPT=${PROMPT:-A red cube left of a blue sphere with a small green cone
 export GENERATION_TIMESTEPS=${GENERATION_TIMESTEPS:-18}
 export GUIDANCE_SCALE=${GUIDANCE_SCALE:-4}
 export MAX_ITERATIONS=${MAX_ITERATIONS:-8}
-export ASCR_START_MODE=${ASCR_START_MODE:-partial}
+export ASCR_START_MODE=${ASCR_START_MODE:-baseline}
 export QWEN_MODEL_PATH=${QWEN_MODEL_PATH:-models/qwen3.5-9b}
 export QWEN_LOCAL_FILES_ONLY=${QWEN_LOCAL_FILES_ONLY:-1}
 

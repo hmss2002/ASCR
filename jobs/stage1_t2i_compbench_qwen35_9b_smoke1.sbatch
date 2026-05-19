@@ -26,7 +26,7 @@ export CONFIG=${CONFIG:-configs/stage1_showo_qwen35_9b_fullcap_parallel.yaml}
 export OUTPUT_DIR=${OUTPUT_DIR:-outputs/benchmarks_t2i_compbench_qwen35_smoke1}
 export PROMPTS_FILE=${PROMPTS_FILE:-configs/prompts/t2i_compbench_hard_smoke8.txt}
 export PROMPT_LIMIT=${PROMPT_LIMIT:-1}
-export ASCR_START_MODE=${ASCR_START_MODE:-partial}
+export ASCR_START_MODE=${ASCR_START_MODE:-baseline}
 export GENERATION_TIMESTEPS=${GENERATION_TIMESTEPS:-18}
 export GUIDANCE_SCALE=${GUIDANCE_SCALE:-4}
 export MAX_ITERATIONS=${MAX_ITERATIONS:-8}
@@ -57,3 +57,4 @@ else
   JUDGE_INPUT="${LATEST_COMPARISON}"
 fi
 "${PYTHON_BIN}" scripts/judge_showo_ascr_pairs_qwen.py "${JUDGE_INPUT}" --config "${CONFIG}" --output "$(dirname "${JUDGE_INPUT}")/qwen_clean_final_pair_judge.json"
+"${PYTHON_BIN}" scripts/judge_showo_ascr_pairwise_qwen.py "${JUDGE_INPUT}" --config "${CONFIG}" --output "$(dirname "${JUDGE_INPUT}")/qwen_pairwise_judge.json"
