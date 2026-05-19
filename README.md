@@ -644,7 +644,10 @@ New benchmark and judge entry points:
 - `configs/prompts/t2i_compbench_hard_smoke8.txt`: 8 unique hard smoke prompts.
 - `configs/prompts/t2i_compbench_hard64.txt`: 64-prompt harder follow-up subset.
 - `jobs/stage1_t2i_compbench_qwen35_9b_smoke1.sbatch`: 1-GPU smoke and sequential fallback runner.
-- `jobs/stage1_t2i_compbench_qwen35_9b_smoke8.sbatch`: 8-GPU process-per-prompt runner.
+- `jobs/stage1_t2i_compbench_qwen35_9b_smoke8.sbatch`: 8-GPU smoke runner for quick pipeline checks.
+- `jobs/stage1_t2i_compbench_qwen35_9b_hard64_8gpu_reuse.sbatch`: recommended hard64 runner; one Slurm job requests `gres/gpu=8`, then launches 8 model-reuse workers.
+- `scripts/run_stage1_showo_compare_sharded_reuse.sh`: shards prompts inside one allocation and keeps models loaded within each worker.
+- `scripts/shard_prompts.py` and `scripts/aggregate_showo_ascr_suites.py`: split prompts and merge worker suites.
 - `scripts/judge_showo_ascr_pairs_qwen.py`: clean final-image paired judge for baseline vs ASCR.
 
 The final judge compares only clean generated images: baseline `baseline_showo.png` against ASCR `ascr_final_image` / `final_decoded_image`. ASCR grid images remain diagnostic artifacts for localization and must not be treated as final benchmark images.
@@ -690,12 +693,10 @@ New and updated entry points:
 Recommended hard benchmark flow:
 
 ```bash
-export CONFIG=configs/stage1_showo_qwen35_9b_fullcap_parallel.yaml
-export PROMPTS_FILE=configs/prompts/t2i_compbench_hard64.txt
-export ASCR_START_MODE=baseline
-export REUSE_MODELS=1
-sbatch jobs/stage1_t2i_compbench_qwen35_9b_smoke1.sbatch
+sbatch jobs/stage1_t2i_compbench_qwen35_9b_hard64_8gpu_reuse.sbatch
 ```
+
+This is the default path for hard64 when 8 GPUs are available: Slurm allocates one job with `ReqTRES=gres/gpu=8`; inside that allocation, 8 workers each receive one `CUDA_VISIBLE_DEVICES` shard and process a contiguous prompt slice with `REUSE_MODELS=1`. Override `SHARD_WORKERS`, `PROMPTS_FILE`, `PROMPT_LIMIT`, or `RUN_ROOT` only when deliberately testing a different shape.
 
 Manual judge rerun on an existing suite:
 
