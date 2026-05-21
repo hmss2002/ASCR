@@ -20,11 +20,19 @@ export TRANSFORMERS_OFFLINE=1
 export HF_HUB_DISABLE_TELEMETRY=1
 
 OWLVIT_MODEL=${OWLVIT_MODEL:-models/owlvit-base-patch32}
+DETR_MODEL=${DETR_MODEL:-models/detr-resnet-50}
+DETECTOR=${DETECTOR:-owlvit}
 NUM_SHARDS=8
 
 if [[ ! -f "$OWLVIT_MODEL/config.json" ]]; then
   echo "OWLViT model not found at $OWLVIT_MODEL" >&2
   echo "Run: python scripts/download_owlvit_model.py first (on login node)" >&2
+  exit 2
+fi
+
+if [[ "$DETECTOR" == "detr" && ! -f "$DETR_MODEL/config.json" ]]; then
+  echo "DETR model not found at $DETR_MODEL" >&2
+  echo "Run: python scripts/download_detr_model.py first (on login node)" >&2
   exit 2
 fi
 
@@ -40,6 +48,8 @@ RESULTS_DIR="$(dirname "$GENEVAL_BASELINE")/"
 echo "[geneval-eval] Baseline dir:   $GENEVAL_BASELINE"
 echo "[geneval-eval] ASCR dir:       $GENEVAL_ASCR"
 echo "[geneval-eval] OWLViT model:   $OWLVIT_MODEL"
+echo "[geneval-eval] Detector:      $DETECTOR"
+[[ "$DETECTOR" == "detr" ]] && echo "[geneval-eval] DETR model:     $DETR_MODEL"
 echo "[geneval-eval] Shards:         $NUM_SHARDS GPUs"
 
 run_sharded_eval() {
@@ -54,6 +64,8 @@ run_sharded_eval() {
         "$IMAGEDIR" \
         --outfile "${OUT_PREFIX}.shard${SHARD}.jsonl" \
         --model-path "$OWLVIT_MODEL" \
+        --detector "$DETECTOR" \
+        ${DETECTOR_EXTRA_ARGS:-} \
         --shard-id "$SHARD" \
         --num-shards "$NUM_SHARDS" \
         > "${OUT_PREFIX}.shard${SHARD}.log" 2>&1 &

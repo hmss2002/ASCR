@@ -6,9 +6,11 @@ This README is the project control document. It records the research plan, imple
 
 ## Quick Results Summary
 
-All Stage 1 evaluations use T2I-CompBench hard64 (64 compositional prompts) judged by
-Qwen3.5-9B. See [Evaluation Methodology](#evaluation-methodology) for method details and
-[Qualitative Examples](#qualitative-examples) for side-by-side image comparisons.
+The current top-level evidence combines Qwen3.5-9B judged T2I-CompBench hard64 results
+with an independent GenEval object-checking run. See [Evaluation Methodology](#evaluation-methodology)
+for method details and [Qualitative Examples](#qualitative-examples) for side-by-side image comparisons.
+
+**T2I-CompBench hard64 (64 compositional prompts, Qwen3.5-9B judge):**
 
 | Experiment | Judge Method | ASCR | Opponent | Ties | N |
 |---|---|---:|---:|---:|---:|
@@ -17,9 +19,25 @@ Qwen3.5-9B. See [Evaluation Methodology](#evaluation-methodology) for method det
 | ASCR vs BAGEL-7B-MoT | Pairwise side-by-side | **50 wins** | 14 wins | 0 | 64 |
 | ASCR vs BAGEL-7B-MoT | Clean pass/fail | **57 / 64** (89.1 %) | 54 / 64 (84.4 %) | — | 64 |
 
-> **Note:** All judges use Qwen3.5-9B, which is also the ASCR correction loop's semantic
+> **Note:** All Qwen judges use Qwen3.5-9B, which is also the ASCR correction loop's semantic
 > evaluator. These are automated benchmark signals; independent human evaluation or official
 > T2I-CompBench metrics are planned as future work.
+
+**ShowO GenEval full 553 prompts (HSV + NMS + counting threshold = 0.15, job 68776):**
+
+| Task | ShowO baseline | ASCR | Delta |
+|---|---:|---:|---:|
+| single_object | 100.00% | 100.00% | +0.00 |
+| two_object | 65.66% | 79.80% | +14.14 |
+| counting | 40.00% | 47.50% | +7.50 |
+| colors | 74.47% | 75.53% | +1.06 |
+| position | 35.00% | 50.00% | +15.00 |
+| color_attr | 9.00% | 19.00% | +10.00 |
+| **Overall** | **54.02%** | **61.97%** | **+7.95** |
+
+ASCR improves GenEval overall by **+7.95 points** over the ShowO baseline. The evaluator is
+circularity-free with respect to Qwen because it uses detector-based object checks rather than
+the ASCR loop's semantic evaluator.
 
 ## Source Documents
 
@@ -1138,16 +1156,75 @@ unambiguous performance ordering:
 - **ASCR's correction loop advantage is robust:** even after accounting for the Qwen evaluator
   circularity caveat, the margin over BAGEL (+36 pairwise, +3 clean-pass) is large enough that
   an independent evaluator would need to strongly disagree with Qwen to reverse the finding.
-- **Evaluator circularity caveat:** Qwen3.5-9B is the judge for all three comparisons and is
-  also the ASCR loop evaluator. The BAGEL vs ShowO comparison is free of this circularity
-  (neither system uses Qwen at generation time). Independent GenEval (OWLViT-based, job 68753)
-  results are pending and will provide circularity-free confirmation.
+- **Evaluator circularity caveat:** Qwen3.5-9B is the judge for all three hard64 comparisons
+  and is also the ASCR loop evaluator. This caveat is partially addressed by the independent
+  GenEval run below: it uses OWLViT detector outputs plus deterministic color/count postprocessing,
+  not Qwen, and shows ASCR ahead of the ShowO baseline by +7.95 overall points.
+
+## 2026-05-21 ShowO GenEval — Independent Full 553-Prompt Evaluation
+
+This run evaluates the full GenEval 553-prompt suite for ShowO baseline vs ASCR using a
+non-Qwen, object-detection-based scorer. It is intended as an independent check on the Qwen
+hard64 findings above.
+
+**Protocol:**
+- Images: `outputs/geneval_showo_ascr_68753_20260521_170538/geneval_baseline/` and
+  `outputs/geneval_showo_ascr_68753_20260521_170538/geneval_ascr/`.
+- Evaluator: `scripts/evaluate_geneval_owlvit.py` with local `models/owlvit-base-patch32`.
+- Slurm job: 68776, 8 GPU shards, completed in 00:01:46.
+- Output files: `outputs/geneval_showo_ascr_68753_20260521_170538/results_baseline.jsonl`,
+  `outputs/geneval_showo_ascr_68753_20260521_170538/results_ascr.jsonl`.
+- Summary log: `logs/geneval-evaluate-68776.out`.
+
+**Evaluator fixes used for the final score:**
+- HSV pixel-histogram color classifier for color-attribute binding, replacing unreliable
+  OWLViT/CLIP pooler color similarities.
+- Per-class NMS at IoU 0.5 to remove duplicate overlapping detections.
+- Tag-aware detection threshold: default `--threshold 0.01` for recall-sensitive tasks, plus
+  `--counting-threshold 0.15` for counting to suppress low-confidence false positives.
+
+**Results:**
+
+| Task | ShowO baseline | ASCR | Delta |
+|---|---:|---:|---:|
+| single_object | 100.00% (80 / 80) | 100.00% (80 / 80) | +0.00 |
+| two_object | 65.66% (65 / 99) | 79.80% (79 / 99) | +14.14 |
+| counting | 40.00% (32 / 80) | 47.50% (38 / 80) | +7.50 |
+| colors | 74.47% (70 / 94) | 75.53% (71 / 94) | +1.06 |
+| position | 35.00% (35 / 100) | 50.00% (50 / 100) | +15.00 |
+| color_attr | 9.00% (9 / 100) | 19.00% (19 / 100) | +10.00 |
+| **Overall** | **54.02%** | **61.97%** | **+7.95** |
+
+**Interpretation:**
+
+The independent GenEval run supports the same direction as the Qwen hard64 comparisons: ASCR
+substantially improves compositional prompt following over the ShowO baseline. The largest gains
+are in two-object, counting, position, and color-attribute tasks. The corrected counting score
+also confirms that the previous 0% was an evaluator artifact caused by low-threshold false
+positives interacting with GenEval's exclude rule.
 
 ## Qualitative Examples
 
-Each image below is the **pairwise side-by-side canvas** fed to the Qwen3.5-9B judge.
-**LEFT = Baseline, RIGHT = ASCR** in both comparisons.
-Representative examples are selected by highest judge confidence.
+Each image below is a compact side-by-side comparison copied from runtime outputs into
+`docs/examples/` so GitHub can render it without syncing the full `outputs/` tree. For Qwen
+pairwise examples, the canvas is exactly what was fed to Qwen3.5-9B. For GenEval examples,
+the canvas is a README-only visualization with **LEFT = ShowO baseline** and **RIGHT = ASCR**.
+
+### GenEval Detector Examples
+
+Representative ASCR-only wins from the full 553-prompt GenEval run (job 68776):
+
+![GenEval two_object — a photo of a toothbrush and a snowboard](docs/examples/geneval/two_object_081_a-photo-of-a-toothbrush-and-a-snowboard.png)
+
+![GenEval counting — a photo of two bears](docs/examples/geneval/counting_184_a-photo-of-two-bears.png)
+
+![GenEval counting — a photo of three pizzas](docs/examples/geneval/counting_240_a-photo-of-three-pizzas.png)
+
+![GenEval position — a photo of a bird left of a couch](docs/examples/geneval/position_400_a-photo-of-a-bird-left-of-a-couch.png)
+
+![GenEval color_attr — a photo of a yellow pizza and a green oven](docs/examples/geneval/color_attr_504_a-photo-of-a-yellow-pizza-and-a-green-oven.png)
+
+![GenEval color_attr — a photo of an orange cow and a purple sandwich](docs/examples/geneval/color_attr_544_a-photo-of-an-orange-cow-and-a-purple-sandwich.png)
 
 ### ASCR vs ShowO Baseline
 
@@ -1163,7 +1240,7 @@ Representative examples are selected by highest judge confidence.
 
 ##### **ASCR wins** — `a pentagonal stop sign and a spherical traffic light`
 
-*Qwen3.5-9B (conf 0.90):* The prompt requests a pentagonal stop sign and a spherical traffic light. Both images feature octagonal stop signs, failing the shape constraint. However, the ASCR image's traffic light has a smoother
+*Qwen3.5-9B (conf 0.90):* The prompt requests a pentagonal stop sign and a spherical traffic light. Both images feature octagonal stop signs, failing the shape constraint. However, the ASCR image's traffic light has a smoother, more rounded housing that is closer to spherical than the baseline's angular housing. Thus, ASCR better satisfies the prompt's specific shape requirements.
 
 ![a pentagonal stop sign and a spherical traffic light — pairwise (LEFT = ShowO Baseline, RIGHT = ASCR)](docs/examples/showo_baseline/ascr_win_2_a_pentagonal_stop_sign_and_a_spherical_traff.png)
 
@@ -1171,7 +1248,7 @@ Representative examples are selected by highest judge confidence.
 
 ##### **ASCR loses** — `a mouse on side of a key`
 
-*Qwen3.5-9B (conf 0.95):* The baseline image perfectly matches the prompt, showing a single mouse standing on a single golden key. The ASCR image suffers from severe hallucinations, showing a distorted, multi-headed creature a
+*Qwen3.5-9B (conf 0.95):* The baseline image perfectly matches the prompt, showing a single mouse standing on a single golden key. The ASCR image suffers from severe hallucinations, showing a distorted, multi-headed creature and a fragmented, glitchy key.
 
 ![a mouse on side of a key — pairwise (LEFT = ShowO Baseline, RIGHT = ASCR)](docs/examples/showo_baseline/ascr_loss_1_a_mouse_on_side_of_a_key.png)
 
@@ -1179,7 +1256,7 @@ Representative examples are selected by highest judge confidence.
 
 ##### **ASCR loses** — `a sheep in front of a key`
 
-*Qwen3.5-9B (conf 0.95):* The baseline image correctly depicts a sheep in front of a key, satisfying the prompt. The right image replaces the key with a metallic grate or mesh structure, failing to generate the requested objec
+*Qwen3.5-9B (conf 0.95):* The baseline image correctly depicts a sheep in front of a key, satisfying the prompt. The right image replaces the key with a metallic grate or mesh structure, failing to generate the requested object.
 
 ![a sheep in front of a key — pairwise (LEFT = ShowO Baseline, RIGHT = ASCR)](docs/examples/showo_baseline/ascr_loss_2_a_sheep_in_front_of_a_key.png)
 
@@ -1195,7 +1272,7 @@ Representative examples are selected by highest judge confidence.
 
 ##### **Tie** — `an oblong cucumber and a teardrop plum`
 
-*Qwen3.5-9B (conf 0.95):* Both images accurately depict an oblong cucumber and a teardrop-shaped plum against a green background. The objects, colors, and spatial relations are identical in both images, with no material differ
+*Qwen3.5-9B (conf 0.95):* Both images accurately depict an oblong cucumber and a teardrop-shaped plum against a green background. The objects, colors, and spatial relations are identical in both images, with no material differences affecting prompt adherence.
 
 ![an oblong cucumber and a teardrop plum — pairwise (LEFT = ShowO Baseline, RIGHT = ASCR)](docs/examples/showo_baseline/tie_2_an_oblong_cucumber_and_a_teardrop_plum.png)
 
@@ -1206,7 +1283,7 @@ Representative examples are selected by highest judge confidence.
 
 ##### **ASCR wins** — `an oblong cucumber and a teardrop plum`
 
-*Qwen3.5-9B (conf 0.95):* The right image (ASCR) correctly depicts an oblong cucumber and a teardrop-shaped plum, matching the prompt's object descriptions and spatial arrangement. The left image (baseline) misidentifies the p
+*Qwen3.5-9B (conf 0.95):* The right image (ASCR) correctly depicts an oblong cucumber and a teardrop-shaped plum, matching the prompt's object descriptions and spatial arrangement. The left image (baseline) misidentifies the plum as a pear, which is a significant object error.
 
 ![an oblong cucumber and a teardrop plum — pairwise (LEFT = BAGEL, RIGHT = ASCR)](docs/examples/bagel/ascr_win_1_an_oblong_cucumber_and_a_teardrop_plum.png)
 
@@ -1214,7 +1291,7 @@ Representative examples are selected by highest judge confidence.
 
 ##### **ASCR wins** — `two boys`
 
-*Qwen3.5-9B (conf 0.95):* The right image (ASCR) is a faithful representation of the prompt 'two boys', showing two distinct individuals. The left image (BAGEL) depicts two identical clones of the same boy, which is a hallucin
+*Qwen3.5-9B (conf 0.95):* The right image (ASCR) is a faithful representation of the prompt 'two boys', showing two distinct individuals. The left image (BAGEL) depicts two identical clones of the same boy, which is a hallucination not present in the prompt.
 
 ![two boys — pairwise (LEFT = BAGEL, RIGHT = ASCR)](docs/examples/bagel/ascr_win_2_two_boys.png)
 
@@ -1222,7 +1299,7 @@ Representative examples are selected by highest judge confidence.
 
 ##### **ASCR loses** — `a giraffe next to a lamp`
 
-*Qwen3.5-9B (conf 0.95):* The left image (BAGEL) perfectly satisfies the prompt, showing a complete giraffe standing next to a lamp with correct spatial relations and lighting. The right image (ASCR) is severely cropped, cutti
+*Qwen3.5-9B (conf 0.95):* The left image (BAGEL) perfectly satisfies the prompt, showing a complete giraffe standing next to a lamp with correct spatial relations and lighting. The right image (ASCR) is severely cropped, cutting off the giraffe's body and showing only its head and neck, which fails to represent the full object described in the prompt.
 
 ![a giraffe next to a lamp — pairwise (LEFT = BAGEL, RIGHT = ASCR)](docs/examples/bagel/ascr_loss_1_a_giraffe_next_to_a_lamp.png)
 
@@ -1230,7 +1307,7 @@ Representative examples are selected by highest judge confidence.
 
 ##### **ASCR loses** — `a girl on the top of a frog`
 
-*Qwen3.5-9B (conf 0.95):* The left image (baseline) perfectly matches the prompt 'a girl on the top of a frog' with a cute, high-quality 3D render of a girl sitting on a large frog in a pond. The right image (ASCR) shows a gir
+*Qwen3.5-9B (conf 0.95):* The left image (baseline) perfectly matches the prompt 'a girl on the top of a frog' with a cute, high-quality 3D render of a girl sitting on a large frog in a pond. The right image (ASCR) shows a girl sitting on a frog, but the frog is on a rock, not in water, and the overall style is less consistent with the prompt's implied whimsical nature. The left image is more visually appealing and adheres better to the spatial relation of being 'on top of' in a natural setting.
 
 ![a girl on the top of a frog — pairwise (LEFT = BAGEL, RIGHT = ASCR)](docs/examples/bagel/ascr_loss_2_a_girl_on_the_top_of_a_frog.png)
 
