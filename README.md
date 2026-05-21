@@ -195,86 +195,212 @@ The practical Stage 1 loop is:
 11. Log every intermediate artifact and decision.
 12. Stop when the evaluator returns no actionable semantic error, the iteration budget is exhausted, or fallback logic triggers abstention.
 
-## Planned Repository Layout
+## Repository Architecture
 
-The first implementation pass will build toward this structure:
+### Directory Tree
+
+The live source tree — runtime artifacts (`outputs/`, `logs/`, `models/`, `external/`) are
+excluded from git:
 
 ```text
 ASCR/
-  README.md
-  .gitignore
-  pyproject.toml
-  requirements/
-    base.txt
-    dev.txt
-    local_vlm.txt
-  configs/
-    stage1_showo_local.yaml
-    cluster_gpu.yaml
-    cluster_gpu_shared.yaml
-  ascr/
-    __init__.py
-    cli/
-      run_stage1.py
-      collect_traces.py
-      validate_artifacts.py
-    core/
-      state.py
-      schemas.py
-      loop.py
-      artifacts.py
-    generators/
-      base.py
-      showo.py
-      registry.py
-    evaluators/
-      base.py
-      local_vlm.py
-      schema_parser.py
-    grids/
-      overlay.py
-      projection.py
-    revision/
-      selector.py
-      remask.py
-      prompt_composer.py
-    benchmarks/
-      prompts.py
-      runner.py
-      metrics.py
-    traces/
-      writer.py
-      schema.py
-    training/
-      selector_model.py
-      train_selector.py
-      ddp.py
-  jobs/
-    stage1_debug_gpu_shared.sbatch
-    stage1_run_gpu.sbatch
-    stage2_train_selector_gpu.sbatch
-  scripts/
-    create_env.sh
-    activate_env.sh
-    run_stage1_debug.sh
-    sync_github.sh
-  docs/
-    stage1_design.md
-    benchmark_plan.md
-    cluster_notes.md
-  tests/
-    test_schema_parser.py
-    test_grid_projection.py
-    test_prompt_composer.py
-  data/
-    README.md
-  outputs/
-  checkpoints/
-  logs/
+├── README.md                                    ← project control document (this file)
+├── setup.py                                     ← package install (editable: setup.py develop)
+├── requirements-qwen-vl.txt                     ← Qwen evaluator pip requirements
+├── requirements/
+│   ├── base.txt                                 ← core runtime deps (PIL, pyyaml, …)
+│   ├── dev.txt                                  ← test + lint tools
+│   ├── showo_inference.txt                      ← Show-o inference deps (.venv legacy)
+│   └── local_vlm.txt                            ← heuristic evaluator deps
+│
+├── configs/                                     ← experiment configs (YAML)
+│   ├── ★ stage1_showo_qwen35_9b_fullcap_parallel.yaml  ← DEFAULT production config
+│   ├── stage1_showo_qwen35_9b.yaml              ← Qwen3.5-9B single-process config
+│   ├── stage1_showo_local.yaml                  ← ShO-MMU evaluator config (legacy)
+│   ├── showo_local_512x512.yaml                 ← Show-o model hyperparams
+│   ├── cluster_gpu.yaml / cluster_gpu_shared.yaml      ← Slurm partition templates
+│   ├── prompts/
+│   │   ├── ★ t2i_compbench_hard64.txt           ← PRIMARY benchmark (64 prompts)
+│   │   ├── t2i_compbench_hard_smoke8.txt        ← 8-prompt smoke subset
+│   │   ├── drawbench_all.txt                    ← 200-prompt DrawBench
+│   │   ├── drawbench_smoke8.txt                 ← 8-prompt DrawBench smoke
+│   │   └── stage1_complex_prompts.txt           ← internal dev regression suite
+│   └── experiments/
+│       └── qwen36/                              ← Qwen3.6 full-precision (67 GiB, inactive)
+│
+├── ascr/                                        ← Python package
+│   ├── cli/
+│   │   ├── ★ compare_showo_ascr.py              ← MAIN benchmark CLI (single-process)
+│   │   ├── compare_showo_ascr_parallel.py       ← multi-worker one-GPU-per-worker CLI
+│   │   └── run_stage1.py                        ← single-loop debug / dry-run CLI
+│   ├── core/
+│   │   ├── ★ loop.py                            ← ASCR iterative correction loop
+│   │   ├── ★ schemas.py                         ← data contracts (SemanticEvaluation,
+│   │   │                                           RegionSelection, TokenReopenMask, …)
+│   │   ├── state.py                             ← GenerationState, IterationSummary
+│   │   └── artifacts.py                         ← per-run artifact file-system writer
+│   ├── generators/
+│   │   ├── ★ showo_native.py                    ← ShowONativeEngine: token-level ops
+│   │   │                                           (run_confidence_block, force_mask,
+│   │   │                                            decode_tokens, token confidence map)
+│   │   ├── showo.py                             ← ShowOAdapter: wraps native engine
+│   │   │                                           (initialize, reopen_and_continue)
+│   │   ├── base.py                              ← GeneratorAdapter ABC
+│   │   └── registry.py                          ← build_generator() factory
+│   ├── evaluators/
+│   │   ├── ★ qwen_vl.py                         ← QwenVLEvaluator (DEFAULT evaluator)
+│   │   │                                           Qwen3.5-9B with chain-of-thought JSON
+│   │   ├── showo_mmu.py                         ← ShowOMMUEvaluator (legacy alternative,
+│   │   │                                           2 MMU calls per iteration)
+│   │   ├── mock.py                              ← MockSemanticEvaluator (--dry-run / tests)
+│   │   ├── local_vlm.py                         ← heuristic color evaluator (legacy;
+│   │   │                                           only supports simple color checks)
+│   │   ├── base.py                              ← SemanticEvaluator ABC
+│   │   ├── schema_parser.py                     ← JSON extraction + repair helpers
+│   │   └── registry.py                          ← build_evaluator() factory
+│   ├── grids/
+│   │   ├── overlay.py                           ← 4×4 grid overlay renderer (512×512)
+│   │   └── projection.py                        ← 4×4 cell → 32×32 token mask + dilation
+│   ├── revision/
+│   │   ├── selector.py                          ← GridSemanticSelector (cell selection)
+│   │   └── prompt_composer.py                   ← correction prompt builder
+│   ├── benchmarks/
+│   │   ├── metrics.py                           ← score_image, compare_scores (heuristic)
+│   │   └── runner.py                            ← result_to_markdown helper
+│   └── training/
+│       ├── selector_model.py                    ← Stage 2 placeholder: learned selector
+│       │                                           interface (image + prompt → token scores)
+│       └── train_selector.py                    ← Stage 2 placeholder: training entry point
+│
+├── scripts/
+│   ├── ★ judge_showo_ascr_pairwise_qwen.py      ← side-by-side Qwen3.5-9B pairwise judge
+│   │                                               outputs qwen_pairwise_judge.json
+│   ├── ★ judge_showo_ascr_pairs_qwen.py         ← clean per-image pass/fail judge
+│   │                                               outputs qwen_clean_final_pair_judge.json
+│   ├── ★ run_stage1_showo_compare_sharded_reuse.sh  ← sharded runner for single Slurm
+│   │                                               8-GPU allocation (primary run script)
+│   ├── run_stage1_showo_compare.sh              ← single-worker compare runner
+│   ├── run_stage1_showo_compare_parallel.sh     ← one-process-per-GPU compare runner
+│   ├── shard_prompts.py                         ← split prompt file across N shards
+│   ├── aggregate_showo_ascr_suites.py           ← merge worker shard suites into one
+│   ├── prepare_t2i_compbench_prompts.py         ← generate T2I-CompBench prompt files
+│   ├── prepare_drawbench_prompts.py             ← generate DrawBench prompt files
+│   ├── run_bagel_text2image.py                  ← BAGEL-7B-MoT baseline generation
+│   ├── run_stage1_debug.sh                      ← mock dry-run (no GPU needed)
+│   ├── run_showo_t2i_local.sh                   ← Show-o T2I subprocess (fallback path)
+│   ├── run_showo_inpaint_local.sh               ← Show-o inpaint subprocess (fallback)
+│   ├── download_showo.sh / download_showo_models.py  ← Show-o model download
+│   ├── download_qwen35_9b_snapshot.sh           ← Qwen3.5-9B snapshot download
+│   ├── download_qwen36_snapshot.sh              ← Qwen3.6 snapshot (inactive; 67 GiB)
+│   ├── sync_github.sh                           ← git add/commit/push helper
+│   └── create_env.sh / activate_env.sh          ← environment setup
+│
+├── jobs/
+│   ├── ★ stage1_t2i_compbench_qwen35_9b_hard64_8gpu_reuse.sbatch  ← PRIMARY job
+│   │                                               8-GPU, 64 prompts, REUSE_MODELS=1
+│   ├── stage1_drawbench_qwen35_9b_smoke8.sbatch ← DrawBench 8-prompt smoke (8 GPU)
+│   ├── stage1_t2i_compbench_qwen35_9b_smoke1.sbatch  ← 1-prompt smoke + both judges
+│   ├── stage1_qwen35_9b_smoke1gpu.sbatch        ← single-GPU full-flow smoke
+│   ├── stage1_qwen35_9b_parallel8.sbatch        ← 8-GPU parallel (dev suite)
+│   ├── stage2_train_selector_gpu.sbatch         ← Stage 2 placeholder
+│   ├── archived/                                ← legacy .venv + ShO-MMU jobs
+│   │                                               (env superseded by .venv-qwen36)
+│   └── experiments/
+│       └── qwen36/                              ← Qwen3.6 full-precision experiment jobs
+│
+├── tests/
+│   ├── test_grid_projection.py                  ← 4×4→32×32 projection + dilation
+│   ├── test_schema_parser.py                    ← SemanticEvaluation JSON parsing
+│   ├── test_prompt_composer.py                  ← correction prompt generation
+│   ├── test_loop_initial_state.py               ← loop initialization
+│   ├── test_loop_multi_insert.py                ← multi-iteration loop behavior
+│   ├── test_native_showo_helpers.py             ← ShowONativeEngine helper ops
+│   ├── test_qwen_vl_evaluator.py                ← QwenVLEvaluator integration
+│   ├── test_local_vlm.py                        ← heuristic evaluator
+│   └── test_compare_showo_suite.py              ← end-to-end comparison CLI
+│
+├── docs/
+│   ├── stage1_phase1_summary_20260519.md        ← T2I-CompBench hard64 benchmark summary
+│   ├── stage1_design.md                         ← ASCR algorithm design notes
+│   ├── benchmark_plan.md                        ← evaluation plan
+│   ├── cluster_notes.md                         ← HKU AI cluster usage notes
+│   ├── project_status.md                        ← current status snapshot
+│   └── examples/                                ← pairwise comparison images (git-tracked)
+│
+├── external/Show-o/                             ← NOT in git; clone separately
+├── models/                                      ← NOT in git; download separately
+│   ├── show-o-512x512/
+│   ├── magvitv2/
+│   ├── phi-1_5/
+│   └── qwen3.5-9b/
+├── outputs/                                     ← NOT in git; runtime benchmark artifacts
+└── logs/                                        ← NOT in git; Slurm stdout/stderr
 ```
 
-Some folders such as `outputs`, `checkpoints`, `logs`, model weights, and datasets are runtime artifacts and should not be committed.
+### Module Quick Reference
 
+#### "Where do I find…?"
+
+| Goal | Start here |
+|---|---|
+| **Understand the ASCR algorithm** | `ascr/core/loop.py` |
+| **Data schemas** (SemanticEvaluation, RegionSelection, TokenReopenMask) | `ascr/core/schemas.py` |
+| **Show-o token operations** (force-mask, confidence block, decode) | `ascr/generators/showo_native.py` |
+| **Qwen3.5-9B evaluator** (prompt template, JSON parsing, thinking mode) | `ascr/evaluators/qwen_vl.py` |
+| **Grid overlay** (4×4 visible grid on 512×512 image) | `ascr/grids/overlay.py` |
+| **4×4 → 32×32 token projection + dilation** | `ascr/grids/projection.py` |
+| **Correction prompt builder** | `ascr/revision/prompt_composer.py` |
+| **Run a single-prompt comparison** | `ascr/cli/compare_showo_ascr.py` |
+| **Submit 8-GPU benchmark** | `jobs/stage1_t2i_compbench_qwen35_9b_hard64_8gpu_reuse.sbatch` |
+| **VLM pairwise judge** | `scripts/judge_showo_ascr_pairwise_qwen.py` |
+| **VLM clean pass/fail judge** | `scripts/judge_showo_ascr_pairs_qwen.py` |
+| **Default config** | `configs/stage1_showo_qwen35_9b_fullcap_parallel.yaml` |
+| **Primary benchmark prompts** | `configs/prompts/t2i_compbench_hard64.txt` |
+| **Stage 2 interface contracts** | `ascr/training/selector_model.py` |
+
+#### Active vs Legacy Evaluators
+
+| Backend | Key | When to use |
+|---|---|---|
+| Qwen3.5-9B | `qwen_vl` | ★ Default for all production runs; chain-of-thought JSON; requires `models/qwen3.5-9b` |
+| Show-o MMU | `showo_mmu` | Legacy: Show-o self-evaluation without extra model; 2 MMU calls per iteration, slower |
+| Mock | `mock` | `--dry-run`, unit tests; no GPU needed |
+| Heuristic | `local_vlm` | Legacy: color-presence checks only; not suitable for compositional prompts |
+
+#### Output Directory Layout
+
+Each benchmark run writes a timestamped root under `outputs/`:
+
+```text
+outputs/<run-name>/
+├── suite.json                              ← aggregated results for all prompts
+├── shard_manifest.log                      ← prompt sharding record
+├── shards/shard_N.txt                      ← per-worker prompt lists
+├── worker_N.log                            ← per-worker stdout/stderr
+├── shard_N/
+│   └── showo_ascr-<ts>/
+│       └── prompt_NNN-<slug>/
+│           ├── ★ baseline_showo.png        ← baseline clean image (judge input)
+│           └── ascr/
+│               └── stage1_showo_ascr-<ts>/
+│                   ├── iterations/
+│                   │   └── 000/
+│                   │       ├── decoded.png            ← decoded image at iter N
+│                   │       ├── grid.png               ← 4×4 grid overlay (diagnostic only)
+│                   │       ├── evaluation.json        ← Qwen evaluator output
+│                   │       ├── correction_prompt.txt  ← correction prompt used
+│                   │       ├── confidence.json        ← token confidence metadata
+│                   │       └── mask.json              ← 32×32 reopening mask
+│                   ├── ★ final_decoded_image.png      ← ASCR final clean image (judge input)
+│                   ├── trace.jsonl                    ← iteration-by-iteration trace
+│                   └── comparison.json                ← heuristic comparison (dev only)
+├── ★ qwen_pairwise_judge.json              ← side-by-side VLM judgment (primary signal)
+└── ★ qwen_clean_final_pair_judge.json      ← per-image pass/fail judgment
+```
+
+> **Key rule:** `baseline_showo.png` and `final_decoded_image.png` are the only files used as
+> judge inputs. Grid overlay images (`grid.png`) are diagnostic artifacts for localization and
+> must never be used as benchmark images.
 ## Stage 1 Implementation Plan
 
 ### S1.0 Repository Bootstrap
