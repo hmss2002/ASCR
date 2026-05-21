@@ -70,7 +70,7 @@ def detect_objects(model, processor, image: Image.Image, class_names: list,
     target_sizes = torch.tensor([[image.height, image.width]], device=DEVICE)
     results = processor.post_process_grounded_object_detection(
         outputs=outputs,
-        input_ids=inputs["input_ids"],
+        text_labels=texts,
         target_sizes=target_sizes,
         threshold=threshold,
     )[0]
