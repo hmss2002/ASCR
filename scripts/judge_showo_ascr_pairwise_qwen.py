@@ -45,18 +45,19 @@ def load_comparison_results(input_path):
     payload.setdefault("result_path", str(path))
     return [payload], path
 
-def make_pair_image(baseline_image, ascr_image, output_path):
+def make_pair_image(baseline_image, ascr_image, output_path, baseline_label="baseline", ascr_label="ASCR", show_labels=True):
     left = Image.open(baseline_image).convert("RGB")
     right = Image.open(ascr_image).convert("RGB")
     height = max(left.height, right.height)
     width = left.width + right.width
-    label_height = 32
+    label_height = 32 if show_labels else 0
     canvas = Image.new("RGB", (width, height + label_height), "white")
     canvas.paste(left, (0, label_height))
     canvas.paste(right, (left.width, label_height))
-    draw = ImageDraw.Draw(canvas)
-    draw.text((12, 8), "LEFT: baseline", fill=(0, 0, 0))
-    draw.text((left.width + 12, 8), "RIGHT: ASCR", fill=(0, 0, 0))
+    if show_labels:
+        draw = ImageDraw.Draw(canvas)
+        draw.text((12, 8), f"LEFT: {baseline_label}", fill=(0, 0, 0))
+        draw.text((left.width + 12, 8), f"RIGHT: {ascr_label}", fill=(0, 0, 0))
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     canvas.save(output_path)
@@ -64,12 +65,12 @@ def make_pair_image(baseline_image, ascr_image, output_path):
     right.close()
     return output_path
 
-def pairwise_question(prompt):
+def pairwise_question(prompt, baseline_label="baseline", ascr_label="ASCR"):
     return " ".join([
         "/no_think",
         "You are a strict text-to-image prompt-following pairwise judge.",
         "The image contains two clean generated images placed side by side.",
-        "LEFT is the baseline image. RIGHT is the ASCR image.",
+        f"LEFT is {baseline_label}. RIGHT is {ascr_label}.",
         f"Prompt: {prompt}",
         "Check objects, counts, colors, attributes, text, and spatial relations.",
         "Choose which side better satisfies the prompt. Tie only if neither side is materially better.",
@@ -109,12 +110,12 @@ def normalize_pairwise_payload(payload):
         "ascr_errors": payload.get("ascr_errors", []),
     }
 
-def judge_pair(evaluator, prompt, baseline_image, ascr_image, pair_image, include_raw):
+def judge_pair(evaluator, prompt, baseline_image, ascr_image, pair_image, include_raw, baseline_label="baseline", ascr_label="ASCR", show_image_labels=True):
     raw_text = ""
     json_text = ""
     try:
-        make_pair_image(baseline_image, ascr_image, pair_image)
-        raw_text = evaluator._generate_text(pairwise_question(prompt), str(pair_image), enable_thinking=False)
+        make_pair_image(baseline_image, ascr_image, pair_image, baseline_label, ascr_label, show_image_labels)
+        raw_text = evaluator._generate_text(pairwise_question(prompt, baseline_label, ascr_label), str(pair_image), enable_thinking=False)
         json_text = raw_text
         try:
             payload = _extract_json_object(raw_text)
@@ -177,6 +178,9 @@ def main(argv=None):
     parser.add_argument("--max-new-tokens", type=int, default=192)
     parser.add_argument("--repair-max-new-tokens", type=int, default=256)
     parser.add_argument("--include-raw", action="store_true")
+    parser.add_argument("--baseline-label", default="baseline")
+    parser.add_argument("--ascr-label", default="ASCR")
+    parser.add_argument("--no-image-labels", action="store_true", help="Do not draw LEFT/RIGHT labels into the paired image canvas.")
     args = parser.parse_args(argv)
 
     config = load_config(args.config)
@@ -202,7 +206,7 @@ def main(argv=None):
             raise ValueError("Result is missing baseline_image and clean ASCR final image")
         pair_image = pair_dir / f"pair_{index:03d}.png"
         print(json.dumps({"event": "judge_pairwise_start", "index": index, "prompt": prompt}), flush=True)
-        pairwise = judge_pair(evaluator, prompt, baseline_image, ascr_image, pair_image, args.include_raw)
+        pairwise = judge_pair(evaluator, prompt, baseline_image, ascr_image, pair_image, args.include_raw, args.baseline_label, args.ascr_label, not args.no_image_labels)
         verdict = pairwise_verdict(pairwise)
         counts[verdict] += 1
         records.append({
@@ -223,6 +227,8 @@ def main(argv=None):
         "config": args.config,
         "prompt_count": len(records),
         "counts": dict(counts),
+        "baseline_label": args.baseline_label,
+        "ascr_label": args.ascr_label,
         "records": records,
     }
     output_path.parent.mkdir(parents=True, exist_ok=True)
