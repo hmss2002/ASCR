@@ -43,7 +43,9 @@ if [[ -z "${GENEVAL_BASELINE:-}" || -z "${GENEVAL_ASCR:-}" ]]; then
 fi
 
 # Derive results dir from parent of GENEVAL_BASELINE
-RESULTS_DIR="$(dirname "$GENEVAL_BASELINE")/"
+RESULTS_DIR="${RESULTS_DIR:-$(dirname "$GENEVAL_BASELINE")}"
+RESULTS_DIR="${RESULTS_DIR%/}/"
+mkdir -p "$RESULTS_DIR"
 
 echo "[geneval-eval] Baseline dir:   $GENEVAL_BASELINE"
 echo "[geneval-eval] ASCR dir:       $GENEVAL_ASCR"
