@@ -3,10 +3,13 @@
 GenEval evaluator using OWLViT (HuggingFace transformers) instead of mmdet.
 Produces results.jsonl compatible with external/geneval/evaluation/summary_scores.py.
 
-Requires: transformers, torch, PIL, pandas
-Does NOT require: mmdet, open_clip, clip_benchmark
+Supports sharding across multiple GPUs:
+    CUDA_VISIBLE_DEVICES=0 python ... --shard-id 0 --num-shards 8 --outfile results.shard0.jsonl
+    ...
+    CUDA_VISIBLE_DEVICES=7 python ... --shard-id 7 --num-shards 8 --outfile results.shard7.jsonl
+    cat results.shard*.jsonl > results.jsonl
 
-Usage:
+Usage (single GPU):
     python scripts/evaluate_geneval_owlvit.py IMAGEDIR --outfile results.jsonl \
         --model-path models/owlvit-base-patch32
 
@@ -38,6 +41,10 @@ def parse_args():
                         help="Detection confidence threshold")
     parser.add_argument("--color-threshold", type=float, default=0.0,
                         help="Min logit difference for color classification (0 = argmax)")
+    parser.add_argument("--shard-id", type=int, default=0,
+                        help="0-indexed shard index for this worker")
+    parser.add_argument("--num-shards", type=int, default=1,
+                        help="Total number of parallel shards (1 = no sharding)")
     return parser.parse_args()
 
 
@@ -51,12 +58,8 @@ def load_models(model_path):
     return model, processor
 
 
-def detect_objects(model, processor, image: Image.Image, class_names: list[str],
-                   threshold: float) -> dict[str, list]:
-    """
-    Run OWLViT zero-shot detection.
-    Returns dict: class_name -> list of (box_xyxy, score) sorted by score descending.
-    """
+def detect_objects(model, processor, image: Image.Image, class_names: list,
+                   threshold: float) -> dict:
     if not class_names:
         return {}
     texts = [[f"a photo of a {c}" for c in class_names]]
@@ -64,7 +67,6 @@ def detect_objects(model, processor, image: Image.Image, class_names: list[str],
     inputs = {k: v.to(DEVICE) for k, v in inputs.items()}
     with torch.no_grad():
         outputs = model(**inputs)
-    # post-process
     target_sizes = torch.tensor([[image.height, image.width]], device=DEVICE)
     results = processor.post_process_grounded_object_detection(
         outputs=outputs,
@@ -72,11 +74,11 @@ def detect_objects(model, processor, image: Image.Image, class_names: list[str],
         target_sizes=target_sizes,
         threshold=threshold,
     )[0]
-    boxes = results["boxes"].cpu().numpy()   # (N, 4) xyxy
-    scores = results["scores"].cpu().numpy()  # (N,)
-    labels = results["labels"].cpu().numpy()  # (N,) indices into class_names
+    boxes = results["boxes"].cpu().numpy()
+    scores = results["scores"].cpu().numpy()
+    labels = results["labels"].cpu().numpy()
 
-    detected: dict[str, list] = {c: [] for c in class_names}
+    detected: dict = {c: [] for c in class_names}
     for box, score, label in sorted(zip(boxes, scores, labels), key=lambda x: -x[1]):
         cls = class_names[int(label)]
         detected[cls].append((box.tolist(), float(score)))
@@ -84,10 +86,6 @@ def detect_objects(model, processor, image: Image.Image, class_names: list[str],
 
 
 def classify_color(model, processor, image: Image.Image, box_xyxy) -> str:
-    """
-    Classify the color of the region in box_xyxy using OWLViT's CLIP text encoder.
-    Returns the most likely color name from COLORS.
-    """
     x1, y1, x2, y2 = [max(0, int(v)) for v in box_xyxy]
     crop = image.crop((x1, y1, x2, y2))
     if crop.width < 4 or crop.height < 4:
@@ -98,28 +96,26 @@ def classify_color(model, processor, image: Image.Image, box_xyxy) -> str:
     inputs = processor(text=color_texts, images=crop, return_tensors="pt", padding=True)
     inputs = {k: v.to(DEVICE) for k, v in inputs.items()}
     with torch.no_grad():
-        # Use CLIP text and image embeddings from inside OWLViT
         owlvit = model.owlvit
         text_out = owlvit.text_model(
             input_ids=inputs["input_ids"][0],
             attention_mask=inputs.get("attention_mask", [None] * len(COLORS))[0],
         )
-        text_embeds = text_out.pooler_output  # (num_colors, hidden)
+        text_embeds = text_out.pooler_output
         text_embeds = model.owlvit.text_projection(text_embeds)
         text_embeds = text_embeds / text_embeds.norm(dim=-1, keepdim=True)
 
         vision_out = owlvit.vision_model(pixel_values=inputs["pixel_values"])
-        image_embeds = vision_out.pooler_output  # (1, hidden)
+        image_embeds = vision_out.pooler_output
         image_embeds = model.owlvit.visual_projection(image_embeds)
         image_embeds = image_embeds / image_embeds.norm(dim=-1, keepdim=True)
 
-        sim = (image_embeds @ text_embeds.T)[0]  # (num_colors,)
+        sim = (image_embeds @ text_embeds.T)[0]
         color_idx = sim.argmax().item()
     return COLORS[color_idx]
 
 
 def relative_position(obj_box, ref_box):
-    """Return set of spatial relations of obj relative to ref."""
     ox = (obj_box[0] + obj_box[2]) / 2
     oy = (obj_box[1] + obj_box[3]) / 2
     rx = (ref_box[0] + ref_box[2]) / 2
@@ -140,10 +136,6 @@ def relative_position(obj_box, ref_box):
 
 
 def evaluate(image, detected_map, metadata):
-    """
-    Apply geneval evaluation logic.
-    detected_map: class_name -> [(box_xyxy, score), ...]
-    """
     correct = True
     reason = []
     matched_groups = []
@@ -194,7 +186,7 @@ def evaluate(image, detected_map, metadata):
     return correct, "\n".join(reason)
 
 
-# Global refs for use inside evaluate (set in main)
+# Global refs set in main()
 model_ref = None
 proc_ref = None
 
@@ -221,6 +213,11 @@ def evaluate_image(filepath, metadata, threshold):
 def main():
     global model_ref, proc_ref
     args = parse_args()
+
+    if args.shard_id >= args.num_shards:
+        print(f"ERROR: shard-id {args.shard_id} >= num-shards {args.num_shards}", file=sys.stderr)
+        sys.exit(1)
+
     model_ref, proc_ref = load_models(args.model_path)
     full_results = []
 
@@ -229,9 +226,17 @@ def main():
          if os.path.isdir(os.path.join(args.imagedir, f)) and f.isdigit()],
         key=int,
     )
-    print(f"Found {len(subfolders)} prompt subfolders in {args.imagedir}", flush=True)
+    # Apply sharding: each worker handles every num_shards-th subfolder
+    my_subfolders = [s for i, s in enumerate(subfolders) if i % args.num_shards == args.shard_id]
 
-    for subfolder in subfolders:
+    print(
+        f"[shard {args.shard_id}/{args.num_shards}] "
+        f"Processing {len(my_subfolders)}/{len(subfolders)} subfolders "
+        f"from {args.imagedir}",
+        flush=True,
+    )
+
+    for subfolder in my_subfolders:
         folderpath = os.path.join(args.imagedir, subfolder)
         meta_path = os.path.join(folderpath, "metadata.jsonl")
         if not os.path.exists(meta_path):
@@ -248,7 +253,7 @@ def main():
             try:
                 result = evaluate_image(imagepath, meta, args.threshold)
                 full_results.append(result)
-                status = "✓" if result["correct"] else "✗"
+                status = "+" if result["correct"] else "-"
                 print(f"  [{subfolder}/{imagename}] {status} {meta['prompt'][:60]}", flush=True)
             except Exception as exc:
                 print(f"  ERROR [{subfolder}/{imagename}]: {exc}", file=sys.stderr)
@@ -260,8 +265,10 @@ def main():
 
     total = len(full_results)
     correct = sum(1 for r in full_results if r["correct"])
-    print(f"\nResults: {correct}/{total} correct ({100*correct/max(1,total):.1f}%)")
-    print(f"Saved to {args.outfile}")
+    print(
+        f"[shard {args.shard_id}/{args.num_shards}] "
+        f"Done: {correct}/{total} correct ({100*correct/max(1,total):.1f}%) → {args.outfile}"
+    )
 
 
 if __name__ == "__main__":
