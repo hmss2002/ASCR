@@ -83,19 +83,22 @@ run_sharded_eval() {
   echo "[geneval-eval] Merged → $MERGED ($(wc -l < "$MERGED") records)"
 }
 
-# === Evaluate ShowO Baseline ===
-echo "=== Evaluating ShowO Baseline (8 GPU shards) ==="
+GENEVAL_BASELINE_LABEL=${GENEVAL_BASELINE_LABEL:-ShowO Baseline}
+GENEVAL_ASCR_LABEL=${GENEVAL_ASCR_LABEL:-ASCR}
+
+# === Evaluate Baseline ===
+echo "=== Evaluating ${GENEVAL_BASELINE_LABEL} (8 GPU shards) ==="
 run_sharded_eval "$GENEVAL_BASELINE" "${RESULTS_DIR}results_baseline"
 
 # === Evaluate ASCR ===
-echo "=== Evaluating ASCR (8 GPU shards) ==="
+echo "=== Evaluating ${GENEVAL_ASCR_LABEL} (8 GPU shards) ==="
 run_sharded_eval "$GENEVAL_ASCR" "${RESULTS_DIR}results_ascr"
 
 # === Print Summary Scores ===
-echo "=== ShowO Baseline Scores ==="
+echo "=== ${GENEVAL_BASELINE_LABEL} Scores ==="
 python3 external/geneval/evaluation/summary_scores.py "${RESULTS_DIR}results_baseline.jsonl"
 
-echo "=== ASCR Scores ==="
+echo "=== ${GENEVAL_ASCR_LABEL} Scores ==="
 python3 external/geneval/evaluation/summary_scores.py "${RESULTS_DIR}results_ascr.jsonl"
 
 echo "[geneval-eval] Done. Results in ${RESULTS_DIR}"
