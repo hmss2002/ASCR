@@ -50,6 +50,6 @@ training:
 mode: "t2i"
 batch_size: 1
 guidance_scale: 4
-generation_timesteps: 18
+generation_timesteps: 50
 prompt: "A red cube left of a blue sphere"
 validation_prompts_file: null

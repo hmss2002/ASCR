@@ -3,6 +3,23 @@
 ASCR is a research prototype for studying and correcting confidence-semantic inconsistency in masked image-token generation. The central observation is that an image region can become confidence-stable during iterative denoising while still being semantically wrong with respect to the text prompt. Stage 1 starts with a zero-training implementation that uses a visible 4x4 grid and structured local semantic feedback to selectively reopen image-token regions instead of retrying the whole image.
 
 This README is the project control document. It records the research plan, implementation plan, current progress, expected interfaces, cluster workflow, and GitHub synchronization policy. It should be updated whenever a meaningful implementation batch is completed.
+ 
+## Active TODO (2026-05-21)
+
+Quality audit of the three GenEval example images surfaced a low-step ShowO config (`generation_timesteps: 18`). ShowO's official demo uses 50 steps; 18 leaves the masked-token field under-denoised, which is the dominant cause of the blurry / glitchy baseline+ASCR samples. BAGEL is unaffected (`num_timesteps=50, cfg_text_scale=4.0`).
+
+Action items (any future agent / human picking this up — start here):
+
+- [x] Patch ShowO configs to `generation_timesteps: 50` (`configs/showo_local_512x512.yaml`, `configs/stage1_showo_qwen35_9b_fullcap_parallel.yaml`); keep `guidance_scale: 4`.
+- [ ] Regenerate ShowO baseline + ASCR on GenEval 553 with 50 steps — submit `jobs/stage1_geneval_generate_8gpu.sbatch` (8 GPUs).
+- [ ] Regenerate ShowO baseline + ASCR on T2I-CompBench hard64 with 50 steps — submit `jobs/stage1_t2i_compbench_qwen35_9b_hard64_8gpu_reuse.sbatch` (8 GPUs).
+- [ ] BAGEL outputs do **not** need regeneration (`scripts/run_bagel_text2image.py` defaults are correct). Keep existing BAGEL GenEval run from job 68762.
+- [ ] After regen finishes, run GenEval evaluator (`jobs/stage1_geneval_evaluate.sbatch`) on the new ShowO/ASCR dirs and on the BAGEL dir.
+- [ ] Add a new "ShowO 50-step rerun" subsection to Quick Results Summary; keep the previous 18-step numbers for comparison and clearly label both.
+
+Cluster constraints (HKU HPC `gpu` partition): max 28 GPUs/user, ≤2 nodes/job, 5 running jobs, 8 submitted. Each node = 8 L40S. Current sharded generation scripts are single-node — submit one 8-GPU job per benchmark; the GenEval + hard64 + BAGEL trio fits in 24/28.
+
+
 
 ## Quick Results Summary
 
