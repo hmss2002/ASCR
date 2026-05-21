@@ -4,7 +4,7 @@
 #SBATCH --gres=gpu:8
 #SBATCH --cpus-per-task=32
 #SBATCH --mem=128G
-#SBATCH --time=02:00:00
+#SBATCH --time=04:00:00
 #SBATCH --output=logs/%x-%j.out
 #SBATCH --error=logs/%x-%j.err
 #
@@ -42,51 +42,68 @@ echo "[3way] bagel suite  : $BAGEL_SUITE"
 echo "[3way] num shards   : $NUM_SHARDS"
 echo "[3way] output root  : $OUT_ROOT"
 
+# Loop over each SIDE (ShowO50 vs BAGEL, ASCR50 vs BAGEL) and each DIRECTION
+# (fwd = ShowO/ASCR LEFT BAGEL RIGHT, swap = BAGEL LEFT ShowO/ASCR RIGHT).
+# Running both directions averages out Qwen position bias.
 for SIDE in baseline ascr; do
-  PAIRED="$OUT_ROOT/bagel_vs_${SIDE}_suite.json"
-  LEFT_LABEL="$([[ $SIDE == baseline ]] && echo 'ShowO' || echo 'ASCR')"
-  SHARD_DIR="$OUT_ROOT/shards_bagel_vs_${SIDE}"
-  mkdir -p "$SHARD_DIR"
-  FINAL="$OUT_ROOT/qwen_pairwise_bagel_vs_${SIDE}.json"
+  PEER_LABEL="$([[ $SIDE == baseline ]] && echo 'ShowO' || echo 'ASCR')"
+  for DIR in fwd swap; do
+    SUFFIX="${SIDE}_${DIR}"
+    PAIRED="$OUT_ROOT/bagel_vs_${SUFFIX}_suite.json"
+    SHARD_DIR="$OUT_ROOT/shards_bagel_vs_${SUFFIX}"
+    mkdir -p "$SHARD_DIR"
+    FINAL="$OUT_ROOT/qwen_pairwise_bagel_vs_${SUFFIX}.json"
 
-  echo "[3way] === Pairing LEFT=$LEFT_LABEL RIGHT=BAGEL ==="
-  "$PY" scripts/pair_bagel_vs_hard64_run.py \
-      --bagel-suite "$BAGEL_SUITE" \
-      --hard64-suite "$HARD64_SUITE" \
-      --side "$SIDE" \
-      --output "$PAIRED"
-
-  echo "[3way] === Sharded judge (LEFT=$LEFT_LABEL RIGHT=BAGEL) ==="
-  PIDS=()
-  for SHARD in $(seq 0 $((NUM_SHARDS - 1))); do
-    CUDA_VISIBLE_DEVICES=$SHARD \
-      "$PY" scripts/judge_showo_ascr_pairwise_qwen.py \
-          "$PAIRED" \
-          --config "$CONFIG" \
-          --output "$SHARD_DIR/shard${SHARD}.json" \
-          --baseline-label "$LEFT_LABEL" \
-          --ascr-label "BAGEL" \
-          --no-image-labels \
-          --shard-id "$SHARD" \
-          --num-shards "$NUM_SHARDS" \
-          > "$SHARD_DIR/shard${SHARD}.log" 2>&1 &
-    PIDS+=($!)
-    echo "  shard $SHARD → PID ${PIDS[-1]}"
-  done
-
-  FAILED=0
-  for i in "${!PIDS[@]}"; do
-    if ! wait "${PIDS[$i]}"; then
-      echo "  ERROR: shard $i failed (PID ${PIDS[$i]}); see $SHARD_DIR/shard${i}.log" >&2
-      FAILED=$((FAILED + 1))
+    if [[ "$DIR" == "fwd" ]]; then
+      SWAP_FLAG=""
+      LEFT_LABEL="$PEER_LABEL"
+      RIGHT_LABEL="BAGEL"
+    else
+      SWAP_FLAG="--swap"
+      LEFT_LABEL="BAGEL"
+      RIGHT_LABEL="$PEER_LABEL"
     fi
-  done
-  [[ $FAILED -eq 0 ]] || { echo "ERROR: $FAILED shard(s) failed for $SIDE" >&2; exit 1; }
 
-  echo "[3way] === Merging shards → $FINAL ==="
-  "$PY" scripts/merge_judge_shards.py \
-      $SHARD_DIR/shard*.json \
-      --output "$FINAL"
+    echo "[3way] === Pairing LEFT=$LEFT_LABEL RIGHT=$RIGHT_LABEL ($SUFFIX) ==="
+    "$PY" scripts/pair_bagel_vs_hard64_run.py \
+        --bagel-suite "$BAGEL_SUITE" \
+        --hard64-suite "$HARD64_SUITE" \
+        --side "$SIDE" \
+        $SWAP_FLAG \
+        --output "$PAIRED"
+
+    echo "[3way] === Sharded judge LEFT=$LEFT_LABEL RIGHT=$RIGHT_LABEL ($SUFFIX) ==="
+    PIDS=()
+    for SHARD in $(seq 0 $((NUM_SHARDS - 1))); do
+      CUDA_VISIBLE_DEVICES=$SHARD \
+        "$PY" scripts/judge_showo_ascr_pairwise_qwen.py \
+            "$PAIRED" \
+            --config "$CONFIG" \
+            --output "$SHARD_DIR/shard${SHARD}.json" \
+            --baseline-label "$LEFT_LABEL" \
+            --ascr-label "$RIGHT_LABEL" \
+            --no-image-labels \
+            --shard-id "$SHARD" \
+            --num-shards "$NUM_SHARDS" \
+            > "$SHARD_DIR/shard${SHARD}.log" 2>&1 &
+      PIDS+=($!)
+      echo "  shard $SHARD → PID ${PIDS[-1]}"
+    done
+
+    FAILED=0
+    for i in "${!PIDS[@]}"; do
+      if ! wait "${PIDS[$i]}"; then
+        echo "  ERROR: shard $i failed (PID ${PIDS[$i]}); see $SHARD_DIR/shard${i}.log" >&2
+        FAILED=$((FAILED + 1))
+      fi
+    done
+    [[ $FAILED -eq 0 ]] || { echo "ERROR: $FAILED shard(s) failed for $SUFFIX" >&2; exit 1; }
+
+    echo "[3way] === Merging shards → $FINAL ==="
+    "$PY" scripts/merge_judge_shards.py \
+        $SHARD_DIR/shard*.json \
+        --output "$FINAL"
+  done
 done
 
 echo "[3way] Done. Outputs under $OUT_ROOT/"

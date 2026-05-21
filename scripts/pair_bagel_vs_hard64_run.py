@@ -33,6 +33,7 @@ def main():
     ap.add_argument('--bagel-suite', required=True)
     ap.add_argument('--hard64-suite', required=True)
     ap.add_argument('--side', choices=['baseline','ascr'], required=True)
+    ap.add_argument('--swap', action='store_true', help='Swap LEFT/RIGHT (BAGEL on LEFT, ShowO/ASCR on RIGHT) to debias Qwen position preference.')
     ap.add_argument('--output', required=True)
     args = ap.parse_args()
 
@@ -48,10 +49,14 @@ def main():
         if not r or not r.get(field):
             missing.append(prompt)
             continue
+        if args.swap:
+            left_img, right_img = b_img, r[field]   # BAGEL LEFT, ShowO/ASCR RIGHT
+        else:
+            left_img, right_img = r[field], b_img   # ShowO/ASCR LEFT, BAGEL RIGHT
         paired.append({
             'prompt': prompt,
-            'baseline_image': r[field],   # LEFT
-            'ascr_final_image': b_img,    # RIGHT (BAGEL)
+            'baseline_image': left_img,
+            'ascr_final_image': right_img,
         })
 
     print(f"Paired {len(paired)} prompts; {len(missing)} unmatched ({label} vs BAGEL)")
@@ -60,11 +65,12 @@ def main():
 
     out = Path(args.output); out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps({
-        'protocol': f'bagel_vs_hard64_{args.side}_pairwise_v1',
+        'protocol': f'bagel_vs_hard64_{args.side}{"_swap" if args.swap else ""}_pairwise_v1',
         'created_at_utc': datetime.utcnow().isoformat()+'Z',
         'bagel_suite': args.bagel_suite,
         'hard64_suite': args.hard64_suite,
         'side': args.side,
+        'swap': bool(args.swap),
         'prompt_count': len(paired),
         'results': paired,
     }, indent=2, ensure_ascii=False)+'\n', encoding='utf-8')
