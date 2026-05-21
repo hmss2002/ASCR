@@ -280,7 +280,7 @@ ASCR/
 ├── requirements/
 │   ├── base.txt                                 ← core runtime deps (PIL, pyyaml, …)
 │   ├── dev.txt                                  ← test + lint tools
-│   ├── showo_inference.txt                      ← Show-o inference deps (.venv legacy)
+│   ├── showo_inference.txt                      ← Show-o inference deps (.venv)
 │   └── local_vlm.txt                            ← heuristic evaluator deps
 │
 ├── configs/                                     ← experiment configs (YAML)
@@ -387,8 +387,8 @@ ASCR/
 │   ├── stage1_geneval_evaluate.sbatch           ← DEPRECATED: pairwise; use score_single
 │   ├── stage1_hard64_bagel_3way_judge.sbatch    ← DEPRECATED: 1-GPU; use *_sharded
 │   ├── stage2_train_selector_gpu.sbatch         ← Stage 2 placeholder
-│   ├── archived/                                ← legacy .venv + ShO-MMU jobs
-│   │                                               (env superseded by .venv-qwen36)
+│   ├── archived/                                ← legacy ShO-MMU evaluator jobs
+│   │                                               (superseded by Qwen3.5-9B path)
 │   └── experiments/
 │       └── qwen36/                              ← Qwen3.6 full-precision experiment jobs
 │
@@ -740,20 +740,22 @@ Next implementation batch:
 
 ## Environment Policy
 
-This project must use a dedicated virtual environment to avoid disturbing the server base environment. The planned location is:
+This project must use dedicated virtual environments to avoid disturbing the server base
+environment. Three venvs are currently in use, each scoped to a model family:
 
-```bash
-/grp01/cds_bdai/JianyuZhang/ASCR/.venv
-```
+| Venv | Purpose | Activated by |
+|---|---|---|
+| `.venv` | Original ShowO + ASCR loop (torch 2.2.1; legacy local-VLM/Show-o MMU evaluator path) | most ShowO inference scripts and `scripts/run_stage1_showo_compare*.sh` |
+| `.venv-qwen36` | ★ Production: ShowO + ASCR loop with Qwen3.5-9B evaluator (torch 2.5.1+cu121, transformers shim under `.deps/transformers-qwen35-clean`) | `jobs/stage1_*_qwen35_9b_*.sbatch`, `jobs/stage1_t2i_*` |
+| `.venv-bagel` | BAGEL-7B-MoT generation only (torch 2.5.1+cu121, flash-attn 2.7.4.post1) | `scripts/run_bagel_text2image.py`, `jobs/stage1_*bagel*.sbatch` |
 
-Every run script should activate it before executing project code:
+All three live under `/grp01/cds_bdai/JianyuZhang/ASCR/`, are gitignored, and must be created
+on the cluster — they are not portable. Compute nodes are offline (`HF_HUB_OFFLINE=1`,
+`TRANSFORMERS_OFFLINE=1`, `QWEN_LOCAL_FILES_ONLY=1`), so any new dependency must be
+pre-installed from a login node.
 
-```bash
-cd /grp01/cds_bdai/JianyuZhang/ASCR
-source .venv/bin/activate
-```
-
-Do not install ASCR dependencies directly into the base conda environment unless there is no practical alternative and the decision is recorded here.
+Do not install ASCR dependencies directly into the base conda environment unless there is no
+practical alternative and the decision is recorded here.
 
 ## Data, Artifacts, and Large Files
 
