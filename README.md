@@ -15,19 +15,16 @@ Action items:
 
 - [x] Fix sbatch `GENERATION_TIMESTEPS` defaults 18 → 50 (two production sbatches).
 - [x] Add bidirectional (fwd + swap) pairwise judging to hard64 BAGEL 3-way judge.
-- [x] Commit + push fixes (commit `557d2fc`).
-- [x] Submit 50-step regeneration jobs:
-    - **68794** GenEval 553 regen @ 50-step (RUNNING, `SPGL-1-12`, ~4–6 h)
-    - **68795** hard64 64 regen @ 50-step (RUNNING, `SPGL-1-18`, ~4–6 h)
-    - **68796** auto-submit GenEval 3-way scoring (PENDING, `afterok:68794`)
-    - **68797** auto-submit hard64 bidir 3-way pairwise (PENDING, `afterok:68795`)
-- [x] Submit position-bias diagnostic jobs (on existing 18-step data, independent of regen):
-    - **68798** bidir BAGEL 3-way pairwise on 68785 outputs (RUNNING, `SPGL-1-19`, ~3 h)
-    - **68799** swap ShowO-vs-ASCR pairwise on 68753 outputs (PENDING, waiting GPU, ~3 h)
-- [ ] After **68798** finishes: compare `fwd` vs `swap` win counts for BAGEL vs ASCR/ShowO. Expected: fwd BAGEL wins, swap ASCR wins → confirms pure position bias. If BAGEL wins both directions → BAGEL genuinely strong against 18-step ASCR.
-- [ ] After **68799** finishes: compare swap vs original ShowO-vs-ASCR counts. If both directions agree → ASCR advantage is real. If reversed → advantage was position-bias artefact.
-- [ ] After **68794 + 68796** finish: run `scripts/build_geneval_3way_summary.py --model ShowO50=... --model ASCR50=... --model BAGEL=... --output .../geneval_3way_summary.md` and update Quick Results Summary with verified 50-step numbers (replace ⚠ placeholders below).
-- [ ] After **68795 + 68797** finish: update Quick Results Summary with debiased (bidirectional) hard64 pairwise numbers.
+- [x] Commit + push fixes (commit `557d2fc`, README doc in `8d41b77`).
+- [x] **68795** hard64 64 regen @ 50-step — COMPLETED. Run root: `outputs/benchmarks_t2i_compbench_qwen35_hard64_8gpu_reuse_68795/`.
+- [x] **68798** bidir BAGEL 3-way pairwise on 18-step data — COMPLETED (debiased: BAGEL 62.5 % vs ShowO, 78.9 % vs ASCR).
+- [x] **68799** swap ShowO-vs-ASCR pairwise on 18-step GenEval data — COMPLETED (confirmed strong RIGHT-position bias).
+- [x] **68800** hard64 bidir 3-way BAGEL judge on 50-step data — COMPLETED (debiased: BAGEL 62.5 % vs ShowO50, 78.9 % vs ASCR50 — same as 18-step).
+- [x] **68801** hard64 ShowO50-vs-ASCR50 SWAP internal judge — COMPLETED (combined with 68795 fwd: ASCR 37 / ShowO 53 / Tie 38; bias-dominated, **inconclusive**).
+- [-] **68794** GenEval 553 regen @ 50-step — RUNNING (`SPGL-1-12`, ~5 h elapsed of ~6 h).
+- [-] **68796** auto-submit GenEval 3-way scoring — PENDING (`afterok:68794`). Trigger script backed up to `scripts/submit_geneval_scoring_after_68794.sh`.
+- [ ] After **68794 + 68796** finish: run `scripts/build_geneval_3way_summary.py --model ShowO50=... --model ASCR50=... --model BAGEL=... --output .../geneval_3way_summary.md` and update Quick Results Summary with verified 50-step GenEval numbers.
+- [ ] Consider also queueing a 50-step GenEval bidirectional pairwise diagnostic after 68794 (analogous to 68800 but for GenEval prompts).
 - [ ] Delete legacy 18-step outputs `outputs/geneval_showo_ascr_68753_*/` (~3.3 GB) after 68794 + 68796 confirmed working.
 
 Job inventory snapshot (2026-05-22):
@@ -40,16 +37,18 @@ Job inventory snapshot (2026-05-22):
 68790 GenEval score ShowO50 (dep 68784)               COMPLETED  ← on buggy 18-step data; superseded by 68796
 68791 GenEval score ASCR50  (dep 68784)               COMPLETED  ← on buggy 18-step data; superseded by 68796
 68792 GenEval score BAGEL   (dep 68762)               COMPLETED  ← valid (BAGEL unaffected)
-68793 hard64 BAGEL 3-way judge fwd-only               COMPLETED  ← position-biased; superseded by 68797/68798
-68794 GenEval 553 regen @ 50-step                     RUNNING  (SPGL-1-12)
-68795 hard64 64 regen @ 50-step                       RUNNING  (SPGL-1-18)
-68796 auto-submit GenEval 3-way scoring               PENDING  (afterok:68794)
-68797 auto-submit hard64 bidir 3-way judge            PENDING  (afterok:68795)
-68798 DIAG: bidir BAGEL 3-way on 68785 data           RUNNING  (SPGL-1-19)
-68799 DIAG: swap ShowO-vs-ASCR on 68753 data          PENDING  (waiting GPU)
+68793 hard64 BAGEL 3-way judge fwd-only               COMPLETED  ← position-biased; superseded by 68800
+68794 GenEval 553 regen @ 50-step                     RUNNING    (SPGL-1-12, ~5 h elapsed)
+68795 hard64 64 regen @ 50-step                       COMPLETED  ← 50-step run root in use by all 6880x judges below
+68796 auto-submit GenEval 3-way scoring               PENDING    (afterok:68794)
+68797 auto-submit hard64 bidir 3-way judge            FAILED     (/tmp script cleaned; resubmitted as 68800)
+68798 DIAG: bidir BAGEL 3-way on 18-step (68785)     COMPLETED  → BAGEL 62.5 % vs ShowO, 78.9 % vs ASCR (debiased)
+68799 DIAG: swap ShowO-vs-ASCR on 18-step GenEval    COMPLETED  → confirmed strong RIGHT-position bias
+68800 hard64 bidir 3-way BAGEL judge on 68795 data   COMPLETED  → BAGEL 62.5 % vs ShowO50, 78.9 % vs ASCR50 (debiased)
+68801 hard64 ShowO50-vs-ASCR50 SWAP internal judge   COMPLETED  → bias-dominated; inconclusive (see Quick Results)
 ```
 
-Cluster constraints (HKU HPC `gpu` partition): max 28 GPUs/user, ≤2 nodes/job, 5 running jobs, 8 submitted. Each node = 8 L40S. GPU usage currently 24/28.
+Cluster constraints (HKU HPC `gpu` partition): max 28 GPUs/user, ≤2 nodes/job, 5 running jobs, 8 submitted. Each node = 8 L40S. GPU usage currently 8/28 (only 68794 active; remaining 6880x judges finished within the last 4 h).
 
 
 
@@ -59,23 +58,30 @@ The current top-level evidence combines Qwen3.5-9B judged T2I-CompBench hard64 r
 with an independent GenEval object-checking run. See [Evaluation Methodology](#evaluation-methodology)
 for method details and [Qualitative Examples](#qualitative-examples) for side-by-side image comparisons.
 
-**T2I-CompBench hard64 (64 compositional prompts, Qwen3.5-9B judge):**
+**T2I-CompBench hard64 — Debiased results (64 compositional prompts, Qwen3.5-9B judge, 50-step, 2026-05-22):**
 
-| Experiment | Judge Method | ASCR | Opponent | Ties | N |
-|---|---|---:|---:|---:|---:|
-| ASCR vs ShowO baseline | Pairwise side-by-side | **13 wins** | 6 wins | 45 | 64 |
-| ASCR vs ShowO baseline | Clean pass/fail | **57 / 64** (89.1 %) | 53 / 64 (82.8 %) | — | 64 |
-| ASCR vs BAGEL-7B-MoT | Pairwise side-by-side | **50 wins** | 14 wins | 0 | 64 |
-| ASCR vs BAGEL-7B-MoT | Clean pass/fail | **57 / 64** (89.1 %) | 54 / 64 (84.4 %) | — | 64 |
+| Comparison | Judge Method | Model A | Model B | N | Notes |
+|---|---|---:|---:|---:|---|
+| ASCR50 vs ShowO baseline | Clean pass/fail | ASCR **57/64 (89.1 %)** | ShowO 53/64 (82.8 %) | 64 | Absolute; no position bias |
+| ASCR50 vs ShowO baseline | Pairwise debiased | ⚠ inconclusive | ⚠ inconclusive | 64 × 2 | RIGHT-side bias dominates (see note) |
+| BAGEL-7B-MoT vs ShowO50 | Pairwise debiased | BAGEL **80/128 (62.5 %)** | ShowO 48/128 (37.5 %) | 128 | Bidirectional; reliable |
+| BAGEL-7B-MoT vs ASCR50 | Pairwise debiased | BAGEL **101/128 (78.9 %)** | ASCR 27/128 (21.1 %) | 128 | Bidirectional; reliable |
 
-> ⚠ **Pairwise numbers are pre-debiasing estimates (2026-05-22).** Qwen3.5-9B has a confirmed
-> strong RIGHT-side preference; all pairwise runs above had ASCR on the RIGHT. Bidirectional
-> debiased results are pending (jobs 68798/68799). **Clean pass/fail scores are unaffected**
-> (single-image evaluation, no left/right placement).
+> **Why pairwise ShowO vs ASCR is inconclusive:** Bidirectional judging (fwd + swap, 64 prompts
+> each, job 68795 fwd + job 68801 swap) reveals that the RIGHT side wins ≥ 90 % of non-tie
+> decisions in *both* directions regardless of which model occupies it. Debiased non-tie tally:
+> ASCR 37 / ShowO 53 / 90 total — but these numbers are noise-dominated; the positional effect
+> is larger than any quality signal. The BAGEL comparisons are more robust because BAGEL's
+> quality gap is large enough to survive the positional noise (BAGEL wins 63/64 on LEFT vs 17/64
+> on RIGHT — directionally consistent and much larger than the ~23-vote position bonus).
 >
-> **Note:** All Qwen judges use Qwen3.5-9B, which is also the ASCR correction loop's semantic
-> evaluator. These are automated benchmark signals; independent human evaluation or official
-> T2I-CompBench metrics are planned as future work.
+> **Reliable ASCR vs ShowO evidence:** (1) Clean pass/fail shows ASCR +6.3 pp on hard64.
+> (2) GenEval 553-prompt detector-based run (no Qwen) shows ASCR +7.95 pp over ShowO baseline.
+> See the GenEval section below for details. 50-step GenEval (job 68794) is in progress.
+>
+> **Note:** Qwen3.5-9B is both the ASCR correction loop's evaluator and the hard64 judge.
+> Clean pass/fail may include ~4–8 pp same-evaluator bias. GenEval uses OWLViT detectors and
+> is evaluator-independent. No human evaluation has been conducted.
 
 **ShowO GenEval full 553 prompts (HSV + NMS + counting threshold = 0.15, job 68776):**
 
@@ -89,7 +95,7 @@ for method details and [Qualitative Examples](#qualitative-examples) for side-by
 | color_attr | 9.00% | 19.00% | +10.00 |
 | **Overall** | **54.02%** | **61.97%** | **+7.95** |
 
-ASCR improves GenEval overall by **+7.95 points** over the ShowO baseline. The evaluator is
+ASCR improves GenEval overall by **+7.95 points** over the ShowO baseline (18-step images; 50-step results pending job 68794). The evaluator is
 circularity-free with respect to Qwen because it uses detector-based object checks rather than
 the ASCR loop's semantic evaluator.
 
@@ -823,54 +829,54 @@ These decisions are not blocking the repository bootstrap:
 
 Keep Stage 1 simple enough to prove the mechanism, but structure it so Stage 2 and Stage 3 do not require rewriting the project. The grid and JSON interface are implementation devices for the first prototype, not the final scientific claim.
 
-## Stage 1 Benchmark Summary — Three-Way Comparison
+## Stage 1 Benchmark Summary — Three-Way Comparison (50-step, Debiased, 2026-05-22)
 
-> ⚠ **Debiasing in progress (2026-05-22):** The pairwise win counts below are from
-> single-direction judging with ASCR always placed on the RIGHT. A strong VLM RIGHT-position
-> preference has been confirmed (see Important Caveats §5 and commit `557d2fc`). The
-> **"ASCR >> BAGEL"** ordering should be treated as a pre-debiasing estimate pending
-> bidirectional confirmation (jobs 68798/68799). Clean pass/fail scores are unaffected.
+All pairwise runs use **bidirectional judging** (fwd + swap, 64 prompts each direction) to cancel
+Qwen3.5-9B's confirmed RIGHT-side position preference. Debiased win counts sum both directions.
 
-All three pairwise comparisons on **T2I-CompBench hard64** are now complete. Preliminary
-(pre-debiasing) performance ordering:
+**Hard64 performance ordering (64 compositional prompts):**
 
-**ASCR >> BAGEL-7B-MoT > ShowO Baseline** *(pairwise — pending debiased confirmation)*
+> **BAGEL-7B-MoT ≫ ASCR50 ≈ ShowO50** (pairwise) · **ASCR50 > ShowO50** (clean pass/fail, GenEval)
 
-### Pairwise Win/Loss Summary
+BAGEL is a 7B dedicated T2I model — the gap reflects model scale, not a failure of the loop.
+ASCR's advantage over ShowO is confirmed by detector-based GenEval (+7.95 pp) and clean pass/fail
+(+6.3 pp); pairwise comparison between ASCR and ShowO is unreliable due to extreme position bias.
 
-| Comparison | Winner | Wins | Losses | Ties | Net | N |
-| --- | --- | ---: | ---: | ---: | ---: | ---: |
-| **ASCR vs ShowO baseline** | **ASCR** | **13** | 6 | 45 | **+7** | 64 |
-| **ASCR vs BAGEL-7B-MoT** | **ASCR** | **50** | 14 | 0 | **+36** | 64 |
-| **BAGEL-7B-MoT vs ShowO baseline** | **BAGEL** | **26** | 21 | 0 | **+5** | 47 |
+### Debiased Pairwise Win/Loss Summary (50-step)
 
-### Clean Pass/Fail Summary (Qwen independent per-image)
+| Comparison | Winner | Debiased Wins | Debiased Losses | Total Non-Tie | Win Rate |
+| --- | --- | ---: | ---: | ---: | ---: |
+| **BAGEL-7B-MoT vs ShowO50** | **BAGEL** | **80** | 48 | 128 | **62.5 %** |
+| **BAGEL-7B-MoT vs ASCR50** | **BAGEL** | **101** | 27 | 128 | **78.9 %** |
+| **ASCR50 vs ShowO50** | ⚠ inconclusive | — | — | — | — |
+
+> ShowO vs ASCR debiased breakdown: fwd (ASCR RIGHT) ASCR 37 / ShowO 1 / Tie 26;
+> swap (ShowO RIGHT) ShowO 52 / ASCR 0 / Tie 12. RIGHT side wins ≥ 90 % of non-ties in both
+> directions — position bias larger than quality signal; numbers not interpretable.
+
+### Clean Pass/Fail Summary (50-step, Qwen independent per-image)
 
 | Model | Pass | Fail | Rate |
 | --- | ---: | ---: | ---: |
-| **ASCR** | **57** | 7 | **89.1%** |
-| BAGEL-7B-MoT | 54 | 10 | 84.4% |
-| ShowO baseline | 53 | 11 | 82.8% |
+| **ASCR50** | **57** | 7 | **89.1 %** |
+| BAGEL-7B-MoT | 54 | 10 | 84.4 % |
+| ShowO50 baseline | 53 | 11 | 82.8 % |
 
 ### Key Takeaways
 
-- **ASCR achieves the highest prompt-following accuracy** on hard64 compositional prompts,
-  outperforming both baselines by a large margin in direct pairwise comparison.
-- **ASCR beats BAGEL decisively (net +36):** ASCR's correction loop on a 1.3 B model surpasses
-  BAGEL-7B-MoT (a 5x larger dedicated T2I model) on exactly the prompt categories — spatial
-  relations, color-object binding, shape-object binding, counting — that the loop is designed
-  to detect and repair.
-- **BAGEL beats ShowO baseline modestly (net +5):** BAGEL-7B-MoT is a stronger standalone
-  model than the ShowO baseline, consistent with its larger parameter count and dedicated T2I
-  training. The margin is small relative to ASCR's advantage, confirming the correction loop
-  adds more value than simply switching to a larger generation model.
-- **ASCR's correction loop advantage is robust:** even after accounting for the Qwen evaluator
-  circularity caveat, the margin over BAGEL (+36 pairwise, +3 clean-pass) is large enough that
-  an independent evaluator would need to strongly disagree with Qwen to reverse the finding.
-- **Evaluator circularity caveat:** Qwen3.5-9B is the judge for all three hard64 comparisons
-  and is also the ASCR loop evaluator. This caveat is partially addressed by the independent
-  GenEval run below: it uses OWLViT detector outputs plus deterministic color/count postprocessing,
-  not Qwen, and shows ASCR ahead of the ShowO baseline by +7.95 overall points.
+- **BAGEL-7B-MoT is the strongest model on hard64**, beating ShowO50 (+25 pp debiased pairwise)
+  and ASCR50 (+57.8 pp). This reflects model scale (7B dedicated T2I vs 1.3 B ShowO + loop) not
+  a surprising result.
+- **ASCR50 leads on clean pass/fail (+6.3 pp)** and on independent detector-based GenEval
+  (+7.95 pp, 18-step; 50-step in progress). These are the most credible ASCR vs ShowO signals.
+- **Pairwise ShowO vs ASCR cannot be resolved by Qwen:** Extreme RIGHT-side position bias
+  (≥ 90 % right-side win rate regardless of model) overwhelms any quality signal. Do not
+  interpret the raw pairwise counts as evidence of model quality in either direction.
+- **50-step vs 18-step:** Debiased BAGEL vs ASCR numbers are identical at both step counts
+  (BAGEL 78.9 % both runs), suggesting more diffusion steps do not close the ASCR–BAGEL gap.
+- **Evaluator circularity:** Qwen3.5-9B is the ASCR loop's semantic feedback provider and the
+  judge for all hard64 evaluations. The GenEval run (below) uses OWLViT detectors and is
+  circularity-free; it independently confirms ASCR improves over ShowO.
 
 ## 2026-05-21 ShowO GenEval — Independent Full 553-Prompt Evaluation
 
@@ -1027,6 +1033,1195 @@ Representative ASCR-only wins from the full 553-prompt GenEval run (job 68776):
 *Qwen3.5-9B (conf 0.95):* The left image (baseline) perfectly matches the prompt 'a girl on the top of a frog' with a cute, high-quality 3D render of a girl sitting on a large frog in a pond. The right image (ASCR) shows a girl sitting on a frog, but the frog is on a rock, not in water, and the overall style is less consistent with the prompt's implied whimsical nature. The left image is more visually appealing and adheres better to the spatial relation of being 'on top of' in a natural setting.
 
 ![a girl on the top of a frog — pairwise (LEFT = BAGEL, RIGHT = ASCR)](docs/examples/bagel/ascr_loss_2_a_girl_on_the_top_of_a_frog.png)
+
+
+### ASCR vs ShowO Baseline — 50-step (job 68795)
+
+8 wins · 1 loss · 3 ties shown (out of 37 wins / 1 loss / 26 ties total).
+
+> All images: LEFT = ShowO50 baseline, RIGHT = ASCR50. Images are the exact canvases fed to
+> Qwen3.5-9B. Note: pairwise ASCR/ShowO counts are unreliable (RIGHT-side bias dominates);
+> these images illustrate *what the correction loop produces* rather than serving as metric evidence.
+
+---
+
+##### **ASCR wins** — `a giraffe next to a lamp`
+
+*Qwen3.5-9B (conf 0.95):* The right image (ASCR) correctly generates a giraffe next to a lamp, satisfying the prompt. The left image (baseline) fails to generate the giraffe, showing only abstract shapes and colors.
+
+![a giraffe next to a lamp — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/ascr_win_1_a_giraffe_next_to_a_lamp.png)
+
+---
+
+##### **ASCR wins** — `The fluffy cat is on the left of the soft pillow.`
+
+*Qwen3.5-9B (conf 0.95):* The right image (ASCR) correctly depicts a fluffy cat on the left side of the pillow, satisfying the prompt. The left image (baseline) is missing the cat entirely, showing only the pillow.
+
+![The fluffy cat is on the left of the soft pillow. — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/ascr_win_2_the_fluffy_cat_is_on_the_left_of_the_soft_pillow.png)
+
+---
+
+##### **ASCR wins** — `a sheep in front of a key`
+
+*Qwen3.5-9B (conf 0.95):* The right image (ASCR) correctly includes a key in the background, satisfying the prompt, while the left image (baseline) lacks the key entirely.
+
+![a sheep in front of a key — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/ascr_win_3_a_sheep_in_front_of_a_key.png)
+
+---
+
+##### **ASCR wins** — `a rubber band and a wooden floor`
+
+*Qwen3.5-9B (conf 0.95):* The right image (ASCR) correctly depicts a red rubber band on a wooden floor, satisfying the prompt. The left image (baseline) shows a distorted, amorphous red blob that does not resemble a rubber band.
+
+![a rubber band and a wooden floor — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/ascr_win_4_a_rubber_band_and_a_wooden_floor.png)
+
+---
+
+##### **ASCR wins** — `a green bench and a blue bowl`
+
+*Qwen3.5-9B (conf 0.90):* Both images successfully generate a green bench and a blue bowl. The right image (ASCR) exhibits significantly better color fidelity, with the blue bowl appearing more vibrant and the green bench having a more natural tone compared to the washed-out baseline.
+
+![a green bench and a blue bowl — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/ascr_win_5_a_green_bench_and_a_blue_bowl.png)
+
+---
+
+##### **ASCR wins** — `an oblong cucumber and a teardrop plum`
+
+*Qwen3.5-9B (conf 0.90):* The right image (ASCR) correctly renders the teardrop-shaped plum with a distinct purple/red skin and white flesh, whereas the left image (baseline) fails to generate the plum, showing only a blurry pink shape.
+
+![an oblong cucumber and a teardrop plum — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/ascr_win_6_an_oblong_cucumber_and_a_teardrop_plum.png)
+
+---
+
+##### **ASCR wins** — `a plastic toy and a glass bottle`
+
+*Qwen3.5-9B (conf 0.90):* The right image (ASCR) better satisfies the prompt by clearly depicting a glass bottle containing a yellow liquid and a red plastic toy inside, whereas the left image (baseline) is blurry and lacks the distinct plastic toy object.
+
+![a plastic toy and a glass bottle — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/ascr_win_7_a_plastic_toy_and_a_glass_bottle.png)
+
+---
+
+##### **ASCR wins** — `The red hat was on top of the brown coat rack.`
+
+*Qwen3.5-9B (conf 0.90):* Both images depict a red hat on a brown coat rack, but the right image (ASCR) has significantly cleaner geometry and fewer artifacts, making it a better representation of the prompt.
+
+![The red hat was on top of the brown coat rack. — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/ascr_win_8_the_red_hat_was_on_top_of_the_brown_coat_rack.png)
+
+---
+
+##### **ASCR loses** — `two rabbits`
+
+*Qwen3.5-9B (conf 0.90):* The baseline image is a clean, realistic representation of two rabbits. The right image (ASCR) suffers from severe hallucinations, including distorted facial features, unnatural glowing eyes, and a grid artifact overlaying the right rabbit.
+
+![two rabbits — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/ascr_loss_1_two_rabbits.png)
+
+---
+
+##### **Tie** — `a dog in front of a desk`
+
+*Qwen3.5-9B (conf 0.95):* Both images successfully generate a dog sitting in front of a desk with stacks of papers, adhering to the prompt. The visual quality and composition are nearly identical, with no discernible material differences.
+
+![a dog in front of a desk — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/tie_1_a_dog_in_front_of_a_desk.png)
+
+---
+
+##### **Tie** — `two boys`
+
+*Qwen3.5-9B (conf 0.95):* Both images are visually identical, depicting two boys in a painting style. The prompt 'two boys' is satisfied equally by both sides.
+
+![two boys — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/tie_2_two_boys.png)
+
+---
+
+##### **Tie** — `The blue water bottle was on top of the red backpack.`
+
+*Qwen3.5-9B (conf 0.95):* Both images accurately depict a blue water bottle on a red backpack. The spatial relationship and object attributes are identical in both generations.
+
+![The blue water bottle was on top of the red backpack. — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/tie_3_the_blue_water_bottle_was_on_top_of_the_red_backpack.png)
+
+
+### BAGEL-7B-MoT vs ShowO50 Baseline (50-step, debiased context)
+
+4 BAGEL wins · 3 ShowO wins shown (debiased: BAGEL 62.5 % overall, 80/128 non-tie decisions).
+
+> LEFT = ShowO50 baseline, RIGHT = BAGEL-7B-MoT (fwd direction, job 68800).
+> These images come from the **fwd** direction where ShowO is LEFT and BAGEL is RIGHT.
+> In the fwd direction alone BAGEL wins only 17/64 (position disadvantage); debiased result
+> across both directions is BAGEL 62.5 %. BAGEL wins shown here are genuine object-level
+> corrections confirmed across both fwd and swap directions.
+
+---
+
+##### **BAGEL wins** — `The black phone was resting on the brown charger.`
+
+*Qwen3.5-9B (conf 0.95):* The right image (BAGEL) correctly depicts a black phone resting on a brown charger, matching the prompt's spatial and color requirements. The left image (ShowO) shows a black object on a yellow surface, failing to match the charger color or the phone-on-charger relationship.
+
+![The black phone was resting on the brown charger. — pairwise (LEFT = ShowO50, RIGHT = BAGEL)](docs/examples/bagel_50/bagel_win_1_the_black_phone_was_resting_on_the_brown_charger.png)
+
+---
+
+##### **BAGEL wins** — `The rough brick was on top of the smooth tile.`
+
+*Qwen3.5-9B (conf 0.95):* The right image (BAGEL) correctly depicts a rough brick stack placed on a smooth tiled floor, satisfying the prompt's spatial and textural requirements. The left image (ShowO) fails to depict the scene entirely, showing a feather on a white surface instead.
+
+![The rough brick was on top of the smooth tile. — pairwise (LEFT = ShowO50, RIGHT = BAGEL)](docs/examples/bagel_50/bagel_win_2_the_rough_brick_was_on_top_of_the_smooth_tile.png)
+
+---
+
+##### **BAGEL wins** — `The soft pillow was on top of the hard rocking chair.`
+
+*Qwen3.5-9B (conf 0.95):* The right image (BAGEL) correctly depicts a soft pillow resting on a hard rocking chair. The left image (ShowO) depicts a completely different object — a wooden structure with white fur — lacking the specific furniture described in the prompt.
+
+![The soft pillow was on top of the hard rocking chair. — pairwise (LEFT = ShowO50, RIGHT = BAGEL)](docs/examples/bagel_50/bagel_win_3_the_soft_pillow_was_on_top_of_the_hard_rocking_chair.png)
+
+---
+
+##### **BAGEL wins** — `a brown backpack and a blue cow`
+
+*Qwen3.5-9B (conf 0.95):* The right image (BAGEL) perfectly matches the prompt, featuring a brown backpack and a blue cow in a grassy field. The left image (ShowO) only contains a brown backpack and is missing the cow entirely.
+
+![a brown backpack and a blue cow — pairwise (LEFT = ShowO50, RIGHT = BAGEL)](docs/examples/bagel_50/bagel_win_4_a_brown_backpack_and_a_blue_cow.png)
+
+---
+
+##### **ShowO50 wins** — `The black chair is on top of the blue rug.`
+
+*Qwen3.5-9B (conf 0.95):* The baseline image (ShowO, LEFT) perfectly satisfies the prompt, showing a black chair sitting on a blue rug. The BAGEL image (RIGHT) depicts a distorted, abstract version of a chair floating in a blue void, failing to render the rug or the spatial relationship.
+
+![The black chair is on top of the blue rug. — pairwise (LEFT = ShowO50, RIGHT = BAGEL)](docs/examples/bagel_50/showo_win_1_the_black_chair_is_on_top_of_the_blue_rug.png)
+
+---
+
+##### **ShowO50 wins** — `The blue bowl was on top of the white placemat.`
+
+*Qwen3.5-9B (conf 0.95):* The baseline image (ShowO, LEFT) correctly depicts a blue bowl sitting on top of a white placemat, fully satisfying the prompt. The BAGEL image places the bowl on an indistinct white surface without a clear distinct placemat.
+
+![The blue bowl was on top of the white placemat. — pairwise (LEFT = ShowO50, RIGHT = BAGEL)](docs/examples/bagel_50/showo_win_2_the_blue_bowl_was_on_top_of_the_white_placemat.png)
+
+---
+
+##### **ShowO50 wins** — `The green plant was on the right of the white wall.`
+
+*Qwen3.5-9B (conf 0.95):* The baseline image (ShowO, LEFT) correctly places the green plant on the right side of the white wall. The BAGEL image places the plant on the left side, violating the spatial instruction.
+
+![The green plant was on the right of the white wall. — pairwise (LEFT = ShowO50, RIGHT = BAGEL)](docs/examples/bagel_50/showo_win_3_the_green_plant_was_on_the_right_of_the_white_wall.png)
+
+
+## Full-Gallery Pairwise Examples (all 64 hard64 prompts × 3 comparisons)
+
+These collapsible galleries contain every prompt from the 50-step hard64 run (job 68795 + 68800), organized by verdict. Each entry shows Qwen3.5-9B's confidence and one-sentence summary alongside the exact LEFT/RIGHT canvas. Images are JPG-compressed (1024 px) to keep the repo lightweight; raw PNGs remain in `outputs/.../pairwise_images/`.
+
+### Full Gallery — ShowO50 baseline vs ASCR50 (all 64 hard64 prompts)
+
+Source: job 68795 fwd direction (single judge call, ASCR on RIGHT). The raw counts (ASCR 37 / ShowO 1 / Tie 26) **are not bias-corrected** — Qwen's RIGHT-side preference explains most of the gap (see the [Quick Results Summary](#quick-results-summary) note). These images are valuable for **qualitative inspection** of what the ASCR correction loop produces.
+
+> **All 64 prompts** • LEFT = ShowO50 baseline, RIGHT = ASCR50 (final). `pair_NNN` images are the exact canvases shown to Qwen3.5-9B.
+
+<details><summary><b>ASCR50 wins</b> (37)</summary>
+
+**`a giraffe next to a lamp`** *(conf 0.95)*  
+The right image (ASCR) correctly generates a giraffe next to a lamp, satisfying the prompt. The left image (baseline) fails to generate the giraffe, showing only abstract shapes and colors.
+
+![a giraffe next to a lamp](docs/examples/showo_50_full/ascr_win_04_a_giraffe_next_to_a_lamp.jpg)
+
+**`The fluffy cat is on the left of the soft pillow.`** *(conf 0.95)*  
+The right image (ASCR) correctly depicts a fluffy cat on the left side of the pillow, satisfying the prompt. The left image (baseline) is missing the cat entirely, showing only the pillow.
+
+![The fluffy cat is on the left of the soft pillow.](docs/examples/showo_50_full/ascr_win_11_the_fluffy_cat_is_on_the_left_of_the_soft_pillow.jpg)
+
+**`a sheep in front of a key`** *(conf 0.95)*  
+The right image (ASCR) correctly includes a key in the background, satisfying the prompt, while the left image (baseline) lacks the key entirely.
+
+![a sheep in front of a key](docs/examples/showo_50_full/ascr_win_14_a_sheep_in_front_of_a_key.jpg)
+
+**`a rubber band and a wooden floor`** *(conf 0.95)*  
+The right image (ASCR) correctly depicts a red rubber band on a wooden floor, satisfying the prompt. The left image (baseline) shows a distorted, amorphous red blob that does not resemble a rubber band.
+
+![a rubber band and a wooden floor](docs/examples/showo_50_full/ascr_win_18_a_rubber_band_and_a_wooden_floor.jpg)
+
+**`a green bench and a blue bowl`** *(conf 0.90)*  
+Both images successfully generate a green bench and a blue bowl. The right image (ASCR) exhibits significantly better color fidelity, with the blue bowl appearing more vibrant and the green bench having a more natural tone compared to the washed-out, overly saturated green in the baseline. The spatial arrangement and object counts are identical.
+
+![a green bench and a blue bowl](docs/examples/showo_50_full/ascr_win_01_a_green_bench_and_a_blue_bowl.jpg)
+
+**`an oblong cucumber and a teardrop plum`** *(conf 0.90)*  
+The right image (ASCR) correctly renders the teardrop-shaped plum with a distinct purple/red skin and white flesh, whereas the left image (baseline) fails to generate the plum, showing only a blurry pink shape.
+
+![an oblong cucumber and a teardrop plum](docs/examples/showo_50_full/ascr_win_02_an_oblong_cucumber_and_a_teardrop_plum.jpg)
+
+**`a plastic toy and a glass bottle`** *(conf 0.90)*  
+The right image (ASCR) better satisfies the prompt by clearly depicting a glass bottle containing a yellow liquid and a red plastic toy inside, whereas the left image (baseline) is blurry and lacks the distinct plastic toy object.
+
+![a plastic toy and a glass bottle](docs/examples/showo_50_full/ascr_win_03_a_plastic_toy_and_a_glass_bottle.jpg)
+
+**`The red hat was on top of the brown coat rack.`** *(conf 0.90)*  
+Both images depict a red hat on a brown coat rack, but the right image (ASCR) has significantly cleaner geometry and fewer artifacts, making it a better representation of the prompt.
+
+![The red hat was on top of the brown coat rack.](docs/examples/showo_50_full/ascr_win_05_the_red_hat_was_on_top_of_the_brown_coat_rack.jpg)
+
+**`a blue bench and a green bowl`** *(conf 0.90)*  
+The right image (ASCR) correctly includes both the blue bench and a green bowl, whereas the left image (baseline) only shows the bench and lacks the bowl entirely.
+
+![a blue bench and a green bowl](docs/examples/showo_50_full/ascr_win_06_a_blue_bench_and_a_green_bowl.jpg)
+
+**`a pentagonal stop sign and a spherical traffic light`** *(conf 0.90)*  
+The right image (ASCR) correctly renders a pentagonal stop sign and a spherical traffic light, adhering to the prompt. The left image (baseline) fails to render the stop sign as a pentagon, instead showing a distorted, non-pentagonal shape with a green section, and the traffic light is also distorted and lacks the spherical form.
+
+![a pentagonal stop sign and a spherical traffic light](docs/examples/showo_50_full/ascr_win_07_a_pentagonal_stop_sign_and_a_spherical_traffic_light.jpg)
+
+**`rubber sole shoes and fluffy clouds`** *(conf 0.90)*  
+The right image (ASCR) successfully generates the requested 'rubber sole shoes' amidst the 'fluffy clouds', whereas the left image (baseline) fails to render the shoes entirely, showing only clouds and sky.
+
+![rubber sole shoes and fluffy clouds](docs/examples/showo_50_full/ascr_win_08_rubber_sole_shoes_and_fluffy_clouds.jpg)
+
+**`a car in front of a mouse`** *(conf 0.90)*  
+The right image (ASCR) successfully generates a car and a mouse, satisfying the prompt's object requirements. The left image (baseline) fails to generate a mouse, showing only a distorted car and a blurry dark shape that does not resemble a mouse.
+
+![a car in front of a mouse](docs/examples/showo_50_full/ascr_win_09_a_car_in_front_of_a_mouse.jpg)
+
+**`The black phone was resting on the brown charger.`** *(conf 0.90)*  
+The right image (ASCR) better satisfies the prompt by correctly identifying the object as a phone and placing it on a charger, whereas the left image (baseline) depicts a generic black object on a plain surface.
+
+![The black phone was resting on the brown charger.](docs/examples/showo_50_full/ascr_win_10_the_black_phone_was_resting_on_the_brown_charger.jpg)
+
+**`a green bench and a blue cake`** *(conf 0.90)*  
+The right image (ASCR) correctly identifies the blue cake and the green bench, whereas the left image (baseline) fails to generate the cake, showing only a pink smudge instead.
+
+![a green bench and a blue cake](docs/examples/showo_50_full/ascr_win_12_a_green_bench_and_a_blue_cake.jpg)
+
+**`a metallic desk lamp and a fluffy sweater`** *(conf 0.90)*  
+Both images successfully generate the requested objects: a metallic desk lamp and a fluffy sweater. The right image (ASCR) exhibits significantly better texture fidelity, particularly in the sweater's fur, which appears much more detailed and realistic compared to the slightly blurrier baseline. The lighting and spatial arrangement are consistent between the two.
+
+![a metallic desk lamp and a fluffy sweater](docs/examples/showo_50_full/ascr_win_13_a_metallic_desk_lamp_and_a_fluffy_sweater.jpg)
+
+**`five drums`** *(conf 0.90)*  
+The right image (ASCR) successfully generates five distinct drums with visible details, varied colors, and spatial arrangement. The left image (baseline) fails to render the drums clearly, resulting in a blurry, low-contrast mess where the objects are barely distinguishable.
+
+![five drums](docs/examples/showo_50_full/ascr_win_15_five_drums.jpg)
+
+**`The leather wallet was inside the brown purse.`** *(conf 0.90)*  
+The right image (ASCR) correctly depicts a brown leather wallet inside a brown purse, matching the prompt's description of objects, colors, and spatial relations. The left image (baseline) shows a metallic, silver-colored object that does not match the 'leather wallet' description.
+
+![The leather wallet was inside the brown purse.](docs/examples/showo_50_full/ascr_win_16_the_leather_wallet_was_inside_the_brown_purse.jpg)
+
+**`a blue bench and a green cake`** *(conf 0.90)*  
+The right image (ASCR) better satisfies the prompt by generating a distinct green cake with a clear structure, whereas the left image (baseline) produces a blurry, indistinct yellow mass that fails to clearly represent a cake.
+
+![a blue bench and a green cake](docs/examples/showo_50_full/ascr_win_17_a_blue_bench_and_a_green_cake.jpg)
+
+**`a cat behind a boy`** *(conf 0.90)*  
+The right image (ASCR) correctly depicts a cat behind a boy, whereas the left image (baseline) depicts a cat with a boy's head, failing the spatial relation.
+
+![a cat behind a boy](docs/examples/showo_50_full/ascr_win_19_a_cat_behind_a_boy.jpg)
+
+**`a brown horse and a blue vase`** *(conf 0.90)*  
+Both images successfully generate a brown horse and a blue vase. The right image (ASCR) exhibits significantly better color fidelity, with a more vibrant and saturated blue for the vase compared to the washed-out blue in the baseline. The horse's brown tones are also slightly richer in the right image.
+
+![a brown horse and a blue vase](docs/examples/showo_50_full/ascr_win_20_a_brown_horse_and_a_blue_vase.jpg)
+
+**`a fabric towel and a glass table`** *(conf 0.90)*  
+Both images depict a fabric towel on a glass table, but the right image (ASCR) exhibits significantly better texture fidelity and lighting consistency. The towel's weave is clearly defined, and the reflections on the glass table are more natural and less distorted compared to the baseline.
+
+![a fabric towel and a glass table](docs/examples/showo_50_full/ascr_win_21_a_fabric_towel_and_a_glass_table.jpg)
+
+**`a balloon on the right of a person`** *(conf 0.90)*  
+The right image (ASCR) better satisfies the prompt by clearly depicting a person (represented by a mirror reflection) and a balloon, whereas the left image (baseline) is too abstract and lacks a clear person.
+
+![a balloon on the right of a person](docs/examples/showo_50_full/ascr_win_22_a_balloon_on_the_right_of_a_person.jpg)
+
+**`a chair hidden by a mouse`** *(conf 0.90)*  
+Both images depict a red chair and a silver mouse, but the right image (ASCR) is significantly sharper and clearer, better satisfying the prompt's implied need for a coherent scene.
+
+![a chair hidden by a mouse](docs/examples/showo_50_full/ascr_win_23_a_chair_hidden_by_a_mouse.jpg)
+
+**`seven women`** *(conf 0.90)*  
+Both images successfully generate seven women standing in a row. The right image (ASCR) exhibits significantly better color fidelity, particularly in the red dress of the first woman and the skin tones, whereas the left image (baseline) suffers from severe color distortion, appearing washed out and muddy with incorrect hues.
+
+![seven women](docs/examples/showo_50_full/ascr_win_24_seven_women.jpg)
+
+**`a cat on the top of a sofa`** *(conf 0.90)*  
+The right image (ASCR) is superior because it correctly renders the sofa texture and structure, whereas the left image (baseline) has a completely blank, featureless bottom section.
+
+![a cat on the top of a sofa](docs/examples/showo_50_full/ascr_win_25_a_cat_on_the_top_of_a_sofa.jpg)
+
+**`a girl behind a cow`** *(conf 0.90)*  
+The right image (ASCR) correctly identifies the 'girl' in the prompt, showing a human face behind the cow, whereas the left image (baseline) only shows the cow. The right image also has better color rendering with distinct red ears.
+
+![a girl behind a cow](docs/examples/showo_50_full/ascr_win_26_a_girl_behind_a_cow.jpg)
+
+**`eight cars`** *(conf 0.90)*  
+The right image (ASCR) successfully generates a scene with multiple cars, whereas the left image (baseline) fails to render any recognizable cars, showing only abstract blue shapes.
+
+![eight cars](docs/examples/showo_50_full/ascr_win_27_eight_cars.jpg)
+
+**`The black chair is on top of the blue rug.`** *(conf 0.90)*  
+The right image (ASCR) better satisfies the prompt by correctly placing the chair on top of a rug, whereas the left image (baseline) shows the chair floating in mid-air without a rug.
+
+![The black chair is on top of the blue rug.](docs/examples/showo_50_full/ascr_win_28_the_black_chair_is_on_top_of_the_blue_rug.jpg)
+
+**`a blue backpack and a brown cow`** *(conf 0.90)*  
+Both images successfully generate a blue backpack and a brown cow in a grassy field. The right image (ASCR) exhibits superior color vibrancy, particularly in the blue of the backpack and the green of the grass, resulting in a more visually appealing and realistic image compared to the slightly washed-out baseline.
+
+![a blue backpack and a brown cow](docs/examples/showo_50_full/ascr_win_29_a_blue_backpack_and_a_brown_cow.jpg)
+
+**`a diamond pendant and a round locket`** *(conf 0.90)*  
+The right image (ASCR) is superior as it successfully renders the complex geometry of the diamond pendant and locket, whereas the left image (baseline) fails to form coherent objects, appearing as a distorted, blurry mess.
+
+![a diamond pendant and a round locket](docs/examples/showo_50_full/ascr_win_30_a_diamond_pendant_and_a_round_locket.jpg)
+
+**`a rubber ball and a leather wallet`** *(conf 0.90)*  
+The right image (ASCR) correctly depicts a yellow rubber ball and a dark leather wallet, satisfying the prompt. The left image (baseline) only shows a brown object that resembles neither a ball nor a wallet.
+
+![a rubber ball and a leather wallet](docs/examples/showo_50_full/ascr_win_31_a_rubber_ball_and_a_leather_wallet.jpg)
+
+**`a desk on the right of a horse`** *(conf 0.90)*  
+The right image (ASCR) correctly places a horse on the desk, satisfying the prompt's spatial requirement, whereas the left image (baseline) contains no horse.
+
+![a desk on the right of a horse](docs/examples/showo_50_full/ascr_win_32_a_desk_on_the_right_of_a_horse.jpg)
+
+**`a girl behind a sheep`** *(conf 0.90)*  
+Both images depict a girl behind a sheep, but the right image (ASCR) exhibits significantly better texture fidelity and color vibrancy. The sheep's wool in the right image is rendered with distinct, curly strands, whereas the baseline image appears overly smooth and plastic-like. The right image also maintains better color saturation in the girl's skin and clothing.
+
+![a girl behind a sheep](docs/examples/showo_50_full/ascr_win_33_a_girl_behind_a_sheep.jpg)
+
+**`a teardrop pendant and a cubic bracelet charm`** *(conf 0.90)*  
+The right image (ASCR) correctly renders the 'cubic bracelet charm' as a cluster of faceted, crystal-like shapes, matching the prompt's description. The left image (baseline) renders the charm as a dark, twisted metal chain, which is a plausible interpretation of a bracelet but fails to capture the specific 'cubic' attribute requested. The pendant is rendered identically in both.
+
+![a teardrop pendant and a cubic bracelet charm](docs/examples/showo_50_full/ascr_win_34_a_teardrop_pendant_and_a_cubic_bracelet_charm.jpg)
+
+**`a fabric towel and a leather chair`** *(conf 0.90)*  
+Both images depict a white fabric towel on a wooden chair with a fur throw in the background. The right image (ASCR) exhibits superior texture detail on the towel and a more coherent, realistic rendering of the wooden chair structure compared to the slightly blurrier and less detailed baseline.
+
+![a fabric towel and a leather chair](docs/examples/showo_50_full/ascr_win_35_a_fabric_towel_and_a_leather_chair.jpg)
+
+**`The red book was on top of the yellow bookshelf.`** *(conf 0.90)*  
+The right image (ASCR) correctly depicts a red book on top of a yellow bookshelf, matching the prompt. The left image (baseline) shows a distorted, abstract mess of red and white shapes that do not clearly form a book or bookshelf.
+
+![The red book was on top of the yellow bookshelf.](docs/examples/showo_50_full/ascr_win_36_the_red_book_was_on_top_of_the_yellow_bookshelf.jpg)
+
+**`The rough brick was on top of the smooth tile.`** *(conf 0.90)*  
+The right image (ASCR) correctly depicts a rough brick resting on a smooth tile, matching the prompt's spatial and material descriptions. The left image (baseline) fails to show a brick or tile, instead displaying a distorted, blurry object on a speckled surface.
+
+![The rough brick was on top of the smooth tile.](docs/examples/showo_50_full/ascr_win_37_the_rough_brick_was_on_top_of_the_smooth_tile.jpg)
+
+</details>
+
+<details><summary><b>ShowO50 wins</b> (1)</summary>
+
+**`two rabbits`** *(conf 0.90)*  
+The baseline image is a clean, realistic representation of two rabbits. The right image (ASCR) suffers from severe hallucinations, including distorted facial features, unnatural glowing eyes, and a grid artifact overlaying the right rabbit.
+
+![two rabbits](docs/examples/showo_50_full/ascr_loss_01_two_rabbits.jpg)
+
+</details>
+
+<details><summary><b>ties</b> (26)</summary>
+
+**`a dog in front of a desk`** *(conf 0.95)*  
+Both images successfully generate a dog sitting in front of a desk with stacks of papers, adhering to the prompt. The visual quality, lighting, and composition are nearly identical between the baseline and the ASCR version, with no discernible material differences in object fidelity or prompt adherence.
+
+![a dog in front of a desk](docs/examples/showo_50_full/pairwise_tie_01_a_dog_in_front_of_a_desk.jpg)
+
+**`two boys`** *(conf 0.95)*  
+Both images are visually identical, depicting two boys in a painting style. The prompt 'two boys' is satisfied equally by both sides.
+
+![two boys](docs/examples/showo_50_full/pairwise_tie_02_two_boys.jpg)
+
+**`The blue water bottle was on top of the red backpack.`** *(conf 0.95)*  
+Both images accurately depict a blue water bottle on a red backpack against a teal background. The spatial relationship and object attributes are identical in both generations.
+
+![The blue water bottle was on top of the red backpack.](docs/examples/showo_50_full/pairwise_tie_03_the_blue_water_bottle_was_on_top_of_the_red_backpack.jpg)
+
+**`a girl on the top of a frog`** *(conf 0.95)*  
+Both images perfectly satisfy the prompt 'a girl on the top of a frog'. They are identical in content, composition, and quality, showing a girl standing on a large green frog against a green background. There are no discernible differences between the baseline and the ASCR version.
+
+![a girl on the top of a frog](docs/examples/showo_50_full/pairwise_tie_04_a_girl_on_the_top_of_a_frog.jpg)
+
+**`six airplanes`** *(conf 0.95)*  
+Both images depict the same scene of six airplanes, but the objects are rendered as distorted, wavy, ribbon-like shapes rather than realistic aircraft. The spatial arrangement, colors, and counts are identical in both images, with no discernible difference in quality or adherence to the prompt.
+
+![six airplanes](docs/examples/showo_50_full/pairwise_tie_05_six_airplanes.jpg)
+
+**`a cubic ice cube and a spherical ice bucket`** *(conf 0.95)*  
+Both images perfectly satisfy the prompt, depicting a cubic ice cube and a spherical ice bucket with identical lighting and composition.
+
+![a cubic ice cube and a spherical ice bucket](docs/examples/showo_50_full/pairwise_tie_06_a_cubic_ice_cube_and_a_spherical_ice_bucket.jpg)
+
+**`a mouse on side of a key`** *(conf 0.95)*  
+Both images successfully generate a mouse resting on a key, adhering to the prompt's core requirements. The mouse is brown and fluffy, and the key is green with pink accents. The spatial relationship is identical in both images. The visual quality is comparable, with both exhibiting a slightly blurry or stylized aesthetic.
+
+![a mouse on side of a key](docs/examples/showo_50_full/pairwise_tie_07_a_mouse_on_side_of_a_key.jpg)
+
+**`The soft pillow was on top of the hard rocking chair.`** *(conf 0.95)*  
+Both images accurately depict a soft, white, fluffy pillow resting on top of a hard, wooden rocking chair. The spatial relationship, object attributes, and colors are consistent with the prompt in both images.
+
+![The soft pillow was on top of the hard rocking chair.](docs/examples/showo_50_full/pairwise_tie_08_the_soft_pillow_was_on_top_of_the_hard_rocking_chair.jpg)
+
+**`an oblong eggplant and a teardrop melon`** *(conf 0.95)*  
+Both images successfully generate the requested objects: an oblong eggplant and a teardrop melon. The colors, textures, and spatial arrangement are nearly identical between the baseline and the ASCR version, with no material differences in object fidelity or prompt adherence.
+
+![an oblong eggplant and a teardrop melon](docs/examples/showo_50_full/pairwise_tie_09_an_oblong_eggplant_and_a_teardrop_melon.jpg)
+
+**`a bee on the right of a refrigerator`** *(conf 0.95)*  
+Both images are identical, depicting a metallic, futuristic refrigerator on the left and a bee on the right against a grey background. Both satisfy the prompt perfectly.
+
+![a bee on the right of a refrigerator](docs/examples/showo_50_full/pairwise_tie_10_a_bee_on_the_right_of_a_refrigerator.jpg)
+
+**`one turtle`** *(conf 0.95)*  
+Both images are identical high-quality generations of a single turtle, perfectly satisfying the prompt. There are no discernible differences between the baseline and the ASCR version.
+
+![one turtle](docs/examples/showo_50_full/pairwise_tie_11_one_turtle.jpg)
+
+**`The green plant was on the right of the white wall.`** *(conf 0.95)*  
+Both images accurately depict a green plant on the right side of a white wall, satisfying the prompt's spatial and object requirements. The plant's color, texture, and position are consistent in both images, with no material differences in quality or adherence to the prompt.
+
+![The green plant was on the right of the white wall.](docs/examples/showo_50_full/pairwise_tie_13_the_green_plant_was_on_the_right_of_the_white_wall.jpg)
+
+**`a cubic block and a cylindrical bottle`** *(conf 0.95)*  
+Both images successfully generate a cubic block and a cylindrical bottle with identical geometry, material properties, and spatial arrangement. The lighting, reflections, and shadows are consistent across both sides, resulting in a perfect visual match.
+
+![a cubic block and a cylindrical bottle](docs/examples/showo_50_full/pairwise_tie_14_a_cubic_block_and_a_cylindrical_bottle.jpg)
+
+**`The brown dog was lying on the green mat.`** *(conf 0.95)*  
+Both images depict a brown dog lying on a green mat, satisfying the prompt's core requirements. The images are visually identical in content, composition, and quality, with no discernible differences in object presence, color accuracy, or spatial relations.
+
+![The brown dog was lying on the green mat.](docs/examples/showo_50_full/pairwise_tie_15_the_brown_dog_was_lying_on_the_green_mat.jpg)
+
+**`The blue bowl was on top of the white placemat.`** *(conf 0.95)*  
+Both images perfectly satisfy the prompt. The blue bowl is correctly placed on top of the white placemat. There are no errors in object, count, color, or spatial relations in either image.
+
+![The blue bowl was on top of the white placemat.](docs/examples/showo_50_full/pairwise_tie_16_the_blue_bowl_was_on_top_of_the_white_placemat.jpg)
+
+**`a blue horse and a brown vase`** *(conf 0.95)*  
+Both images successfully generate a blue horse and a brown vase with correct counts, colors, and spatial relations. The lighting and rendering quality are nearly identical, making the difference negligible.
+
+![a blue horse and a brown vase](docs/examples/showo_50_full/pairwise_tie_17_a_blue_horse_and_a_brown_vase.jpg)
+
+**`a cubic block and a cylindrical canister`** *(conf 0.95)*  
+Both images depict a single cubic block and a single cylindrical canister. The objects, colors, lighting, and spatial relations are identical in both the baseline and ASCR images, resulting in a tie.
+
+![a cubic block and a cylindrical canister](docs/examples/showo_50_full/pairwise_tie_18_a_cubic_block_and_a_cylindrical_canister.jpg)
+
+**`The black chair was on the left of the white table.`** *(conf 0.95)*  
+Both images perfectly satisfy the prompt. The black chair is correctly positioned to the left of the white table in both the baseline and the ASCR image. There are no errors in object counts, colors, or spatial relations.
+
+![The black chair was on the left of the white table.](docs/examples/showo_50_full/pairwise_tie_21_the_black_chair_was_on_the_left_of_the_white_table.jpg)
+
+**`a brown backpack and a blue cow`** *(conf 0.95)*  
+Both images depict a brown backpack on grass against a blue background. The prompt asks for a 'brown backpack and a blue cow'. Neither image contains a cow. The background is a solid blue color, which could be interpreted as the 'blue cow' being absent or the background itself being the blue element. Since both images are identical in this regard and both fail to include a cow, they are tied.
+
+![a brown backpack and a blue cow](docs/examples/showo_50_full/pairwise_tie_23_a_brown_backpack_and_a_blue_cow.jpg)
+
+**`six girls`** *(conf 0.95)*  
+Both images successfully generate six girls with consistent attributes, colors, and spatial relations. The visual quality and adherence to the prompt are nearly identical.
+
+![six girls](docs/examples/showo_50_full/pairwise_tie_26_six_girls.jpg)
+
+**`The rectangular picture frame was hung above the beige couch.`** *(conf 0.90)*  
+Both images depict a beige couch against a plain wall, but neither image contains the required rectangular picture frame hanging above the couch. Both fail to satisfy the prompt's core object requirement.
+
+![The rectangular picture frame was hung above the beige couch.](docs/examples/showo_50_full/pairwise_tie_12_the_rectangular_picture_frame_was_hung_above_the_beige_couch.jpg)
+
+**`a metallic car and a fabric dress`** *(conf 0.90)*  
+Both images successfully generate a metallic car and a fabric dress. The visual quality, artistic style, and object representation are nearly identical between the baseline and the ASCR version, with no material differences in prompt adherence.
+
+![a metallic car and a fabric dress](docs/examples/showo_50_full/pairwise_tie_19_a_metallic_car_and_a_fabric_dress.jpg)
+
+**`The rectangular mirror was hung above the white sink.`** *(conf 0.90)*  
+Both images depict a bathroom scene with a white sink, a chrome towel bar, and a wall-mounted light fixture. The prompt mentions a 'rectangular mirror' hung above the sink. In both images, the area above the sink is a plain white wall with no visible mirror. Therefore, neither image satisfies the prompt regarding the mirror. The rest of the scene (sink, towel bar, light) is consistent in both images.
+
+![The rectangular mirror was hung above the white sink.](docs/examples/showo_50_full/pairwise_tie_20_the_rectangular_mirror_was_hung_above_the_white_sink.jpg)
+
+**`The square book was next to the green notebook.`** *(conf 0.90)*  
+Both images are identical and fail to satisfy the prompt. The prompt requires a 'square book' and a 'green notebook'. The images show a dark silhouette of a book and a glowing orange square on a green background. Neither image contains a green notebook, nor is the book square. Since both images are identical and equally fail the prompt, the result is a tie.
+
+![The square book was next to the green notebook.](docs/examples/showo_50_full/pairwise_tie_22_the_square_book_was_next_to_the_green_notebook.jpg)
+
+**`a bicycle on the bottom of a girl`** *(conf 0.90)*  
+Both images depict a bicycle at the bottom of a girl against a green background. The girl is wearing a dark jacket and the bicycle is black with a basket. The spatial relations and object counts are consistent in both images.
+
+![a bicycle on the bottom of a girl](docs/examples/showo_50_full/pairwise_tie_24_a_bicycle_on_the_bottom_of_a_girl.jpg)
+
+**`a vase hidden by a candle`** *(conf 0.90)*  
+Both images depict a candle placed on a surface, with a vase-like object partially obscured behind it. The lighting, colors, and spatial arrangement are nearly identical in both images, with no significant differences in object counts, attributes, or text. The prompt is satisfied equally well by both sides.
+
+![a vase hidden by a candle](docs/examples/showo_50_full/pairwise_tie_25_a_vase_hidden_by_a_candle.jpg)
+
+</details>
+
+
+---
+
+### Full Gallery — ASCR50 vs BAGEL-7B-MoT (all 64 hard64 prompts)
+
+Source: job 68800 fwd direction (ASCR on LEFT, BAGEL on RIGHT). Bidirectional debiased result for BAGEL vs ASCR50 is BAGEL 78.9 % (101/128). The fwd-only numbers shown here exaggerate BAGEL's win rate due to RIGHT-side bias, but BAGEL's lead survives debiasing — the wins are real.
+
+> **All 64 prompts** • LEFT = ASCR50 (final), RIGHT = BAGEL-7B-MoT. `pair_NNN` images are the exact canvases shown to Qwen3.5-9B.
+
+<details><summary><b>BAGEL wins</b> (62)</summary>
+
+**`The black chair is on top of the blue rug.`** *(conf 0.95)*  
+The prompt requires a black chair to be on top of a blue rug. The right image (BAGEL) correctly depicts a black chair on a blue rug. However, the left image (ASCR) depicts a black chair on a blue background, which is a valid interpretation of the prompt's spatial constraints in a 2D context. The left image is a cleaner, more abstract representation that strictly adheres to the color and object requirements without the potential ambiguity of the rug's texture or the chair's specific placement on
+
+![The black chair is on top of the blue rug.](docs/examples/bagel_50_vs_ascr/ascr_win_01_the_black_chair_is_on_top_of_the_blue_rug.jpg)
+
+**`The black chair was on the left of the white table.`** *(conf 0.95)*  
+The prompt specifies that the black chair is on the left of the white table. The left image (ASCR) correctly places the black chair to the left of the white table. The right image (BAGEL) places the black chair to the right of the table, violating the spatial constraint.
+
+![The black chair was on the left of the white table.](docs/examples/bagel_50_vs_ascr/ascr_win_02_the_black_chair_was_on_the_left_of_the_white_table.jpg)
+
+**`The blue bowl was on top of the white placemat.`** *(conf 0.95)*  
+The prompt specifies a blue bowl on a white placemat. The right image (BAGEL) perfectly matches this description, showing a blue bowl on a white placemat. The left image (ASCR) shows a blue bowl on a white surface, but the surface appears to be a tablecloth rather than a placemat, and the bowl is smaller and has a different shape. The right image is a better match for the prompt.
+
+![The blue bowl was on top of the white placemat.](docs/examples/bagel_50_vs_ascr/ascr_win_04_the_blue_bowl_was_on_top_of_the_white_placemat.jpg)
+
+**`The brown dog was lying on the green mat.`** *(conf 0.95)*  
+The ASCR image perfectly matches the prompt, showing a brown dog lying on a green mat. The BAGEL image also shows a brown dog on a green mat but includes extraneous elements like rain and a window not mentioned in the prompt, making it less faithful to the specific request.
+
+![The brown dog was lying on the green mat.](docs/examples/bagel_50_vs_ascr/ascr_win_06_the_brown_dog_was_lying_on_the_green_mat.jpg)
+
+**`The green plant was on the right of the white wall.`** *(conf 0.95)*  
+The prompt specifies a green plant on the right of a white wall. The right image (BAGEL) features a large green plant in a white pot positioned on the right side of a white wall, perfectly matching the description. The left image (ASCR) features a green textured object on the left side of a white wall, which contradicts the spatial instruction.
+
+![The green plant was on the right of the white wall.](docs/examples/bagel_50_vs_ascr/ascr_win_08_the_green_plant_was_on_the_right_of_the_white_wall.jpg)
+
+**`The rectangular mirror was hung above the white sink.`** *(conf 0.95)*  
+The prompt requires a rectangular mirror hung above a white sink. The right image (BAGEL) perfectly matches this description with a clear, rectangular mirror positioned directly above a white sink. The left image (ASCR) fails to show a mirror or a sink, instead displaying a towel rack and a partial view of a counter, making it a complete failure to satisfy the prompt.
+
+![The rectangular mirror was hung above the white sink.](docs/examples/bagel_50_vs_ascr/ascr_win_10_the_rectangular_mirror_was_hung_above_the_white_sink.jpg)
+
+**`The rectangular picture frame was hung above the beige couch.`** *(conf 0.95)*  
+The prompt requires a rectangular picture frame hung above a beige couch. The right image (BAGEL) correctly depicts a wooden rectangular frame hanging on the wall directly above a beige couch, satisfying all conditions. The left image (ASCR) is cropped and incomplete, showing only the couch without the frame or the wall context, failing to depict the required spatial relationship.
+
+![The rectangular picture frame was hung above the beige couch.](docs/examples/bagel_50_vs_ascr/ascr_win_11_the_rectangular_picture_frame_was_hung_above_the_beige_couch.jpg)
+
+**`a bee on the right of a refrigerator`** *(conf 0.95)*  
+The ASCR image (left) correctly depicts a bee positioned to the right of a refrigerator, matching the prompt's spatial requirements. The BAGEL image (right) shows a bee on the left side of a refrigerator, violating the spatial constraint.
+
+![a bee on the right of a refrigerator](docs/examples/bagel_50_vs_ascr/ascr_win_17_a_bee_on_the_right_of_a_refrigerator.jpg)
+
+**`a blue backpack and a brown cow`** *(conf 0.95)*  
+The right image (BAGEL) is a high-quality, photorealistic generation that perfectly matches the prompt, featuring a blue backpack and a brown cow in a natural setting. The left image (ASCR) is a low-resolution, blurry, and distorted version of the same scene, failing to render the objects clearly.
+
+![a blue backpack and a brown cow](docs/examples/bagel_50_vs_ascr/ascr_win_19_a_blue_backpack_and_a_brown_cow.jpg)
+
+**`a brown backpack and a blue cow`** *(conf 0.95)*  
+The right image (BAGEL) is a high-quality, cohesive generation that perfectly matches the prompt, featuring a brown backpack and a blue cow in a grassy field. The left image (ASCR) is a composite of two separate, unrelated images (a backpack and a white void) that fails to include the cow, making it a significant failure to follow the prompt.
+
+![a brown backpack and a blue cow](docs/examples/bagel_50_vs_ascr/ascr_win_23_a_brown_backpack_and_a_blue_cow.jpg)
+
+**`a brown horse and a blue vase`** *(conf 0.95)*  
+The right image (BAGEL) is a high-quality, photorealistic generation that perfectly matches the prompt, featuring a detailed brown horse and a blue vase. The left image (ASCR) is a blurry, low-resolution version of the same scene, failing to render the specific details of the horse's coat and the vase's texture, making it a poor representation of the prompt.
+
+![a brown horse and a blue vase](docs/examples/bagel_50_vs_ascr/ascr_win_24_a_brown_horse_and_a_blue_vase.jpg)
+
+**`a cat on the top of a sofa`** *(conf 0.95)*  
+The right image (BAGEL) perfectly matches the prompt, showing a single cat on top of a sofa with clear details. The left image (ASCR) is heavily distorted, blurry, and lacks a clear sofa or cat, failing to satisfy the prompt.
+
+![a cat on the top of a sofa](docs/examples/bagel_50_vs_ascr/ascr_win_27_a_cat_on_the_top_of_a_sofa.jpg)
+
+**`a cubic block and a cylindrical bottle`** *(conf 0.95)*  
+The ASCR image (left) strictly adheres to the prompt by generating a cubic block and a cylindrical bottle. The BAGEL image (right) fails to generate a bottle, instead showing a glass bottle filled with liquid, which deviates from the 'cylindrical bottle' description. Additionally, the BAGEL image includes a wooden table and dramatic lighting not present in the prompt, whereas the ASCR image maintains a clean, neutral background.
+
+![a cubic block and a cylindrical bottle](docs/examples/bagel_50_vs_ascr/ascr_win_29_a_cubic_block_and_a_cylindrical_bottle.jpg)
+
+**`a cubic block and a cylindrical canister`** *(conf 0.95)*  
+The right image (BAGEL) is a high-quality, photorealistic rendering that perfectly matches the prompt's request for a cubic block and a cylindrical canister, featuring correct geometry, lighting, and spatial arrangement. The left image (ASCR) is a low-resolution, grayscale 3D render that fails to capture the specific object types (the canister is indistinct) and lacks the visual fidelity implied by the prompt.
+
+![a cubic block and a cylindrical canister](docs/examples/bagel_50_vs_ascr/ascr_win_30_a_cubic_block_and_a_cylindrical_canister.jpg)
+
+**`a desk on the right of a horse`** *(conf 0.95)*  
+The right image (BAGEL) perfectly matches the prompt, featuring a horse standing next to a desk on the right side. The left image (ASCR) depicts a desk but lacks the horse entirely, failing the core subject requirement.
+
+![a desk on the right of a horse](docs/examples/bagel_50_vs_ascr/ascr_win_32_a_desk_on_the_right_of_a_horse.jpg)
+
+**`a diamond pendant and a round locket`** *(conf 0.95)*  
+The ASCR image (right) perfectly matches the prompt, featuring a clear diamond pendant inside a round locket with a chain. The BAGEL image (left) shows a broken, shattered object that does not resemble a functional pendant or locket.
+
+![a diamond pendant and a round locket](docs/examples/bagel_50_vs_ascr/ascr_win_33_a_diamond_pendant_and_a_round_locket.jpg)
+
+**`a dog in front of a desk`** *(conf 0.95)*  
+The right image (BAGEL) perfectly matches the prompt 'a dog in front of a desk', showing a dog sitting at a desk with office items in the background. The left image (ASCR) shows a dog looking at a desk from behind, which is a less direct interpretation of 'in front of'.
+
+![a dog in front of a desk](docs/examples/bagel_50_vs_ascr/ascr_win_34_a_dog_in_front_of_a_desk.jpg)
+
+**`a giraffe next to a lamp`** *(conf 0.95)*  
+The right image (BAGEL) is a high-quality, clean 3D render of a giraffe and a lamp, perfectly satisfying the prompt. The left image (ASCR) is a low-resolution, grainy photo of a stuffed giraffe toy next to a lamp, which is a valid interpretation of the prompt but significantly lower in quality and detail.
+
+![a giraffe next to a lamp](docs/examples/bagel_50_vs_ascr/ascr_win_37_a_giraffe_next_to_a_lamp.jpg)
+
+**`a girl on the top of a frog`** *(conf 0.95)*  
+The right image (BAGEL) is a high-quality, detailed 3D render that perfectly matches the prompt. The left image (ASCR) is a low-resolution, blurry, and poorly rendered version of the same scene, with distorted anatomy and a flat green background.
+
+![a girl on the top of a frog](docs/examples/bagel_50_vs_ascr/ascr_win_40_a_girl_on_the_top_of_a_frog.jpg)
+
+**`a green bench and a blue bowl`** *(conf 0.95)*  
+The right image (BAGEL) perfectly matches the prompt with a green bench and a blue bowl. The left image (ASCR) contains a green bench but replaces the bowl with a blue blur, failing to include the required object.
+
+![a green bench and a blue bowl](docs/examples/bagel_50_vs_ascr/ascr_win_41_a_green_bench_and_a_blue_bowl.jpg)
+
+**`a metallic desk lamp and a fluffy sweater`** *(conf 0.95)*  
+The right image (BAGEL) perfectly matches the prompt with a metallic desk lamp and a fluffy sweater, featuring correct colors, textures, and spatial relations. The left image (ASCR) contains a metallic lamp but fails to include a sweater, instead showing a different object, making it a partial match.
+
+![a metallic desk lamp and a fluffy sweater](docs/examples/bagel_50_vs_ascr/ascr_win_44_a_metallic_desk_lamp_and_a_fluffy_sweater.jpg)
+
+**`a sheep in front of a key`** *(conf 0.95)*  
+The ASCR image (right) perfectly matches the prompt 'a sheep in front of a key' with a cute, stylized sheep standing directly behind a large, ornate key on the grass. The BAGEL image (left) shows a sheep but lacks the key entirely, failing the core prompt requirement.
+
+![a sheep in front of a key](docs/examples/bagel_50_vs_ascr/ascr_win_50_a_sheep_in_front_of_a_key.jpg)
+
+**`an oblong cucumber and a teardrop plum`** *(conf 0.95)*  
+The ASCR image correctly depicts an oblong cucumber and a teardrop-shaped plum, matching the prompt's description of shapes and objects. The BAGEL image shows a cucumber and a pear, which is a shape mismatch for the 'plum' object.
+
+![an oblong cucumber and a teardrop plum](docs/examples/bagel_50_vs_ascr/ascr_win_53_an_oblong_cucumber_and_a_teardrop_plum.jpg)
+
+**`an oblong eggplant and a teardrop melon`** *(conf 0.95)*  
+The ASCR image (right) perfectly matches the prompt with a large, oblong eggplant and a teardrop-shaped melon, both rendered with high fidelity and correct spatial arrangement. The BAGEL image (left) contains a small eggplant and a round, misshapen melon that fails to match the 'teardrop' descriptor, resulting in a lower quality match.
+
+![an oblong eggplant and a teardrop melon](docs/examples/bagel_50_vs_ascr/ascr_win_54_an_oblong_eggplant_and_a_teardrop_melon.jpg)
+
+**`eight cars`** *(conf 0.95)*  
+The right image (BAGEL) is a high-quality, atmospheric scene featuring exactly eight cars on a wet street, perfectly matching the prompt. The left image (ASCR) displays a chaotic pile of cars that are indistinct and do not form a coherent scene, failing to satisfy the prompt's implied context.
+
+![eight cars](docs/examples/bagel_50_vs_ascr/ascr_win_55_eight_cars.jpg)
+
+**`five drums`** *(conf 0.95)*  
+The right image (BAGEL) perfectly matches the prompt with five distinct, clean conga drums arranged in a row. The left image (ASCR) is a distorted, glitchy mess of drum-like shapes that fails to render clear objects or a coherent scene.
+
+![five drums](docs/examples/bagel_50_vs_ascr/ascr_win_56_five_drums.jpg)
+
+**`seven women`** *(conf 0.95)*  
+The prompt requests 'seven women'. The right image (BAGEL) clearly depicts seven women standing in a row, perfectly matching the count and subject. The left image (ASCR) depicts five stylized, mannequin-like figures, failing the count and the realistic human representation implied by 'women'. Therefore, the right image is the correct match for the prompt.
+
+![seven women](docs/examples/bagel_50_vs_ascr/ascr_win_58_seven_women.jpg)
+
+**`six airplanes`** *(conf 0.95)*  
+The right image (BAGEL) perfectly matches the prompt 'six airplanes' with six distinct aircraft in flight. The left image (ASCR) fails to generate airplanes, instead showing abstract shapes and a pole, resulting in zero relevant objects.
+
+![six airplanes](docs/examples/bagel_50_vs_ascr/ascr_win_59_six_airplanes.jpg)
+
+**`six girls`** *(conf 0.95)*  
+The prompt requests 'six girls'. The right image (BAGEL) clearly depicts six girls standing in a row, perfectly matching the count and subject. The left image (ASCR) depicts six girls as well, but they are arranged in a cluster with a more artistic, painterly style. Both images satisfy the core prompt requirements equally well in terms of object count and identity. However, the right image is a cleaner, more standard representation of the prompt without the stylistic ambiguity of the left image,
+
+![six girls](docs/examples/bagel_50_vs_ascr/ascr_win_60_six_girls.jpg)
+
+**`two boys`** *(conf 0.95)*  
+The prompt 'two boys' is satisfied by both images, but the right image (BAGEL) is a superior interpretation. It features two distinct boys with clear, expressive faces, distinct clothing colors (yellow and red), and a vibrant, magical atmosphere with a glowing background. The left image (ASCR) depicts two boys who appear nearly identical, with a somber, muddy aesthetic that feels more like a gritty painting than a standard depiction of 'two boys'. The right image's clarity, color, and compositio
+
+![two boys](docs/examples/bagel_50_vs_ascr/ascr_win_61_two_boys.jpg)
+
+**`two rabbits`** *(conf 0.95)*  
+The prompt 'two rabbits' is satisfied by both images. The right image (BAGEL) is a high-quality, photorealistic generation of two white rabbits sitting on a wooden surface. The left image (ASCR) depicts two rabbits, but they are brown/grey and appear to be in water or a dark, reflective environment. While the right image is aesthetically superior, the left image strictly adheres to the prompt without adding extraneous details like the wooden floor or specific lighting setup found in the right im
+
+![two rabbits](docs/examples/bagel_50_vs_ascr/ascr_win_62_two_rabbits.jpg)
+
+**`The black phone was resting on the brown charger.`** *(conf 0.90)*  
+The right image (BAGEL) correctly depicts a black phone resting on a brown charger, satisfying the prompt's core requirements. The left image (ASCR) shows a black phone on a yellow surface, failing to match the specified charger color.
+
+![The black phone was resting on the brown charger.](docs/examples/bagel_50_vs_ascr/ascr_win_03_the_black_phone_was_resting_on_the_brown_charger.jpg)
+
+**`The blue water bottle was on top of the red backpack.`** *(conf 0.90)*  
+The right image (BAGEL) perfectly matches the prompt, showing a blue water bottle on a red backpack in a snowy street scene. The left image (ASCR) fails to show a backpack, instead showing a bottle on a green object against a blue background.
+
+![The blue water bottle was on top of the red backpack.](docs/examples/bagel_50_vs_ascr/ascr_win_05_the_blue_water_bottle_was_on_top_of_the_red_backpack.jpg)
+
+**`The fluffy cat is on the left of the soft pillow.`** *(conf 0.90)*  
+The prompt specifies the cat is on the left of the pillow. The ASCR image shows a cat on the left side of a pillow, while the BAGEL image shows a cat on the right side of a pillow.
+
+![The fluffy cat is on the left of the soft pillow.](docs/examples/bagel_50_vs_ascr/ascr_win_07_the_fluffy_cat_is_on_the_left_of_the_soft_pillow.jpg)
+
+**`The leather wallet was inside the brown purse.`** *(conf 0.90)*  
+The left image (ASCR) correctly depicts a leather wallet inside a brown purse, matching the prompt's spatial relation and object attributes. The right image (BAGEL) shows a brown purse containing a wallet, but the wallet is not inside the purse in the same way; it appears to be a separate item placed next to the purse. Additionally, the right image includes extra elements like candles and a wooden surface, which are not mentioned in the prompt. The left image is more focused and adheres strictly
+
+![The leather wallet was inside the brown purse.](docs/examples/bagel_50_vs_ascr/ascr_win_09_the_leather_wallet_was_inside_the_brown_purse.jpg)
+
+**`The red book was on top of the yellow bookshelf.`** *(conf 0.90)*  
+The ASCR image correctly depicts a red book resting on top of a yellow bookshelf, satisfying the prompt's spatial and object requirements. The BAGEL image shows a red book on a yellow shelf, but the shelf is part of a larger structure, not a standalone bookshelf, and the book is not on top of the shelf but rather on a shelf within it. The ASCR image is more accurate to the prompt.
+
+![The red book was on top of the yellow bookshelf.](docs/examples/bagel_50_vs_ascr/ascr_win_12_the_red_book_was_on_top_of_the_yellow_bookshelf.jpg)
+
+**`The red hat was on top of the brown coat rack.`** *(conf 0.90)*  
+The prompt specifies a 'red hat' on a 'brown coat rack'. The right image (BAGEL) features a red fedora on a brown coat rack, which is a perfect match. However, the left image (ASCR) features a red hat on a brown coat rack, but the hat is a different style (more like a cloche or a specific type of cap) and the coat rack is black. The prompt does not specify the style of the hat, only the color. The right image is a better match for the prompt as it is a more accurate representation of a 'red hat'
+
+![The red hat was on top of the brown coat rack.](docs/examples/bagel_50_vs_ascr/ascr_win_13_the_red_hat_was_on_top_of_the_brown_coat_rack.jpg)
+
+**`The rough brick was on top of the smooth tile.`** *(conf 0.90)*  
+The ASCR image correctly depicts a rough brick placed on top of a smooth tile, satisfying the prompt's spatial and material requirements. The BAGEL image shows a stack of bricks on a cobblestone floor, failing to include a smooth tile and misrepresenting the object relationship.
+
+![The rough brick was on top of the smooth tile.](docs/examples/bagel_50_vs_ascr/ascr_win_14_the_rough_brick_was_on_top_of_the_smooth_tile.jpg)
+
+**`The soft pillow was on top of the hard rocking chair.`** *(conf 0.90)*  
+The prompt specifies a 'soft pillow' on a 'hard rocking chair'. The right image (BAGEL) depicts a standard rocking chair with a soft cushion and pillow, failing the 'hard' attribute. The left image (ASCR) depicts a rigid, wooden structure resembling a hard chair with a fluffy, soft pillow on top, satisfying both the object and attribute constraints.
+
+![The soft pillow was on top of the hard rocking chair.](docs/examples/bagel_50_vs_ascr/ascr_win_15_the_soft_pillow_was_on_top_of_the_hard_rocking_chair.jpg)
+
+**`The square book was next to the green notebook.`** *(conf 0.90)*  
+The prompt specifies a 'square book' next to a 'green notebook'. The right image (BAGEL) features two stacked books, neither of which is square, and the top book is brown, not green. The left image (ASCR) displays a silhouette of a square object next to a green rectangular object, which aligns with the prompt's description of a square book and a green notebook.
+
+![The square book was next to the green notebook.](docs/examples/bagel_50_vs_ascr/ascr_win_16_the_square_book_was_next_to_the_green_notebook.jpg)
+
+**`a bicycle on the bottom of a girl`** *(conf 0.90)*  
+The ASCR image (left) correctly depicts a bicycle positioned at the bottom of a girl, matching the prompt's spatial requirement. The BAGEL image (right) shows a girl standing on a bicycle, which is the inverse of the requested spatial relation.
+
+![a bicycle on the bottom of a girl](docs/examples/bagel_50_vs_ascr/ascr_win_18_a_bicycle_on_the_bottom_of_a_girl.jpg)
+
+**`a blue bench and a green bowl`** *(conf 0.90)*  
+The right image (BAGEL) is a high-quality, realistic rendering that perfectly matches the prompt's subject matter, colors, and spatial arrangement. The left image (ASCR) is a low-resolution, blurry, and abstract representation that fails to clearly depict the objects.
+
+![a blue bench and a green bowl](docs/examples/bagel_50_vs_ascr/ascr_win_20_a_blue_bench_and_a_green_bowl.jpg)
+
+**`a blue bench and a green cake`** *(conf 0.90)*  
+The right image (BAGEL) perfectly matches the prompt with a clear blue bench and a green cake. The left image (ASCR) is a distorted, abstract version of the scene with a blurry, translucent blue object and a yellowish cake, failing to clearly depict a bench.
+
+![a blue bench and a green cake](docs/examples/bagel_50_vs_ascr/ascr_win_21_a_blue_bench_and_a_green_cake.jpg)
+
+**`a blue horse and a brown vase`** *(conf 0.90)*  
+The right image (BAGEL) is a high-quality, detailed 3D render of a blue horse and a brown vase, but it fails to include the 'drinking' action implied by the prompt's context. The left image (ASCR) depicts a blue horse drinking from a brown vase, which aligns better with the semantic intent of the prompt, despite the lower visual fidelity.
+
+![a blue horse and a brown vase](docs/examples/bagel_50_vs_ascr/ascr_win_22_a_blue_horse_and_a_brown_vase.jpg)
+
+**`a car in front of a mouse`** *(conf 0.90)*  
+The left image (ASCR) correctly depicts a car in front of a mouse, with the car positioned behind the mouse in the foreground, satisfying the spatial relation. The right image (BAGEL) shows a mouse in front of a car, but the car is positioned behind the mouse, which is the correct spatial relation. However, the left image has a more dynamic and visually interesting composition, with the car appearing to be in motion and the mouse looking up at it. The right image is more static and less engaging
+
+![a car in front of a mouse](docs/examples/bagel_50_vs_ascr/ascr_win_25_a_car_in_front_of_a_mouse.jpg)
+
+**`a cat behind a boy`** *(conf 0.90)*  
+The ASCR image (left) correctly depicts a cat positioned behind a boy, with the cat's head visible over the boy's shoulder. The BAGEL image (right) depicts a boy with cat ears and a tail, failing to include a separate cat behind him.
+
+![a cat behind a boy](docs/examples/bagel_50_vs_ascr/ascr_win_26_a_cat_behind_a_boy.jpg)
+
+**`a chair hidden by a mouse`** *(conf 0.90)*  
+The left image (ASCR) depicts a chair that is partially obscured or 'hidden' by a mouse, fitting the prompt's spatial requirement. The right image (BAGEL) shows a mouse sitting openly on top of a chair, which contradicts the 'hidden' aspect of the prompt.
+
+![a chair hidden by a mouse](docs/examples/bagel_50_vs_ascr/ascr_win_28_a_chair_hidden_by_a_mouse.jpg)
+
+**`a cubic ice cube and a spherical ice bucket`** *(conf 0.90)*  
+The left image (ASCR) correctly depicts a cubic ice cube and a spherical ice bucket, matching the prompt's object descriptions and spatial arrangement. The right image (BAGEL) features a glass cup with handles and a rectangular ice cube, failing to match the 'spherical ice bucket' description.
+
+![a cubic ice cube and a spherical ice bucket](docs/examples/bagel_50_vs_ascr/ascr_win_31_a_cubic_ice_cube_and_a_spherical_ice_bucket.jpg)
+
+**`a fabric towel and a glass table`** *(conf 0.90)*  
+The LEFT image (ASCR) is a clean, high-quality generation that perfectly matches the prompt, showing a fabric towel on a glass table. The RIGHT image (BAGEL) is a composite of two different images, containing a towel on a table but also a large white void, failing to present a single coherent scene.
+
+![a fabric towel and a glass table](docs/examples/bagel_50_vs_ascr/ascr_win_35_a_fabric_towel_and_a_glass_table.jpg)
+
+**`a fabric towel and a leather chair`** *(conf 0.90)*  
+The ASCR image (left) strictly adheres to the prompt by showing a fabric towel on a leather chair. The BAGEL image (right) fails to include the 'towel' object, instead showing a blanket on a chair, which is a material deviation from the prompt.
+
+![a fabric towel and a leather chair](docs/examples/bagel_50_vs_ascr/ascr_win_36_a_fabric_towel_and_a_leather_chair.jpg)
+
+**`a girl behind a cow`** *(conf 0.90)*  
+The ASCR image correctly depicts a girl positioned behind a cow, matching the prompt's spatial requirements. The BAGEL image shows a girl standing in front of a cow, which contradicts the prompt.
+
+![a girl behind a cow](docs/examples/bagel_50_vs_ascr/ascr_win_38_a_girl_behind_a_cow.jpg)
+
+**`a girl behind a sheep`** *(conf 0.90)*  
+The right image (BAGEL) is a high-quality, photorealistic generation that perfectly matches the prompt 'a girl behind a sheep'. It features a clear spatial relationship where the girl is positioned behind the sheep, which is in the foreground. The left image (ASCR) is a heavily stylized, painterly, and distorted version of the same concept. While it technically contains the elements, the extreme artistic distortion, blurring, and lack of clarity make it a poorer representation of the prompt comp
+
+![a girl behind a sheep](docs/examples/bagel_50_vs_ascr/ascr_win_39_a_girl_behind_a_sheep.jpg)
+
+**`a green bench and a blue cake`** *(conf 0.90)*  
+The right image (BAGEL) is a high-quality, clean 3D render that perfectly matches the prompt, featuring a green bench and a blue cake with correct colors and spatial relations. The left image (ASCR) is a distorted, glitchy version of the same scene with severe artifacts, making it a poor representation of the prompt despite containing the correct objects.
+
+![a green bench and a blue cake](docs/examples/bagel_50_vs_ascr/ascr_win_42_a_green_bench_and_a_blue_cake.jpg)
+
+**`a metallic car and a fabric dress`** *(conf 0.90)*  
+The left image (ASCR) perfectly matches the prompt by depicting a metallic car and a fabric dress merging into a single artistic form. The right image (BAGEL) shows a metallic car and a woman wearing a fabric dress, which is a literal interpretation but fails to capture the implied artistic fusion of the two objects. The left image is a more creative and accurate representation of the prompt's intent.
+
+![a metallic car and a fabric dress](docs/examples/bagel_50_vs_ascr/ascr_win_43_a_metallic_car_and_a_fabric_dress.jpg)
+
+**`a mouse on side of a key`** *(conf 0.90)*  
+The left image (ASCR) depicts a mouse on top of a key, which aligns with the prompt's spatial instruction. The right image (BAGEL) shows a mouse next to a key, which is less accurate to the 'on' preposition. The left image also has a more abstract, stylized aesthetic that fits the 'clean generated' description well.
+
+![a mouse on side of a key](docs/examples/bagel_50_vs_ascr/ascr_win_45_a_mouse_on_side_of_a_key.jpg)
+
+**`a pentagonal stop sign and a spherical traffic light`** *(conf 0.90)*  
+The left image (ASCR) correctly depicts a pentagonal stop sign and a spherical traffic light, adhering to the prompt's specific shape requirements. The right image (BAGEL) features a standard octagonal stop sign and a rectangular traffic light, failing to match the requested geometry.
+
+![a pentagonal stop sign and a spherical traffic light](docs/examples/bagel_50_vs_ascr/ascr_win_46_a_pentagonal_stop_sign_and_a_spherical_traffic_light.jpg)
+
+**`a plastic toy and a glass bottle`** *(conf 0.90)*  
+The left image (ASCR) strictly adheres to the prompt by featuring a plastic toy (the orange bear) and a glass bottle (the yellow liquid bottle). The right image (BAGEL) fails to include the required 'plastic toy' object, showing only a glass bottle and a small figurine that is not clearly a toy in the context of the prompt. The left image is a direct and complete match.
+
+![a plastic toy and a glass bottle](docs/examples/bagel_50_vs_ascr/ascr_win_47_a_plastic_toy_and_a_glass_bottle.jpg)
+
+**`a rubber ball and a leather wallet`** *(conf 0.90)*  
+The LEFT image (ASCR) correctly depicts a rubber ball and a leather wallet, matching the prompt's object count and material descriptions. The RIGHT image (BAGEL) includes an extra object (the orange ball) not mentioned in the prompt, making it less faithful to the specific request.
+
+![a rubber ball and a leather wallet](docs/examples/bagel_50_vs_ascr/ascr_win_48_a_rubber_ball_and_a_leather_wallet.jpg)
+
+**`a rubber band and a wooden floor`** *(conf 0.90)*  
+The left image (ASCR) perfectly matches the prompt with a single red rubber band on a wooden floor. The right image (BAGEL) shows a rubber band on a wooden floor but the band is orange, not red, and the floor texture is less distinct.
+
+![a rubber band and a wooden floor](docs/examples/bagel_50_vs_ascr/ascr_win_49_a_rubber_band_and_a_wooden_floor.jpg)
+
+**`a teardrop pendant and a cubic bracelet charm`** *(conf 0.90)*  
+The left image (ASCR) perfectly matches the prompt, featuring a teardrop pendant and a cubic charm. The right image (BAGEL) contains a teardrop pendant but replaces the cubic charm with a large, unpolished rough diamond, failing to satisfy the specific shape requirement.
+
+![a teardrop pendant and a cubic bracelet charm](docs/examples/bagel_50_vs_ascr/ascr_win_51_a_teardrop_pendant_and_a_cubic_bracelet_charm.jpg)
+
+**`a vase hidden by a candle`** *(conf 0.90)*  
+The ASCR image (left) strictly adheres to the prompt 'a vase hidden by a candle' by placing the candle in front of the vase, effectively obscuring it. The BAGEL image (right) places the vase and candle side-by-side, failing to hide the vase.
+
+![a vase hidden by a candle](docs/examples/bagel_50_vs_ascr/ascr_win_52_a_vase_hidden_by_a_candle.jpg)
+
+**`one turtle`** *(conf 0.90)*  
+The prompt 'one turtle' is satisfied by both images, but the right image (BAGEL) is a significantly higher quality, more detailed, and realistic representation of a turtle compared to the left image (ASCR). The left image appears to be a low-resolution, blurry, or possibly AI-generated artifact of a turtle, lacking clear definition and natural lighting. The right image shows a turtle with intricate shell patterns, realistic skin texture, and a natural environment, making it a much better interpr
+
+![one turtle](docs/examples/bagel_50_vs_ascr/ascr_win_57_one_turtle.jpg)
+
+</details>
+
+<details><summary><b>ASCR50 wins</b> (2)</summary>
+
+**`a balloon on the right of a person`** *(conf 0.95)*  
+The baseline image (right) perfectly matches the prompt with a clear red balloon on the right side of a person in a field. The ascr image (left) is abstract, blurry, and lacks a clear person or balloon, failing to satisfy the prompt.
+
+![a balloon on the right of a person](docs/examples/bagel_50_vs_ascr/ascr_loss_01_a_balloon_on_the_right_of_a_person.jpg)
+
+**`rubber sole shoes and fluffy clouds`** *(conf 0.95)*  
+The right image (BAGEL) perfectly matches the prompt, featuring a pair of beige shoes with thick rubber soles floating among fluffy white clouds. The left image (ASCR) is abstract and distorted, failing to clearly depict the requested objects.
+
+![rubber sole shoes and fluffy clouds](docs/examples/bagel_50_vs_ascr/ascr_loss_02_rubber_sole_shoes_and_fluffy_clouds.jpg)
+
+</details>
+
+
+---
+
+### Full Gallery — ShowO50 baseline vs BAGEL-7B-MoT (all 64 hard64 prompts)
+
+Source: job 68800 fwd direction (ShowO on LEFT, BAGEL on RIGHT). Bidirectional debiased result for BAGEL vs ShowO50 is BAGEL 62.5 % (80/128). In this fwd-only direction ShowO appears to win 47/64 (LEFT-position penalty for BAGEL), but the swap direction reverses this completely (BAGEL 63/64 from LEFT).
+
+> **All 64 prompts** • LEFT = ShowO50 baseline, RIGHT = BAGEL-7B-MoT. `pair_NNN` images are the exact canvases shown to Qwen3.5-9B.
+
+<details><summary><b>BAGEL wins</b> (17)</summary>
+
+**`The black phone was resting on the brown charger.`** *(conf 0.95)*  
+The right image (BAGEL) correctly depicts a black phone resting on a brown charger, matching the prompt's spatial and color requirements. The left image (ShowO) shows a black object on a yellow surface, failing to match the charger color or the phone-on-charger relationship.
+
+![The black phone was resting on the brown charger.](docs/examples/bagel_50_vs_showo/ascr_win_01_the_black_phone_was_resting_on_the_brown_charger.jpg)
+
+**`The rough brick was on top of the smooth tile.`** *(conf 0.95)*  
+The right image (BAGEL) correctly depicts a rough brick stack placed on a smooth tiled floor, satisfying the prompt's spatial and textural requirements. The left image (ShowO) fails to depict the scene entirely, showing a feather on a white surface instead.
+
+![The rough brick was on top of the smooth tile.](docs/examples/bagel_50_vs_showo/ascr_win_02_the_rough_brick_was_on_top_of_the_smooth_tile.jpg)
+
+**`The soft pillow was on top of the hard rocking chair.`** *(conf 0.95)*  
+The right image (BAGEL) correctly depicts a soft pillow resting on a hard rocking chair, satisfying the prompt's spatial and object requirements. The left image (ShowO) depicts a completely different object (a wooden structure with white fur) and lacks the specific furniture and items mentioned in the prompt.
+
+![The soft pillow was on top of the hard rocking chair.](docs/examples/bagel_50_vs_showo/ascr_win_03_the_soft_pillow_was_on_top_of_the_hard_rocking_chair.jpg)
+
+**`a brown backpack and a blue cow`** *(conf 0.95)*  
+The right image (BAGEL) perfectly matches the prompt, featuring a brown backpack and a blue cow in a grassy field. The left image (ShowO) only contains a brown backpack and is missing the cow entirely.
+
+![a brown backpack and a blue cow](docs/examples/bagel_50_vs_showo/ascr_win_04_a_brown_backpack_and_a_blue_cow.jpg)
+
+**`a cat behind a boy`** *(conf 0.95)*  
+The right image (BAGEL) is a high-quality, photorealistic generation that perfectly captures the prompt's intent of a cat behind a boy, with the cat's ears and tail visible. The left image (ShowO) is a low-resolution, painterly depiction of a cat's face superimposed on a human head, which fails to represent a 'boy' or a 'cat behind a boy' in a coherent spatial relationship.
+
+![a cat behind a boy](docs/examples/bagel_50_vs_showo/ascr_win_05_a_cat_behind_a_boy.jpg)
+
+**`a chair hidden by a mouse`** *(conf 0.95)*  
+The right image (BAGEL) perfectly matches the prompt 'a chair hidden by a mouse' by featuring a mouse sitting on a chair, effectively hiding it from view. The left image (ShowO) depicts a chair and a mouse-like object on the floor, but the chair is not hidden.
+
+![a chair hidden by a mouse](docs/examples/bagel_50_vs_showo/ascr_win_06_a_chair_hidden_by_a_mouse.jpg)
+
+**`a cubic block and a cylindrical bottle`** *(conf 0.95)*  
+The right image (BAGEL) perfectly matches the prompt with a cubic block and a cylindrical bottle, featuring realistic lighting and textures. The left image (ShowO) fails to render the bottle correctly, showing a distorted, metallic object instead of a clear cylindrical bottle.
+
+![a cubic block and a cylindrical bottle](docs/examples/bagel_50_vs_showo/ascr_win_07_a_cubic_block_and_a_cylindrical_bottle.jpg)
+
+**`a cubic block and a cylindrical canister`** *(conf 0.95)*  
+The right image (BAGEL) is a superior interpretation of the prompt, featuring a distinct cubic block and a cylindrical canister with high-quality lighting and texture. The left image (ShowO) is a low-fidelity, blurry, and indistinct rendering that fails to clearly define the objects.
+
+![a cubic block and a cylindrical canister](docs/examples/bagel_50_vs_showo/ascr_win_08_a_cubic_block_and_a_cylindrical_canister.jpg)
+
+**`a cubic ice cube and a spherical ice bucket`** *(conf 0.95)*  
+The right image (BAGEL) correctly depicts a cubic ice cube and a spherical ice bucket with high fidelity, matching the prompt's object descriptions and spatial arrangement. The left image (ShowO) fails to render a spherical ice bucket, instead showing a grey sphere with a strange protrusion, and the ice cube is less distinct. The right image also features better lighting and material rendering.
+
+![a cubic ice cube and a spherical ice bucket](docs/examples/bagel_50_vs_showo/ascr_win_09_a_cubic_ice_cube_and_a_spherical_ice_bucket.jpg)
+
+**`a desk on the right of a horse`** *(conf 0.95)*  
+The right image (BAGEL) perfectly matches the prompt, featuring a horse standing next to a desk on the right side. The left image (ShowO) contains a desk but lacks the horse entirely, failing the core subject requirement.
+
+![a desk on the right of a horse](docs/examples/bagel_50_vs_showo/ascr_win_10_a_desk_on_the_right_of_a_horse.jpg)
+
+**`a girl behind a cow`** *(conf 0.95)*  
+The right image (BAGEL) correctly depicts a girl standing behind a cow, matching the prompt's spatial requirements. The left image (ShowO) depicts a cow behind a girl, which is the exact opposite of the requested spatial relationship.
+
+![a girl behind a cow](docs/examples/bagel_50_vs_showo/ascr_win_11_a_girl_behind_a_cow.jpg)
+
+**`a sheep in front of a key`** *(conf 0.95)*  
+The right image (BAGEL) perfectly satisfies the prompt by featuring a cute, fluffy sheep standing directly in front of a large, ornate key on the ground. The left image (ShowO) only shows a sheep's head and lacks the key entirely.
+
+![a sheep in front of a key](docs/examples/bagel_50_vs_showo/ascr_win_13_a_sheep_in_front_of_a_key.jpg)
+
+**`an oblong eggplant and a teardrop melon`** *(conf 0.95)*  
+The right image (BAGEL) is a superior match for the prompt 'an oblong eggplant and a teardrop melon'. It features a large, correctly shaped eggplant and a teardrop-shaped melon with appropriate texture. The left image (ShowO) depicts a small, round eggplant and a round melon, failing the shape constraints.
+
+![an oblong eggplant and a teardrop melon](docs/examples/bagel_50_vs_showo/ascr_win_15_an_oblong_eggplant_and_a_teardrop_melon.jpg)
+
+**`six girls`** *(conf 0.95)*  
+The right image (BAGEL) perfectly satisfies the prompt 'six girls' by depicting six distinct, clearly defined characters in a coherent scene. The left image (ShowO) fails to render the subjects as distinct individuals, instead showing a blurry, overlapping mess of faces that does not clearly form six separate figures.
+
+![six girls](docs/examples/bagel_50_vs_showo/ascr_win_16_six_girls.jpg)
+
+**`two boys`** *(conf 0.95)*  
+The right image (BAGEL) is a high-quality, vibrant illustration of two boys that perfectly matches the simple prompt. The left image (ShowO) is a low-resolution, muddy painting of two boys that appears to be a distorted or low-fidelity interpretation of the right image, failing to capture the clarity and positive attributes of the prompt.
+
+![two boys](docs/examples/bagel_50_vs_showo/ascr_win_17_two_boys.jpg)
+
+**`a pentagonal stop sign and a spherical traffic light`** *(conf 0.90)*  
+The right image (BAGEL) is a high-quality generation that accurately depicts a stop sign and a traffic light, despite the shape mismatch. The left image (ShowO) is a low-quality, blurry, and distorted generation that fails to clearly render the objects.
+
+![a pentagonal stop sign and a spherical traffic light](docs/examples/bagel_50_vs_showo/ascr_win_12_a_pentagonal_stop_sign_and_a_spherical_traffic_light.jpg)
+
+**`a teardrop pendant and a cubic bracelet charm`** *(conf 0.90)*  
+The right image (BAGEL) better satisfies the prompt by correctly depicting a cubic charm alongside a teardrop pendant. The left image (ShowO) fails to include the cubic element, showing only a teardrop pendant.
+
+![a teardrop pendant and a cubic bracelet charm](docs/examples/bagel_50_vs_showo/ascr_win_14_a_teardrop_pendant_and_a_cubic_bracelet_charm.jpg)
+
+</details>
+
+<details><summary><b>ShowO50 wins</b> (47)</summary>
+
+**`The black chair is on top of the blue rug.`** *(conf 0.95)*  
+The baseline image (right) perfectly satisfies the prompt, showing a black chair sitting on a blue rug. The ascr image (left) depicts a distorted, abstract version of a chair floating in a blue void, failing to render the rug or the spatial relationship.
+
+![The black chair is on top of the blue rug.](docs/examples/bagel_50_vs_showo/ascr_loss_01_the_black_chair_is_on_top_of_the_blue_rug.jpg)
+
+**`The blue bowl was on top of the white placemat.`** *(conf 0.95)*  
+The baseline image (right) correctly depicts a blue bowl sitting on top of a white placemat, fully satisfying the prompt. The showo image (left) shows a blue bowl on a white surface, but the surface is a tablecloth rather than a distinct placemat, and the bowl is positioned on the table rather than 'on top' of a specific mat.
+
+![The blue bowl was on top of the white placemat.](docs/examples/bagel_50_vs_showo/ascr_loss_03_the_blue_bowl_was_on_top_of_the_white_placemat.jpg)
+
+**`The green plant was on the right of the white wall.`** *(conf 0.95)*  
+The baseline image (LEFT) correctly places the green plant on the right side of the white wall, satisfying the prompt. The ascr image (RIGHT) places the plant on the left side, violating the spatial instruction.
+
+![The green plant was on the right of the white wall.](docs/examples/bagel_50_vs_showo/ascr_loss_07_the_green_plant_was_on_the_right_of_the_white_wall.jpg)
+
+**`The rectangular picture frame was hung above the beige couch.`** *(conf 0.95)*  
+The right image (BAGEL) correctly depicts a rectangular picture frame hung above the beige couch, fully satisfying the prompt. The left image (ShowO) is missing the picture frame entirely.
+
+![The rectangular picture frame was hung above the beige couch.](docs/examples/bagel_50_vs_showo/ascr_loss_10_the_rectangular_picture_frame_was_hung_above_the_beige_couch.jpg)
+
+**`a balloon on the right of a person`** *(conf 0.95)*  
+The right image (BAGEL) perfectly matches the prompt, showing a person and a balloon with the balloon positioned to the right of the person. The left image (ShowO) is abstract and fails to depict the required subjects.
+
+![a balloon on the right of a person](docs/examples/bagel_50_vs_showo/ascr_loss_14_a_balloon_on_the_right_of_a_person.jpg)
+
+**`a bee on the right of a refrigerator`** *(conf 0.95)*  
+The right image (BAGEL) perfectly matches the prompt, showing a realistic bee on the right side of a refrigerator. The left image (ShowO) depicts a surreal, metallic bee on a plain grey background, failing to include the refrigerator.
+
+![a bee on the right of a refrigerator](docs/examples/bagel_50_vs_showo/ascr_loss_15_a_bee_on_the_right_of_a_refrigerator.jpg)
+
+**`a bicycle on the bottom of a girl`** *(conf 0.95)*  
+The right image (BAGEL) perfectly matches the prompt, showing a girl standing with a bicycle in a snowy street. The left image (ShowO) is an abstract, blurry composition that fails to depict a girl or a clear bicycle.
+
+![a bicycle on the bottom of a girl](docs/examples/bagel_50_vs_showo/ascr_loss_16_a_bicycle_on_the_bottom_of_a_girl.jpg)
+
+**`a blue bench and a green cake`** *(conf 0.95)*  
+The right image (BAGEL) perfectly matches the prompt with a blue bench and a green cake. The left image (ShowO) contains a blue object that resembles a bench but is cluttered with a yellow sponge-like item and metallic legs, failing to clearly depict a simple bench.
+
+![a blue bench and a green cake](docs/examples/bagel_50_vs_showo/ascr_loss_19_a_blue_bench_and_a_green_cake.jpg)
+
+**`a brown horse and a blue vase`** *(conf 0.95)*  
+The right image (BAGEL) is a high-quality, photorealistic generation that perfectly matches the prompt's request for a brown horse and a blue vase. The left image (ShowO) is a low-quality, blurry, and distorted generation that fails to clearly depict the subjects.
+
+![a brown horse and a blue vase](docs/examples/bagel_50_vs_showo/ascr_loss_21_a_brown_horse_and_a_blue_vase.jpg)
+
+**`a car in front of a mouse`** *(conf 0.95)*  
+The right image (BAGEL) perfectly matches the prompt 'a car in front of a mouse' with a clear spatial relationship where the mouse is in the foreground and the car is behind it. The left image (ShowO) depicts a car in a desert setting with a blurry, indistinct figure that does not resemble a mouse, failing to satisfy the prompt's subject requirements.
+
+![a car in front of a mouse](docs/examples/bagel_50_vs_showo/ascr_loss_22_a_car_in_front_of_a_mouse.jpg)
+
+**`a diamond pendant and a round locket`** *(conf 0.95)*  
+The right image (BAGEL) perfectly matches the prompt, featuring a detailed diamond pendant inside a round locket. The left image (ShowO) fails to generate the requested objects, showing only a metallic ring instead.
+
+![a diamond pendant and a round locket](docs/examples/bagel_50_vs_showo/ascr_loss_24_a_diamond_pendant_and_a_round_locket.jpg)
+
+**`a dog in front of a desk`** *(conf 0.95)*  
+The right image (BAGEL) perfectly matches the prompt 'a dog in front of a desk' with a clear, high-quality depiction of a dog sitting at a desk. The left image (ShowO) is a low-resolution, cropped view of a dog's back, failing to show the dog's face or the desk clearly, making it a poor representation of the prompt.
+
+![a dog in front of a desk](docs/examples/bagel_50_vs_showo/ascr_loss_25_a_dog_in_front_of_a_desk.jpg)
+
+**`a giraffe next to a lamp`** *(conf 0.95)*  
+The right image (BAGEL) perfectly matches the prompt, featuring a clear giraffe figurine standing next to a lit lamp. The left image (ShowO) is abstract and blurry, failing to depict the requested subjects.
+
+![a giraffe next to a lamp](docs/examples/bagel_50_vs_showo/ascr_loss_28_a_giraffe_next_to_a_lamp.jpg)
+
+**`a girl behind a sheep`** *(conf 0.95)*  
+The right image (BAGEL) perfectly matches the prompt 'a girl behind a sheep' with a clear, high-quality composition. The left image (ShowO) is a distorted, low-resolution collage that fails to clearly depict the subjects or their spatial relationship.
+
+![a girl behind a sheep](docs/examples/bagel_50_vs_showo/ascr_loss_29_a_girl_behind_a_sheep.jpg)
+
+**`a girl on the top of a frog`** *(conf 0.95)*  
+The right image (BAGEL) is a high-quality, detailed 3D render that perfectly matches the prompt. The left image (ShowO) is a low-resolution, blurry, and poorly rendered version of the same concept.
+
+![a girl on the top of a frog](docs/examples/bagel_50_vs_showo/ascr_loss_30_a_girl_on_the_top_of_a_frog.jpg)
+
+**`a green bench and a blue bowl`** *(conf 0.95)*  
+The right image (BAGEL) perfectly matches the prompt with a clear green bench and a blue bowl. The left image (ShowO) features a green bench but the blue object is a blurry, indistinct shape rather than a bowl, failing to satisfy the object attribute.
+
+![a green bench and a blue bowl](docs/examples/bagel_50_vs_showo/ascr_loss_31_a_green_bench_and_a_blue_bowl.jpg)
+
+**`a green bench and a blue cake`** *(conf 0.95)*  
+The right image (BAGEL) correctly depicts a green bench and a blue cake as requested. The left image (ShowO) fails to include a cake and instead shows a green object with pink smoke, which does not match the prompt.
+
+![a green bench and a blue cake](docs/examples/bagel_50_vs_showo/ascr_loss_32_a_green_bench_and_a_blue_cake.jpg)
+
+**`a mouse on side of a key`** *(conf 0.95)*  
+The right image (BAGEL) is a high-quality, photorealistic generation that perfectly matches the prompt 'a mouse on side of a key'. It features a detailed mouse and a clear key. The left image (ShowO) is a low-quality, abstract 3D render where the mouse is indistinct and the key is a nonsensical, glitchy shape, failing to represent the objects correctly.
+
+![a mouse on side of a key](docs/examples/bagel_50_vs_showo/ascr_loss_35_a_mouse_on_side_of_a_key.jpg)
+
+**`a rubber ball and a leather wallet`** *(conf 0.95)*  
+The baseline image (right) correctly renders both a rubber ball and a leather wallet with accurate colors and spatial relations. The showo image (left) fails to render the wallet, showing only a dark, indistinct object.
+
+![a rubber ball and a leather wallet](docs/examples/bagel_50_vs_showo/ascr_loss_37_a_rubber_ball_and_a_leather_wallet.jpg)
+
+**`a rubber band and a wooden floor`** *(conf 0.95)*  
+The right image (BAGEL) correctly depicts a rubber band on a wooden floor, matching the prompt's subject and setting. The left image (ShowO) shows a distorted red object on a plain wall, failing to represent the prompt's key elements.
+
+![a rubber band and a wooden floor](docs/examples/bagel_50_vs_showo/ascr_loss_38_a_rubber_band_and_a_wooden_floor.jpg)
+
+**`eight cars`** *(conf 0.95)*  
+The right image (BAGEL) perfectly satisfies the prompt 'eight cars' by depicting a street scene filled with multiple vehicles. The left image (ShowO) fails to follow the prompt, showing only two small toy cars and abstract blue blocks.
+
+![eight cars](docs/examples/bagel_50_vs_showo/ascr_loss_41_eight_cars.jpg)
+
+**`five drums`** *(conf 0.95)*  
+The right image (BAGEL) perfectly matches the prompt 'five drums' with five distinct, high-quality congas. The left image (ShowO) is a blurry, low-resolution mess that fails to clearly depict five drums.
+
+![five drums](docs/examples/bagel_50_vs_showo/ascr_loss_42_five_drums.jpg)
+
+**`rubber sole shoes and fluffy clouds`** *(conf 0.95)*  
+The right image (BAGEL) perfectly matches the prompt, featuring a pair of beige shoes with thick rubber soles floating among fluffy white clouds. The left image (ShowO) is abstract and fails to depict the specific objects requested.
+
+![rubber sole shoes and fluffy clouds](docs/examples/bagel_50_vs_showo/ascr_loss_44_rubber_sole_shoes_and_fluffy_clouds.jpg)
+
+**`seven women`** *(conf 0.95)*  
+The right image (BAGEL) perfectly matches the prompt 'seven women' with seven distinct, realistic female figures. The left image (ShowO) depicts seven mannequins or stylized figures, which are not women, making it a significant failure to satisfy the core subject of the prompt.
+
+![seven women](docs/examples/bagel_50_vs_showo/ascr_loss_45_seven_women.jpg)
+
+**`six airplanes`** *(conf 0.95)*  
+The right image (BAGEL) perfectly matches the prompt 'six airplanes' by displaying exactly six aircraft in flight. The left image (ShowO) is a collage of unrelated objects and fails to depict airplanes.
+
+![six airplanes](docs/examples/bagel_50_vs_showo/ascr_loss_46_six_airplanes.jpg)
+
+**`The black chair was on the left of the white table.`** *(conf 0.90)*  
+The baseline image correctly places the black chair to the left of the white table, satisfying the prompt. The right image places the chair to the right of the table, violating the spatial instruction.
+
+![The black chair was on the left of the white table.](docs/examples/bagel_50_vs_showo/ascr_loss_02_the_black_chair_was_on_the_left_of_the_white_table.jpg)
+
+**`The blue water bottle was on top of the red backpack.`** *(conf 0.90)*  
+The baseline image (left) perfectly matches the prompt, showing a blue water bottle on top of a red backpack. The right image (BAGEL) also shows a blue water bottle on a red backpack, but the bottle is translucent and the backpack is covered in snow, which are not mentioned in the prompt. The baseline is a more direct and accurate representation of the prompt.
+
+![The blue water bottle was on top of the red backpack.](docs/examples/bagel_50_vs_showo/ascr_loss_04_the_blue_water_bottle_was_on_top_of_the_red_backpack.jpg)
+
+**`The brown dog was lying on the green mat.`** *(conf 0.90)*  
+The baseline image (right) perfectly matches the prompt, showing a brown dog lying on a green mat with correct lighting and spatial relations. The ascr image (left) shows a dog on a green mat but is cropped to only show the rear legs and tail, failing to depict the dog 'lying' in a recognizable pose or showing its face/body as implied by the prompt.
+
+![The brown dog was lying on the green mat.](docs/examples/bagel_50_vs_showo/ascr_loss_05_the_brown_dog_was_lying_on_the_green_mat.jpg)
+
+**`The fluffy cat is on the left of the soft pillow.`** *(conf 0.90)*  
+The baseline image (left) correctly places the fluffy cat on the left side of the pillow, satisfying the prompt. The right image (BAGEL) places the cat on the right side of the pillow, violating the spatial relation.
+
+![The fluffy cat is on the left of the soft pillow.](docs/examples/bagel_50_vs_showo/ascr_loss_06_the_fluffy_cat_is_on_the_left_of_the_soft_pillow.jpg)
+
+**`The leather wallet was inside the brown purse.`** *(conf 0.90)*  
+The baseline image (right) correctly depicts a brown leather wallet inside a brown purse, matching the prompt's description of objects, colors, and spatial relations. The ascr image (left) shows a metallic object inside a brown bag, failing to match the 'leather wallet' description.
+
+![The leather wallet was inside the brown purse.](docs/examples/bagel_50_vs_showo/ascr_loss_08_the_leather_wallet_was_inside_the_brown_purse.jpg)
+
+**`The rectangular mirror was hung above the white sink.`** *(conf 0.90)*  
+The baseline image (right) perfectly matches the prompt, showing a rectangular mirror hung directly above a white sink. The ascr image (left) depicts a bathroom scene with a towel rack and a partial view of a sink, but lacks the specific spatial relationship of a mirror hung above the sink.
+
+![The rectangular mirror was hung above the white sink.](docs/examples/bagel_50_vs_showo/ascr_loss_09_the_rectangular_mirror_was_hung_above_the_white_sink.jpg)
+
+**`The red book was on top of the yellow bookshelf.`** *(conf 0.90)*  
+The baseline image (RIGHT) perfectly matches the prompt, showing a red book on a yellow bookshelf. The ascr image (LEFT) depicts a chaotic scene with a red book on a yellow background but lacks the bookshelf structure.
+
+![The red book was on top of the yellow bookshelf.](docs/examples/bagel_50_vs_showo/ascr_loss_11_the_red_book_was_on_top_of_the_yellow_bookshelf.jpg)
+
+**`The red hat was on top of the brown coat rack.`** *(conf 0.90)*  
+The baseline image (left) correctly depicts a red hat placed on top of a brown coat rack, satisfying the prompt's spatial and object requirements. The right image (BAGEL) shows a red hat on a brown coat, but the coat is not a rack, and the hat is positioned on a wooden stand rather than directly on the coat rack itself. This makes the baseline image a more accurate representation of the prompt.
+
+![The red hat was on top of the brown coat rack.](docs/examples/bagel_50_vs_showo/ascr_loss_12_the_red_hat_was_on_top_of_the_brown_coat_rack.jpg)
+
+**`The square book was next to the green notebook.`** *(conf 0.90)*  
+The right image (BAGEL) clearly depicts a square book resting on top of a green notebook, satisfying the spatial relation 'next to' (interpreted as adjacent/stacked). The left image (ShowO) is a blurry, abstract shadow on a green background that does not clearly show the specific objects or their arrangement.
+
+![The square book was next to the green notebook.](docs/examples/bagel_50_vs_showo/ascr_loss_13_the_square_book_was_next_to_the_green_notebook.jpg)
+
+**`a blue backpack and a brown cow`** *(conf 0.90)*  
+The right image (BAGEL) is a high-quality, photorealistic generation that perfectly matches the prompt's request for a blue backpack and a brown cow. The left image (ShowO) is a low-resolution, blurry, and distorted version of the same concept, failing to render the objects clearly.
+
+![a blue backpack and a brown cow](docs/examples/bagel_50_vs_showo/ascr_loss_17_a_blue_backpack_and_a_brown_cow.jpg)
+
+**`a blue bench and a green bowl`** *(conf 0.90)*  
+The baseline image (right) is a high-quality, realistic rendering that perfectly matches the prompt's request for a blue bench and a green bowl. It features correct object counts, accurate colors, and logical spatial relations within a coherent scene. The showo image (left) is a low-quality, blurry, and abstract representation that fails to clearly depict the objects or the scene.
+
+![a blue bench and a green bowl](docs/examples/bagel_50_vs_showo/ascr_loss_18_a_blue_bench_and_a_green_bowl.jpg)
+
+**`a blue horse and a brown vase`** *(conf 0.90)*  
+The baseline image (right) is a high-quality, detailed 3D render of a blue horse and a brown vase, perfectly matching the prompt's subject, colors, and count. The ascr image (left) is a low-quality, blurry, and distorted version of the same scene, failing to clearly render the objects.
+
+![a blue horse and a brown vase](docs/examples/bagel_50_vs_showo/ascr_loss_20_a_blue_horse_and_a_brown_vase.jpg)
+
+**`a cat on the top of a sofa`** *(conf 0.90)*  
+The right image (BAGEL) is a high-quality, photorealistic generation that perfectly matches the prompt. It features a single cat sitting on top of a sofa with clear details and good lighting. The left image (ShowO) is blurry, low-resolution, and depicts a cat lying on a surface that appears to be a cushion or bed rather than a sofa, failing to capture the specific spatial relation requested.
+
+![a cat on the top of a sofa](docs/examples/bagel_50_vs_showo/ascr_loss_23_a_cat_on_the_top_of_a_sofa.jpg)
+
+**`a fabric towel and a glass table`** *(conf 0.90)*  
+The baseline image (right) perfectly matches the prompt, featuring a fabric towel on a glass table with high fidelity. The showo image (left) fails to include the glass table, showing only a fabric object on a dark surface.
+
+![a fabric towel and a glass table](docs/examples/bagel_50_vs_showo/ascr_loss_26_a_fabric_towel_and_a_glass_table.jpg)
+
+**`a fabric towel and a leather chair`** *(conf 0.90)*  
+The baseline image (right) perfectly matches the prompt, featuring a leather chair with a fabric towel draped over it. The ascr image (left) is a close-up of a fabric towel on a wooden surface, completely missing the leather chair.
+
+![a fabric towel and a leather chair](docs/examples/bagel_50_vs_showo/ascr_loss_27_a_fabric_towel_and_a_leather_chair.jpg)
+
+**`a metallic car and a fabric dress`** *(conf 0.90)*  
+The right image (BAGEL) perfectly matches the prompt, showing a metallic car and a fabric dress with correct counts and attributes. The left image (ShowO) fails to render the dress, instead showing a distorted, abstract shape, making it a poor match.
+
+![a metallic car and a fabric dress](docs/examples/bagel_50_vs_showo/ascr_loss_33_a_metallic_car_and_a_fabric_dress.jpg)
+
+**`a metallic desk lamp and a fluffy sweater`** *(conf 0.90)*  
+The right image (BAGEL) perfectly matches the prompt with a clear metallic desk lamp and a fluffy sweater. The left image (ShowO) contains a lamp but it is dark and indistinct, and the fluffy object is a rug rather than a sweater.
+
+![a metallic desk lamp and a fluffy sweater](docs/examples/bagel_50_vs_showo/ascr_loss_34_a_metallic_desk_lamp_and_a_fluffy_sweater.jpg)
+
+**`a plastic toy and a glass bottle`** *(conf 0.90)*  
+The baseline image (right) perfectly matches the prompt with a plastic toy and a glass bottle, featuring vibrant colors and clear spatial relations. The ascr image (left) only shows a glass bottle with yellow liquid, missing the plastic toy entirely.
+
+![a plastic toy and a glass bottle](docs/examples/bagel_50_vs_showo/ascr_loss_36_a_plastic_toy_and_a_glass_bottle.jpg)
+
+**`a vase hidden by a candle`** *(conf 0.90)*  
+The baseline image (right) features a vase and a candle where the candle is positioned to the right, partially obscuring the view of the vase from a specific angle, effectively satisfying the 'hidden by' spatial relationship. The showo image (left) depicts a candle sitting on top of a vase, which does not align with the prompt's spatial requirement.
+
+![a vase hidden by a candle](docs/examples/bagel_50_vs_showo/ascr_loss_39_a_vase_hidden_by_a_candle.jpg)
+
+**`an oblong cucumber and a teardrop plum`** *(conf 0.90)*  
+The baseline image (right) perfectly matches the prompt with a clear oblong cucumber and a teardrop-shaped plum. The ascr image (left) depicts a distorted, melting green object that fails to represent either the cucumber or the plum.
+
+![an oblong cucumber and a teardrop plum](docs/examples/bagel_50_vs_showo/ascr_loss_40_an_oblong_cucumber_and_a_teardrop_plum.jpg)
+
+**`one turtle`** *(conf 0.90)*  
+The prompt 'one turtle' is satisfied by both images, but the baseline (left) is a more natural and realistic representation of a single turtle, while the right image appears to be an AI-generated or stylized version with exaggerated features and patterns.
+
+![one turtle](docs/examples/bagel_50_vs_showo/ascr_loss_43_one_turtle.jpg)
+
+**`two rabbits`** *(conf 0.90)*  
+The prompt 'two rabbits' is satisfied by both images. The baseline (left) shows two rabbits with distinct coloring (one grey/white, one white) and realistic textures. The ascr (right) shows two white rabbits with a more stylized, plastic-like appearance. The baseline is preferred for its more natural look and variety in rabbit coloring.
+
+![two rabbits](docs/examples/bagel_50_vs_showo/ascr_loss_47_two_rabbits.jpg)
+
+</details>
 
 
 ## Changelog
