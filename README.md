@@ -356,6 +356,14 @@ ASCR/
 │   ├── prepare_t2i_compbench_prompts.py         ← generate T2I-CompBench prompt files
 │   ├── prepare_drawbench_prompts.py             ← generate DrawBench prompt files
 │   ├── run_bagel_text2image.py                  ← BAGEL-7B-MoT baseline generation
+│   ├── ★ build_geneval_3way_summary.py          ← combine per-model GenEval scores
+│   │                                               into 3-way comparison table
+│   ├── ★ merge_judge_shards.py                  ← merge N shard JSON outputs from
+│   │                                               sharded Qwen judge runs
+│   ├── ★ pair_bagel_vs_hard64_run.py            ← pair BAGEL hard64 outputs with
+│   │                                               ShowO/ASCR runs by prompt
+│   ├── pair_bagel_vs_showo_baseline.py          ← legacy pairing helper
+│   │                                               (only used by archived baseline job)
 │   ├── run_stage1_debug.sh                      ← mock dry-run (no GPU needed)
 │   ├── run_showo_t2i_local.sh                   ← Show-o T2I subprocess (fallback path)
 │   ├── run_showo_inpaint_local.sh               ← Show-o inpaint subprocess (fallback)
@@ -372,6 +380,12 @@ ASCR/
 │   ├── stage1_t2i_compbench_qwen35_9b_smoke1.sbatch  ← 1-prompt smoke + both judges
 │   ├── stage1_qwen35_9b_smoke1gpu.sbatch        ← single-GPU full-flow smoke
 │   ├── stage1_qwen35_9b_parallel8.sbatch        ← 8-GPU parallel (dev suite)
+│   ├── ★ stage1_geneval_score_single.sbatch     ← per-model GenEval scoring
+│   │                                               (8-GPU OWLViT, 1 dir at a time)
+│   ├── ★ stage1_hard64_bagel_3way_judge_sharded.sbatch  ← 8-GPU sharded Qwen
+│   │                                               judge (BAGEL vs ShowO50 vs ASCR50)
+│   ├── stage1_geneval_evaluate.sbatch           ← DEPRECATED: pairwise; use score_single
+│   ├── stage1_hard64_bagel_3way_judge.sbatch    ← DEPRECATED: 1-GPU; use *_sharded
 │   ├── stage2_train_selector_gpu.sbatch         ← Stage 2 placeholder
 │   ├── archived/                                ← legacy .venv + ShO-MMU jobs
 │   │                                               (env superseded by .venv-qwen36)
@@ -422,11 +436,19 @@ ASCR/
 | **Correction prompt builder** | `ascr/revision/prompt_composer.py` |
 | **Run a single-prompt comparison** | `ascr/cli/compare_showo_ascr.py` |
 | **Submit 8-GPU benchmark** | `jobs/stage1_t2i_compbench_qwen35_9b_hard64_8gpu_reuse.sbatch` |
-| **VLM pairwise judge** | `scripts/judge_showo_ascr_pairwise_qwen.py` |
-| **VLM clean pass/fail judge** | `scripts/judge_showo_ascr_pairs_qwen.py` |
+| **VLM pairwise judge** (side-by-side comparative) | `scripts/judge_showo_ascr_pairwise_qwen.py` |
+| **VLM clean pass/fail judge** (per-image) | `scripts/judge_showo_ascr_pairs_qwen.py` |
+| **GenEval per-model scoring** (8-GPU) | `jobs/stage1_geneval_score_single.sbatch` |
+| **GenEval 3-way comparison summary** | `scripts/build_geneval_3way_summary.py` |
+| **8-GPU sharded hard64 Qwen judge** | `jobs/stage1_hard64_bagel_3way_judge_sharded.sbatch` |
+| **Merge sharded judge outputs** | `scripts/merge_judge_shards.py` |
 | **Default config** | `configs/stage1_showo_qwen35_9b_fullcap_parallel.yaml` |
 | **Primary benchmark prompts** | `configs/prompts/t2i_compbench_hard64.txt` |
 | **Stage 2 interface contracts** | `ascr/training/selector_model.py` |
+
+> **Note on judge sibling scripts.** `scripts/judge_showo_ascr_pairs_qwen.py` (per-image clean pass/fail)
+> and `scripts/judge_showo_ascr_pairwise_qwen.py` (side-by-side comparative) are **siblings, not duplicates** —
+> both are actively used in different evaluation flows. Do not delete or merge.
 
 #### Active vs Legacy Evaluators
 
