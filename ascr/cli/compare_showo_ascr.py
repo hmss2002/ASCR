@@ -112,7 +112,7 @@ def build_baseline_generator(config):
         generation_timesteps=int(generator_config.get("generation_timesteps", 18)),
         seed=int(config.get("seed", generator_config.get("seed", 1234))),
         native_token_loop=True,
-        confidence_steps=int(generator_config.get("generation_timesteps", 18)),
+        confidence_steps=int(generator_config.get("confidence_steps", generator_config.get("generation_timesteps", 18))),
     )
 
 

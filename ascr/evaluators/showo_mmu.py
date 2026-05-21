@@ -126,6 +126,14 @@ class ShowOMMUEvaluator(SemanticEvaluator):
         self._engine = None
 
     def evaluate(self, original_prompt, grid_image_path, iteration, current_prompt=None):
+        # ShowO-MMU uses two separate MMU inference calls per iteration:
+        #   Call 1 (semantic check): asks "Does this image match the prompt?" and
+        #          returns a JSON with match/errors summary.
+        #   Call 2 (localization): asks "Which 4x4 grid cells contain the mismatch?"
+        #          and returns a JSON with grid_cells and rationale.
+        # This differs from QwenVLEvaluator, which resolves both in a single call.
+        # The trade-off: ShowO-MMU leverages the same model for generation and
+        # evaluation (no extra model loaded), but doubles the per-iteration latency.
         if not Path(grid_image_path).exists():
             return SemanticEvaluation.abstain(f"Missing image for Show-o MMU evaluation: {grid_image_path}")
         eval_question = self._semantic_eval_question(original_prompt)

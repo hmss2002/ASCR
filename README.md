@@ -316,7 +316,7 @@ Tasks:
 - Define `ASCRState` for prompt, token state, decoded image path, grid image path, evaluator output, masks, iteration counters, and artifact paths.
 - Define `SemanticEvaluation` schema for structured local semantic feedback.
 - Define `RegionSelection` schema for selected 4x4 grid cells, natural-language reason, confidence, and action type.
-- Define `TokenReopenMask` schema for 16x16 reopening masks.
+- Define `TokenReopenMask` schema for 32x32 reopening masks.
 - Add strict parser and fallback behavior for malformed evaluator outputs.
 
 Acceptance:
