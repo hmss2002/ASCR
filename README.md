@@ -4,6 +4,23 @@ ASCR is a research prototype for studying and correcting confidence-semantic inc
 
 This README is the project control document. It records the research plan, implementation plan, current progress, expected interfaces, cluster workflow, and GitHub synchronization policy. It should be updated whenever a meaningful implementation batch is completed.
 
+## Quick Results Summary
+
+All Stage 1 evaluations use T2I-CompBench hard64 (64 compositional prompts) judged by
+Qwen3.5-9B. See [Evaluation Methodology](#evaluation-methodology) for method details and
+[Qualitative Examples](#qualitative-examples) for side-by-side image comparisons.
+
+| Experiment | Judge Method | ASCR | Opponent | Ties | N |
+|---|---|---:|---:|---:|---:|
+| ASCR vs ShowO baseline | Pairwise side-by-side | **13 wins** | 6 wins | 45 | 64 |
+| ASCR vs ShowO baseline | Clean pass/fail | **57 / 64** (89.1 %) | 53 / 64 (82.8 %) | — | 64 |
+| ASCR vs BAGEL-7B-MoT | Pairwise side-by-side | **50 wins** | 14 wins | 0 | 64 |
+| ASCR vs BAGEL-7B-MoT | Clean pass/fail | **57 / 64** (89.1 %) | 54 / 64 (84.4 %) | — | 64 |
+
+> **Note:** All judges use Qwen3.5-9B, which is also the ASCR correction loop's semantic
+> evaluator. These are automated benchmark signals; independent human evaluation or official
+> T2I-CompBench metrics are planned as future work.
+
 ## Source Documents
 
 The project is built from two planning documents placed in the project root:
@@ -67,6 +84,99 @@ Stage 1 must leave these interfaces ready:
 - Capability descriptions for token grid size, decode behavior, remask controls, hidden states, and confidence scores.
 - Model-specific config files without changing the ASCR loop.
 - Transfer benchmark runner that can evaluate the same prompt subsets across multiple generators.
+
+## Evaluation Methodology
+
+### Benchmark: T2I-CompBench hard64
+
+[T2I-CompBench](https://karine-h.github.io/T2I-CompBench/) (NeurIPS 2023, HKU) is a benchmark
+designed for **compositional text-to-image generation**: it tests whether generated images
+accurately reflect the semantic constraints in the prompt — not visual quality or aesthetics,
+but compositional correctness.
+
+The **hard64** subset contains 64 prompts that are particularly challenging for current models,
+covering four compositional categories:
+
+| Category | What it tests | Example prompt |
+|---|---|---|
+| Color–object binding | Each color must bind to the correct object, not transposed | `a green bench and a blue bowl` |
+| Shape–object binding | Non-default shapes must bind to the right object | `a pentagonal stop sign and a spherical traffic light` |
+| Spatial relations | Objects must appear in the described spatial arrangement | `The blue water bottle was on top of the red backpack.` |
+| Counting / quantity | The exact stated number of objects must appear | `one turtle` |
+
+Prompt file: `configs/prompts/t2i_compbench_hard64.txt`. These prompts are selected because
+current single-pass generators tend to produce the right *objects* but with wrong color
+assignment, wrong spatial arrangement, or wrong count. ASCR's correction loop is specifically
+designed to detect and repair these failures.
+
+### Evaluation Method 1: Pairwise Side-by-Side Judge
+
+**What it is:** A *relative* comparison — for the same prompt, which of two images better
+follows the prompt description?
+
+**How it works:**
+
+1. Take two clean generated images: competitor (LEFT) and ASCR (RIGHT).
+2. Compose a side-by-side canvas. **No text labels are drawn** (`--no-image-labels`). Drawing
+   labels like "LEFT: BAGEL" caused Qwen to treat label text as image content in earlier tests,
+   distorting verdicts.
+3. Feed the canvas to Qwen3.5-9B: *"Check objects, counts, colors, attributes, and spatial
+   relations. Which image better satisfies the prompt?"*
+4. Qwen returns JSON: `winner` ("baseline"/"ascr"/"tie"), `confidence` (0–1), `summary`,
+   `baseline_errors`, `ascr_errors`.
+5. Accumulate: `ascr_win` (RIGHT wins), `ascr_loss` (LEFT wins), `pairwise_tie`.
+
+**What it measures:** Whether ASCR's image is *better* in a direct head-to-head comparison.
+
+**Limitation:** Contrast effect — one obviously wrong image makes the other look better even if
+both are imperfect. Run alongside the clean pass/fail judge to balance this.
+
+**Script:** `scripts/judge_showo_ascr_pairwise_qwen.py`
+**Key flags:** `--baseline-label`, `--ascr-label`, `--no-image-labels`, `--output`
+
+### Evaluation Method 2: Clean Pass/Fail Judge
+
+**What it is:** An *absolute* evaluation — does this image, judged entirely independently,
+satisfy the prompt?
+
+**How it works:**
+
+1. Show **only** the ASCR image to Qwen3.5-9B. Ask: "Does this satisfy the prompt?"
+   Qwen returns `{"matches_prompt": true/false, "score": 0–1}`.
+2. Repeat with only the competitor's image.
+3. An image **passes** if `matches_prompt == true` AND `score >= 0.5` (default threshold,
+   configurable with `--pass-threshold`).
+4. Count outcomes: `both_pass`, `both_fail`, `ascr_win`, `ascr_loss`.
+
+**What it measures:** Whether each image independently meets an absolute quality bar with no
+contrast effect.
+
+**Limitation:** The 0.5 threshold is somewhat arbitrary. Qwen3.5-9B is also the ASCR loop's
+evaluator, creating a potential circularity: the model that decides when to stop correcting also
+judges whether the correction worked.
+
+**Script:** `scripts/judge_showo_ascr_pairs_qwen.py`
+**Key flags:** `--pass-threshold`, `--output`, `--config`
+
+### Reading the Two Methods Together
+
+| Signal | Large advantage means | Small advantage means |
+|---|---|---|
+| Pairwise net | Consistently better in direct head-to-head | Less consistent per-prompt advantage |
+| Clean pass/fail net | Larger absolute gap at the score threshold | Both systems pass at similar rates |
+
+When pairwise net is large but clean-pass net is small, one system is more *precisely* correct
+even when both clear the pass threshold. When clean-pass net is large but pairwise net is small,
+the absolute improvement is real but per-prompt advantage is less consistent.
+
+### Important Caveats
+
+1. **Evaluator circularity:** Qwen3.5-9B is both the ASCR loop's semantic feedback provider and
+   the final evaluation judge. Results may reflect Qwen's preference patterns.
+2. **No reference images:** Evaluation is entirely VLM-based; no ground-truth images exist.
+3. **Automated only:** No human evaluation has been conducted.
+4. **ASCR vs standalone model:** ASCR is ShowO + correction loop; BAGEL is a larger standalone
+   model. Not architecture-to-architecture.
 
 ## Stage 1 System Overview
 
@@ -793,4 +903,125 @@ Clean pass/fail (Qwen independent per-image, N=64):
 - `qwen_clean_bagel_vs_ascr.json`: full clean pass/fail judgment.
 - `bagel_vs_ascr_summary.json`: aggregated counts.
 
-**Interpretation:** ASCR (ShowO + adaptive correction loop) achieves a +36 net pairwise advantage and +3 net clean-pass advantage over BAGEL-7B-MoT on the hard64 compositional prompt set. ASCR runs a correction loop on top of ShowO, so the comparison is not architecture-to-architecture; the result shows that the correction loop adds meaningful compositional fidelity beyond what a larger standalone model provides on these prompts. Both models were judged by the same Qwen3.5-9B evaluator used in the ASCR loop; future work should include human evaluation or official T2I-CompBench metrics for independent confirmation.
+**Interpretation:**
+
+ASCR achieves a **+36 net pairwise advantage** (50 wins vs 14 losses, 0 ties) and a
+**+3 net clean-pass advantage** (57/64 = 89.1 % vs 54/64 = 84.4 %) over BAGEL-7B-MoT on the
+hard64 compositional prompt set.
+
+Key points for interpreting this result:
+
+- **Not architecture-to-architecture.** ASCR uses ShowO (1.3 B unified masked multimodal
+  generator) with an iterative correction loop; BAGEL-7B-MoT (7 B mixture-of-transformers) is a
+  larger standalone model. The comparison shows the correction-loop approach can outperform a
+  larger dedicated model on compositional following, at the cost of additional inference compute.
+- **Correction loop advantage on compositional prompts.** The hard64 prompts specifically target
+  failures in spatial relations, color–object binding, shape–object binding, and counting —
+  exactly the categories the ASCR loop is designed to detect and repair.
+- **Pairwise vs clean-pass discrepancy.** The large pairwise net (+36) alongside a smaller
+  clean-pass net (+3) means: in direct head-to-head comparison ASCR's images are consistently
+  more precisely correct, while when judged in isolation at the 0.5 threshold both systems pass
+  at similar rates. BAGEL's images often satisfy a loose pass criterion while being less precise
+  on compositional details when directly compared.
+- **Evaluator circularity.** Both judges use Qwen3.5-9B, which is also the semantic feedback
+  model inside the ASCR correction loop. Human evaluation or official T2I-CompBench CLI metrics
+  are needed for independent confirmation.
+- **Sample BAGEL wins (14 prompts):** `a plastic toy and a glass bottle`,
+  `a giraffe next to a lamp`, `a girl on the top of a frog`.
+- **Sample ASCR wins (50 prompts):** `a green bench and a blue bowl`,
+  `an oblong cucumber and a teardrop plum`, `a dog in front of a desk`.
+
+See [Qualitative Examples](#qualitative-examples) for side-by-side images of representative
+wins, losses, and ties.
+
+## Qualitative Examples
+
+Each image below is the **pairwise side-by-side canvas** fed to the Qwen3.5-9B judge.
+**LEFT = Baseline, RIGHT = ASCR** in both comparisons.
+Representative examples are selected by highest judge confidence.
+
+### ASCR vs ShowO Baseline
+
+2 wins · 2 losses · 2 ties shown (out of 13 wins / 6 losses / 45 ties total).
+
+##### **ASCR wins** — `a girl behind a cow`
+
+*Qwen3.5-9B (conf 0.95):* The right image (ASCR) correctly includes the requested subject, a girl, positioned behind the cow, whereas the left image (baseline) completely omits the girl.
+
+![a girl behind a cow — pairwise (LEFT = ShowO Baseline, RIGHT = ASCR)](docs/examples/showo_baseline/ascr_win_1_a_girl_behind_a_cow.png)
+
+---
+
+##### **ASCR wins** — `a pentagonal stop sign and a spherical traffic light`
+
+*Qwen3.5-9B (conf 0.90):* The prompt requests a pentagonal stop sign and a spherical traffic light. Both images feature octagonal stop signs, failing the shape constraint. However, the ASCR image's traffic light has a smoother
+
+![a pentagonal stop sign and a spherical traffic light — pairwise (LEFT = ShowO Baseline, RIGHT = ASCR)](docs/examples/showo_baseline/ascr_win_2_a_pentagonal_stop_sign_and_a_spherical_traff.png)
+
+---
+
+##### **ASCR loses** — `a mouse on side of a key`
+
+*Qwen3.5-9B (conf 0.95):* The baseline image perfectly matches the prompt, showing a single mouse standing on a single golden key. The ASCR image suffers from severe hallucinations, showing a distorted, multi-headed creature a
+
+![a mouse on side of a key — pairwise (LEFT = ShowO Baseline, RIGHT = ASCR)](docs/examples/showo_baseline/ascr_loss_1_a_mouse_on_side_of_a_key.png)
+
+---
+
+##### **ASCR loses** — `a sheep in front of a key`
+
+*Qwen3.5-9B (conf 0.95):* The baseline image correctly depicts a sheep in front of a key, satisfying the prompt. The right image replaces the key with a metallic grate or mesh structure, failing to generate the requested objec
+
+![a sheep in front of a key — pairwise (LEFT = ShowO Baseline, RIGHT = ASCR)](docs/examples/showo_baseline/ascr_loss_2_a_sheep_in_front_of_a_key.png)
+
+---
+
+##### **Tie** — `a green bench and a blue bowl`
+
+*Qwen3.5-9B (conf 0.95):* Both images perfectly satisfy the prompt, depicting a green bench and a blue bowl with accurate colors, counts, and spatial relations.
+
+![a green bench and a blue bowl — pairwise (LEFT = ShowO Baseline, RIGHT = ASCR)](docs/examples/showo_baseline/tie_1_a_green_bench_and_a_blue_bowl.png)
+
+---
+
+##### **Tie** — `an oblong cucumber and a teardrop plum`
+
+*Qwen3.5-9B (conf 0.95):* Both images accurately depict an oblong cucumber and a teardrop-shaped plum against a green background. The objects, colors, and spatial relations are identical in both images, with no material differ
+
+![an oblong cucumber and a teardrop plum — pairwise (LEFT = ShowO Baseline, RIGHT = ASCR)](docs/examples/showo_baseline/tie_2_an_oblong_cucumber_and_a_teardrop_plum.png)
+
+
+### ASCR vs BAGEL-7B-MoT
+
+2 wins · 2 losses shown (out of 50 wins / 14 losses / 0 ties total).
+
+##### **ASCR wins** — `an oblong cucumber and a teardrop plum`
+
+*Qwen3.5-9B (conf 0.95):* The right image (ASCR) correctly depicts an oblong cucumber and a teardrop-shaped plum, matching the prompt's object descriptions and spatial arrangement. The left image (baseline) misidentifies the p
+
+![an oblong cucumber and a teardrop plum — pairwise (LEFT = BAGEL, RIGHT = ASCR)](docs/examples/bagel/ascr_win_1_an_oblong_cucumber_and_a_teardrop_plum.png)
+
+---
+
+##### **ASCR wins** — `two boys`
+
+*Qwen3.5-9B (conf 0.95):* The right image (ASCR) is a faithful representation of the prompt 'two boys', showing two distinct individuals. The left image (BAGEL) depicts two identical clones of the same boy, which is a hallucin
+
+![two boys — pairwise (LEFT = BAGEL, RIGHT = ASCR)](docs/examples/bagel/ascr_win_2_two_boys.png)
+
+---
+
+##### **ASCR loses** — `a giraffe next to a lamp`
+
+*Qwen3.5-9B (conf 0.95):* The left image (BAGEL) perfectly satisfies the prompt, showing a complete giraffe standing next to a lamp with correct spatial relations and lighting. The right image (ASCR) is severely cropped, cutti
+
+![a giraffe next to a lamp — pairwise (LEFT = BAGEL, RIGHT = ASCR)](docs/examples/bagel/ascr_loss_1_a_giraffe_next_to_a_lamp.png)
+
+---
+
+##### **ASCR loses** — `a girl on the top of a frog`
+
+*Qwen3.5-9B (conf 0.95):* The left image (baseline) perfectly matches the prompt 'a girl on the top of a frog' with a cute, high-quality 3D render of a girl sitting on a large frog in a pond. The right image (ASCR) shows a gir
+
+![a girl on the top of a frog — pairwise (LEFT = BAGEL, RIGHT = ASCR)](docs/examples/bagel/ascr_loss_2_a_girl_on_the_top_of_a_frog.png)
+
