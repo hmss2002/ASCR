@@ -7,6 +7,9 @@
 #SBATCH --time=01:30:00
 #SBATCH --output=logs/%x-%j.out
 #SBATCH --error=logs/%x-%j.err
+#
+# DEPRECATED (2026-05-21): 1-GPU serial judge. Use the 8-GPU sharded version
+# jobs/stage1_hard64_bagel_3way_judge_sharded.sbatch instead.
 
 set -euo pipefail
 cd /grp01/cds_bdai/JianyuZhang/ASCR

@@ -14,13 +14,16 @@ Action items (any future agent / human picking this up — start here):
 - [x] Regenerate ShowO baseline + ASCR on GenEval 553 with 50 steps — job **68784** (`outputs/geneval_showo_ascr_68784_20260521_224813/`).
 - [x] Regenerate ShowO baseline + ASCR on T2I-CompBench hard64 with 50 steps — job **68785** (`outputs/benchmarks_t2i_compbench_qwen35_hard64_8gpu_reuse_68785/`).
 - [x] BAGEL kept as-is: GenEval job **68762** (`outputs/geneval_bagel_68762_20260521_175812/`), hard64 run `outputs/bagel_t2i_compbench_hard64_8gpu_20260519_202625/`.
-- [x] Submit dependent 3-way evaluations (Slurm `afterok` dependencies):
-    - **68786** GenEval ShowO50 vs ASCR50 → `.../geneval_showo_ascr_68784_*/eval_showo50_vs_ascr50/`
-    - **68787** GenEval BAGEL vs ASCR50 → `.../eval_bagel_vs_ascr50/`
-    - **68788** GenEval BAGEL vs ShowO50 baseline → `.../eval_bagel_vs_showo50/`
-    - **68789** hard64 BAGEL vs {ShowO50, ASCR50} pairwise Qwen judge → `.../benchmarks_..._hard64_8gpu_reuse_68785/bagel_3way/`
+- [x] **Refactor (2026-05-21, late):** cancelled redundant pairwise GenEval eval jobs (68786-68788) and 1-GPU hard64 judge (68789). New canonical flow:
+    - GenEval: each model is scored **once** with `jobs/stage1_geneval_score_single.sbatch` (8-GPU sharded), then combined via `scripts/build_geneval_3way_summary.py`. Old `jobs/stage1_geneval_evaluate.sbatch` (pairwise) is marked DEPRECATED.
+    - hard64: BAGEL vs {ShowO50, ASCR50} Qwen pairwise judge now runs on **8 GPUs** via `jobs/stage1_hard64_bagel_3way_judge_sharded.sbatch` (round-robin shards + `scripts/merge_judge_shards.py`). Old 1-GPU `jobs/stage1_hard64_bagel_3way_judge.sbatch` is marked DEPRECATED.
+- [x] Submit new dependent evaluations (Slurm `afterok` dependencies):
+    - **68790** GenEval score ShowO50 → `outputs/geneval_showo_ascr_68784_*/scores/ShowO50.jsonl`
+    - **68791** GenEval score ASCR50  → `.../scores/ASCR50.jsonl`
+    - **68792** GenEval score BAGEL   → `.../scores/BAGEL.jsonl`
+    - **68793** hard64 sharded BAGEL vs {ShowO50, ASCR50} Qwen pairwise → `.../benchmarks_..._hard64_8gpu_reuse_68785/bagel_3way/qwen_pairwise_bagel_vs_{baseline,ascr}.json`
     - hard64 ShowO50 vs ASCR50 (Qwen pairwise + clean) is produced internally by job 68785.
-- [ ] After all eval jobs finish, harvest scores and add a "ShowO 50-step rerun (3-way: BAGEL / ShowO50 / ASCR50)" subsection to Quick Results Summary; keep the previous 18-step numbers labeled as legacy.
+- [ ] After 68790-68792 finish, run `scripts/build_geneval_3way_summary.py --model ShowO50=... --model ASCR50=... --model BAGEL=... --output .../geneval_3way_summary.md` and paste the table into Quick Results Summary as the "ShowO 50-step rerun (3-way)" subsection (keep the 18-step numbers labeled legacy).
 
 Job inventory snapshot (2026-05-21):
 
@@ -28,10 +31,12 @@ Job inventory snapshot (2026-05-21):
 68762 BAGEL GenEval generation                (running)
 68784 ShowO50 + ASCR50 GenEval gen            (running)
 68785 ShowO50 + ASCR50 hard64 gen             (running, includes internal ShowO50 vs ASCR50 judges)
-68786 GenEval eval  ShowO50 vs ASCR50         (PD, dep 68784)
-68787 GenEval eval  BAGEL   vs ASCR50         (PD, dep 68762 + 68784)
-68788 GenEval eval  BAGEL   vs ShowO50        (PD, dep 68762 + 68784)
-68789 hard64 judge  BAGEL vs {ShowO50,ASCR50} (PD, dep 68785)
+68786-68789 CANCELLED and replaced (see below).
+68790 GenEval score ShowO50               (PD, dep 68784, 8 GPU)
+68791 GenEval score ASCR50                (PD, dep 68784, 8 GPU)
+68792 GenEval score BAGEL                 (PD, dep 68762, 8 GPU)
+68793 hard64 sharded judge BAGEL vs {ShowO50,ASCR50}
+                                          (PD, dep 68785, 8 GPU)
 ```
 
 Cluster constraints (HKU HPC `gpu` partition): max 28 GPUs/user, ≤2 nodes/job, 5 running jobs, 8 submitted. Each node = 8 L40S. Current sharded generation scripts are single-node — submit one 8-GPU job per benchmark; the GenEval + hard64 + BAGEL trio fits in 24/28.

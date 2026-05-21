@@ -181,6 +181,8 @@ def main(argv=None):
     parser.add_argument("--baseline-label", default="baseline")
     parser.add_argument("--ascr-label", default="ASCR")
     parser.add_argument("--no-image-labels", action="store_true", help="Do not draw LEFT/RIGHT labels into the paired image canvas.")
+    parser.add_argument("--shard-id", type=int, default=0, help="0-based shard index (default 0).")
+    parser.add_argument("--num-shards", type=int, default=1, help="Total number of shards (default 1 = no sharding).")
     args = parser.parse_args(argv)
 
     config = load_config(args.config)
@@ -193,12 +195,22 @@ def main(argv=None):
     if not results:
         raise ValueError("No comparison results found for pairwise judge")
 
+    if args.num_shards < 1 or args.shard_id < 0 or args.shard_id >= args.num_shards:
+        raise ValueError(f"Invalid shard config: shard-id={args.shard_id} num-shards={args.num_shards}")
+    sharded = args.num_shards > 1
+    if sharded:
+        # Round-robin assignment so workload is balanced even if prompts differ in cost.
+        original_total = len(results)
+        results = [r for i, r in enumerate(results) if i % args.num_shards == args.shard_id]
+        print(json.dumps({"event": "shard_info", "shard_id": args.shard_id, "num_shards": args.num_shards, "shard_size": len(results), "total": original_total}), flush=True)
+
     output_path = Path(args.output) if args.output else (Path(source_path).parent if Path(source_path).is_file() else Path(source_path)) / "qwen_pairwise_judge.json"
     pair_dir = output_path.with_suffix("") / "pairwise_images"
     evaluator = build_evaluator(config.get("evaluator", {}).get("name", "qwen_vl"), config)
     records = []
     counts = Counter()
-    for index, result in enumerate(results):
+    for shard_local_index, result in enumerate(results):
+        index = shard_local_index * args.num_shards + args.shard_id if sharded else shard_local_index
         prompt = result["prompt"]
         baseline_image = resolve_path(result.get("baseline_image"))
         ascr_image = resolve_path(result.get("accepted_ascr_image") or result.get("ascr_final_image") or result.get("final_decoded_image"))
@@ -229,6 +241,8 @@ def main(argv=None):
         "counts": dict(counts),
         "baseline_label": args.baseline_label,
         "ascr_label": args.ascr_label,
+        "shard_id": args.shard_id,
+        "num_shards": args.num_shards,
         "records": records,
     }
     output_path.parent.mkdir(parents=True, exist_ok=True)

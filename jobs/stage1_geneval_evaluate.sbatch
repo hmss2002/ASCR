@@ -7,6 +7,11 @@
 #SBATCH --time=01:00:00
 #SBATCH --output=logs/%x-%j.out
 #SBATCH --error=logs/%x-%j.err
+#
+# DEPRECATED (2026-05-21): pairwise (baseline+ASCR) GenEval scoring. The new
+# canonical flow is jobs/stage1_geneval_score_single.sbatch (score each model
+# once, then combine via scripts/build_geneval_3way_summary.py). Kept for
+# backward compatibility with single-pair workflows.
 
 set -euo pipefail
 cd /grp01/cds_bdai/JianyuZhang/ASCR
