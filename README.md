@@ -4,42 +4,52 @@ ASCR is a research prototype for studying and correcting confidence-semantic inc
 
 This README is the project control document. It records the research plan, implementation plan, current progress, expected interfaces, cluster workflow, and GitHub synchronization policy. It should be updated whenever a meaningful implementation batch is completed.
  
-## Active TODO (2026-05-21)
+## Active TODO (2026-05-22, updated)
 
-Quality audit of the three GenEval example images surfaced a low-step ShowO config (`generation_timesteps: 18`). ShowO's official demo uses 50 steps; 18 leaves the masked-token field under-denoised, which is the dominant cause of the blurry / glitchy baseline+ASCR samples. BAGEL is unaffected (`num_timesteps=50, cfg_text_scale=4.0`).
+**Two bugs discovered and fixed in commit `557d2fc` (2026-05-22):**
 
-Action items (any future agent / human picking this up — start here):
+1. **GENERATION_TIMESTEPS default override:** `compare_showo_ascr_parallel.py` always forwarded `--generation-timesteps ${GENERATION_TIMESTEPS}` to the worker CLI, silently overriding yaml's `generation_timesteps: 50` with the sbatch default of 18. md5 comparison confirmed 68784 == 68753 baseline images are byte-identical (both 18-step). Fixed: sbatch defaults changed to 50.
+2. **Qwen pairwise RIGHT-position bias:** Cross-checking four pairwise comparisons found that whichever model was placed on the RIGHT always won lopsidedly, regardless of actual quality. Fixed: `pair_bagel_vs_hard64_run.py` gains `--swap`; `stage1_hard64_bagel_3way_judge_sharded.sbatch` now loops over `fwd` + `swap` directions.
 
-- [x] Patch ShowO configs to `generation_timesteps: 50` (`configs/showo_local_512x512.yaml`, `configs/stage1_showo_qwen35_9b_fullcap_parallel.yaml`); keep `guidance_scale: 4`.
-- [x] Regenerate ShowO baseline + ASCR on GenEval 553 with 50 steps — job **68784** (`outputs/geneval_showo_ascr_68784_20260521_224813/`).
-- [x] Regenerate ShowO baseline + ASCR on T2I-CompBench hard64 with 50 steps — job **68785** (`outputs/benchmarks_t2i_compbench_qwen35_hard64_8gpu_reuse_68785/`).
-- [x] BAGEL kept as-is: GenEval job **68762** (`outputs/geneval_bagel_68762_20260521_175812/`), hard64 run `outputs/bagel_t2i_compbench_hard64_8gpu_20260519_202625/`.
-- [x] **Refactor (2026-05-21, late):** cancelled redundant pairwise GenEval eval jobs (68786-68788) and 1-GPU hard64 judge (68789). New canonical flow:
-    - GenEval: each model is scored **once** with `jobs/stage1_geneval_score_single.sbatch` (8-GPU sharded), then combined via `scripts/build_geneval_3way_summary.py`. Old `jobs/stage1_geneval_evaluate.sbatch` (pairwise) is marked DEPRECATED.
-    - hard64: BAGEL vs {ShowO50, ASCR50} Qwen pairwise judge now runs on **8 GPUs** via `jobs/stage1_hard64_bagel_3way_judge_sharded.sbatch` (round-robin shards + `scripts/merge_judge_shards.py`). Old 1-GPU `jobs/stage1_hard64_bagel_3way_judge.sbatch` is marked DEPRECATED.
-- [x] Submit new dependent evaluations (Slurm `afterok` dependencies):
-    - **68790** GenEval score ShowO50 → `outputs/geneval_showo_ascr_68784_*/scores/ShowO50.jsonl`
-    - **68791** GenEval score ASCR50  → `.../scores/ASCR50.jsonl`
-    - **68792** GenEval score BAGEL   → `.../scores/BAGEL.jsonl`
-    - **68793** hard64 sharded BAGEL vs {ShowO50, ASCR50} Qwen pairwise → `.../benchmarks_..._hard64_8gpu_reuse_68785/bagel_3way/qwen_pairwise_bagel_vs_{baseline,ascr}.json`
-    - hard64 ShowO50 vs ASCR50 (Qwen pairwise + clean) is produced internally by job 68785.
-- [ ] After 68790-68792 finish, run `scripts/build_geneval_3way_summary.py --model ShowO50=... --model ASCR50=... --model BAGEL=... --output .../geneval_3way_summary.md` and paste the table into Quick Results Summary as the "ShowO 50-step rerun (3-way)" subsection (keep the 18-step numbers labeled legacy).
+Action items:
 
-Job inventory snapshot (2026-05-21):
+- [x] Fix sbatch `GENERATION_TIMESTEPS` defaults 18 → 50 (two production sbatches).
+- [x] Add bidirectional (fwd + swap) pairwise judging to hard64 BAGEL 3-way judge.
+- [x] Commit + push fixes (commit `557d2fc`).
+- [x] Submit 50-step regeneration jobs:
+    - **68794** GenEval 553 regen @ 50-step (RUNNING, `SPGL-1-12`, ~4–6 h)
+    - **68795** hard64 64 regen @ 50-step (RUNNING, `SPGL-1-18`, ~4–6 h)
+    - **68796** auto-submit GenEval 3-way scoring (PENDING, `afterok:68794`)
+    - **68797** auto-submit hard64 bidir 3-way pairwise (PENDING, `afterok:68795`)
+- [x] Submit position-bias diagnostic jobs (on existing 18-step data, independent of regen):
+    - **68798** bidir BAGEL 3-way pairwise on 68785 outputs (RUNNING, `SPGL-1-19`, ~3 h)
+    - **68799** swap ShowO-vs-ASCR pairwise on 68753 outputs (PENDING, waiting GPU, ~3 h)
+- [ ] After **68798** finishes: compare `fwd` vs `swap` win counts for BAGEL vs ASCR/ShowO. Expected: fwd BAGEL wins, swap ASCR wins → confirms pure position bias. If BAGEL wins both directions → BAGEL genuinely strong against 18-step ASCR.
+- [ ] After **68799** finishes: compare swap vs original ShowO-vs-ASCR counts. If both directions agree → ASCR advantage is real. If reversed → advantage was position-bias artefact.
+- [ ] After **68794 + 68796** finish: run `scripts/build_geneval_3way_summary.py --model ShowO50=... --model ASCR50=... --model BAGEL=... --output .../geneval_3way_summary.md` and update Quick Results Summary with verified 50-step numbers (replace ⚠ placeholders below).
+- [ ] After **68795 + 68797** finish: update Quick Results Summary with debiased (bidirectional) hard64 pairwise numbers.
+- [ ] Delete legacy 18-step outputs `outputs/geneval_showo_ascr_68753_*/` (~3.3 GB) after 68794 + 68796 confirmed working.
+
+Job inventory snapshot (2026-05-22):
 
 ```
-68762 BAGEL GenEval generation                (running)
-68784 ShowO50 + ASCR50 GenEval gen            (running)
-68785 ShowO50 + ASCR50 hard64 gen             (running, includes internal ShowO50 vs ASCR50 judges)
-68786-68789 CANCELLED and replaced (see below).
-68790 GenEval score ShowO50               (PD, dep 68784, 8 GPU)
-68791 GenEval score ASCR50                (PD, dep 68784, 8 GPU)
-68792 GenEval score BAGEL                 (PD, dep 68762, 8 GPU)
-68793 hard64 sharded judge BAGEL vs {ShowO50,ASCR50}
-                                          (PD, dep 68785, 8 GPU)
+68762 BAGEL GenEval generation                       COMPLETED
+68753 ShowO+ASCR GenEval gen @ 18-step               COMPLETED  ← BUG (should be 50-step); superseded by 68794
+68784 ShowO+ASCR GenEval gen @ 18-step (re-attempt)  COMPLETED  ← BUG (same bug); superseded by 68794
+68785 ShowO+ASCR hard64 gen @ 18-step                COMPLETED  ← BUG (same bug); superseded by 68795
+68790 GenEval score ShowO50 (dep 68784)               COMPLETED  ← on buggy 18-step data; superseded by 68796
+68791 GenEval score ASCR50  (dep 68784)               COMPLETED  ← on buggy 18-step data; superseded by 68796
+68792 GenEval score BAGEL   (dep 68762)               COMPLETED  ← valid (BAGEL unaffected)
+68793 hard64 BAGEL 3-way judge fwd-only               COMPLETED  ← position-biased; superseded by 68797/68798
+68794 GenEval 553 regen @ 50-step                     RUNNING  (SPGL-1-12)
+68795 hard64 64 regen @ 50-step                       RUNNING  (SPGL-1-18)
+68796 auto-submit GenEval 3-way scoring               PENDING  (afterok:68794)
+68797 auto-submit hard64 bidir 3-way judge            PENDING  (afterok:68795)
+68798 DIAG: bidir BAGEL 3-way on 68785 data           RUNNING  (SPGL-1-19)
+68799 DIAG: swap ShowO-vs-ASCR on 68753 data          PENDING  (waiting GPU)
 ```
 
-Cluster constraints (HKU HPC `gpu` partition): max 28 GPUs/user, ≤2 nodes/job, 5 running jobs, 8 submitted. Each node = 8 L40S. Current sharded generation scripts are single-node — submit one 8-GPU job per benchmark; the GenEval + hard64 + BAGEL trio fits in 24/28.
+Cluster constraints (HKU HPC `gpu` partition): max 28 GPUs/user, ≤2 nodes/job, 5 running jobs, 8 submitted. Each node = 8 L40S. GPU usage currently 24/28.
 
 
 
@@ -58,6 +68,11 @@ for method details and [Qualitative Examples](#qualitative-examples) for side-by
 | ASCR vs BAGEL-7B-MoT | Pairwise side-by-side | **50 wins** | 14 wins | 0 | 64 |
 | ASCR vs BAGEL-7B-MoT | Clean pass/fail | **57 / 64** (89.1 %) | 54 / 64 (84.4 %) | — | 64 |
 
+> ⚠ **Pairwise numbers are pre-debiasing estimates (2026-05-22).** Qwen3.5-9B has a confirmed
+> strong RIGHT-side preference; all pairwise runs above had ASCR on the RIGHT. Bidirectional
+> debiased results are pending (jobs 68798/68799). **Clean pass/fail scores are unaffected**
+> (single-image evaluation, no left/right placement).
+>
 > **Note:** All Qwen judges use Qwen3.5-9B, which is also the ASCR correction loop's semantic
 > evaluator. These are automated benchmark signals; independent human evaluation or official
 > T2I-CompBench metrics are planned as future work.
@@ -247,6 +262,14 @@ the absolute improvement is real but per-prompt advantage is less consistent.
 3. **Automated only:** No human evaluation has been conducted.
 4. **ASCR vs standalone model:** ASCR is ShowO + correction loop; BAGEL is a larger standalone
    model. Not architecture-to-architecture.
+5. **VLM position bias in pairwise judging:** Qwen3.5-9B exhibits a strong RIGHT-side preference
+   in side-by-side comparisons — cross-checking four pairwise comparisons found that whichever
+   model was placed on the RIGHT always won lopsidedly, regardless of actual image quality
+   (confirmed 2026-05-22, commit `557d2fc`). Pairwise numbers in this README were obtained with
+   ASCR always on the RIGHT and should be treated as **pre-debiasing estimates**. The corrected
+   protocol (running both forward and swapped directions, then averaging) is now implemented in
+   `jobs/stage1_hard64_bagel_3way_judge_sharded.sbatch`; debiased results are pending (jobs 68798,
+   68799).
 
 ## Stage 1 System Overview
 
@@ -802,10 +825,16 @@ Keep Stage 1 simple enough to prove the mechanism, but structure it so Stage 2 a
 
 ## Stage 1 Benchmark Summary — Three-Way Comparison
 
-All three pairwise comparisons on **T2I-CompBench hard64** are now complete, establishing an
-unambiguous performance ordering:
+> ⚠ **Debiasing in progress (2026-05-22):** The pairwise win counts below are from
+> single-direction judging with ASCR always placed on the RIGHT. A strong VLM RIGHT-position
+> preference has been confirmed (see Important Caveats §5 and commit `557d2fc`). The
+> **"ASCR >> BAGEL"** ordering should be treated as a pre-debiasing estimate pending
+> bidirectional confirmation (jobs 68798/68799). Clean pass/fail scores are unaffected.
 
-**ASCR >> BAGEL-7B-MoT > ShowO Baseline**
+All three pairwise comparisons on **T2I-CompBench hard64** are now complete. Preliminary
+(pre-debiasing) performance ordering:
+
+**ASCR >> BAGEL-7B-MoT > ShowO Baseline** *(pairwise — pending debiased confirmation)*
 
 ### Pairwise Win/Loss Summary
 
@@ -844,6 +873,12 @@ unambiguous performance ordering:
   not Qwen, and shows ASCR ahead of the ShowO baseline by +7.95 overall points.
 
 ## 2026-05-21 ShowO GenEval — Independent Full 553-Prompt Evaluation
+
+> ⚠ **Note (2026-05-22):** The images for this section (job **68753**) were generated at
+> **18 diffusion steps**, not 50, due to a CLI default-override bug fixed in commit `557d2fc`.
+> The ShowO-baseline-vs-ASCR **relative comparison remains valid** (both sides affected equally
+> by the same step count), but absolute accuracy values are expected to differ at 50 steps.
+> A corrected 3-way 50-step GenEval section will be added once jobs 68794 and 68796 complete.
 
 This run evaluates the full GenEval 553-prompt suite for ShowO baseline vs ASCR using a
 non-Qwen, object-detection-based scorer. It is intended as an independent check on the Qwen
