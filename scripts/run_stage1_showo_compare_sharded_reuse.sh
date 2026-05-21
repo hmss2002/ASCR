@@ -60,7 +60,12 @@ fi
 
 suite_inputs=()
 for ((shard = 0; shard < SHARD_COUNT; shard++)); do
-  suite_inputs+=("$RUN_ROOT/worker_${shard}/suite.json")
+  # suite.json lives inside a timestamped subdirectory created by the CLI
+  suite_file=$(find "$RUN_ROOT/worker_${shard}" -name "suite.json" -maxdepth 3 2>/dev/null | head -1)
+  if [[ -z "$suite_file" ]]; then
+    echo "[sharded-reuse] ERROR: suite.json not found for worker $shard" >&2; exit 1
+  fi
+  suite_inputs+=("$suite_file")
 done
 
 AGG_SUITE="$RUN_ROOT/suite.json"
