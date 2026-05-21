@@ -11,11 +11,28 @@ Quality audit of the three GenEval example images surfaced a low-step ShowO conf
 Action items (any future agent / human picking this up — start here):
 
 - [x] Patch ShowO configs to `generation_timesteps: 50` (`configs/showo_local_512x512.yaml`, `configs/stage1_showo_qwen35_9b_fullcap_parallel.yaml`); keep `guidance_scale: 4`.
-- [ ] Regenerate ShowO baseline + ASCR on GenEval 553 with 50 steps — submit `jobs/stage1_geneval_generate_8gpu.sbatch` (8 GPUs).
-- [ ] Regenerate ShowO baseline + ASCR on T2I-CompBench hard64 with 50 steps — submit `jobs/stage1_t2i_compbench_qwen35_9b_hard64_8gpu_reuse.sbatch` (8 GPUs).
-- [ ] BAGEL outputs do **not** need regeneration (`scripts/run_bagel_text2image.py` defaults are correct). Keep existing BAGEL GenEval run from job 68762.
-- [ ] After regen finishes, run GenEval evaluator (`jobs/stage1_geneval_evaluate.sbatch`) on the new ShowO/ASCR dirs and on the BAGEL dir.
-- [ ] Add a new "ShowO 50-step rerun" subsection to Quick Results Summary; keep the previous 18-step numbers for comparison and clearly label both.
+- [x] Regenerate ShowO baseline + ASCR on GenEval 553 with 50 steps — job **68784** (`outputs/geneval_showo_ascr_68784_20260521_224813/`).
+- [x] Regenerate ShowO baseline + ASCR on T2I-CompBench hard64 with 50 steps — job **68785** (`outputs/benchmarks_t2i_compbench_qwen35_hard64_8gpu_reuse_68785/`).
+- [x] BAGEL kept as-is: GenEval job **68762** (`outputs/geneval_bagel_68762_20260521_175812/`), hard64 run `outputs/bagel_t2i_compbench_hard64_8gpu_20260519_202625/`.
+- [x] Submit dependent 3-way evaluations (Slurm `afterok` dependencies):
+    - **68786** GenEval ShowO50 vs ASCR50 → `.../geneval_showo_ascr_68784_*/eval_showo50_vs_ascr50/`
+    - **68787** GenEval BAGEL vs ASCR50 → `.../eval_bagel_vs_ascr50/`
+    - **68788** GenEval BAGEL vs ShowO50 baseline → `.../eval_bagel_vs_showo50/`
+    - **68789** hard64 BAGEL vs {ShowO50, ASCR50} pairwise Qwen judge → `.../benchmarks_..._hard64_8gpu_reuse_68785/bagel_3way/`
+    - hard64 ShowO50 vs ASCR50 (Qwen pairwise + clean) is produced internally by job 68785.
+- [ ] After all eval jobs finish, harvest scores and add a "ShowO 50-step rerun (3-way: BAGEL / ShowO50 / ASCR50)" subsection to Quick Results Summary; keep the previous 18-step numbers labeled as legacy.
+
+Job inventory snapshot (2026-05-21):
+
+```
+68762 BAGEL GenEval generation                (running)
+68784 ShowO50 + ASCR50 GenEval gen            (running)
+68785 ShowO50 + ASCR50 hard64 gen             (running, includes internal ShowO50 vs ASCR50 judges)
+68786 GenEval eval  ShowO50 vs ASCR50         (PD, dep 68784)
+68787 GenEval eval  BAGEL   vs ASCR50         (PD, dep 68762 + 68784)
+68788 GenEval eval  BAGEL   vs ShowO50        (PD, dep 68762 + 68784)
+68789 hard64 judge  BAGEL vs {ShowO50,ASCR50} (PD, dep 68785)
+```
 
 Cluster constraints (HKU HPC `gpu` partition): max 28 GPUs/user, ≤2 nodes/job, 5 running jobs, 8 submitted. Each node = 8 L40S. Current sharded generation scripts are single-node — submit one 8-GPU job per benchmark; the GenEval + hard64 + BAGEL trio fits in 24/28.
 
