@@ -98,8 +98,8 @@ def classify_color(model, processor, image: Image.Image, box_xyxy) -> str:
     with torch.no_grad():
         owlvit = model.owlvit
         text_out = owlvit.text_model(
-            input_ids=inputs["input_ids"][0],
-            attention_mask=inputs.get("attention_mask", [None] * len(COLORS))[0],
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs.get("attention_mask"),
         )
         text_embeds = text_out.pooler_output
         text_embeds = model.owlvit.text_projection(text_embeds)
