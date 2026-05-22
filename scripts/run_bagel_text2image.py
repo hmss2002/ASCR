@@ -32,6 +32,7 @@ def main():
     parser.add_argument('--show-thinking',action='store_true')
     parser.add_argument('--do-sample',action='store_true')
     parser.add_argument('--text-temperature',type=float,default=0.3)
+    parser.add_argument('--skip-existing',action='store_true',help='Skip prompts whose output image already exists')
     args=parser.parse_args()
     out=Path(args.output_dir); images=out/'images'; records=out/'records'
     images.mkdir(parents=True,exist_ok=True); records.mkdir(parents=True,exist_ok=True)
@@ -64,6 +65,11 @@ def main():
         index=args.offset+local_index; seed=args.seed+index if args.seed>=0 else args.seed
         stem=f'prompt_{index:03d}-{slug(prompt)}'
         image_path=images/f'{stem}.png'; record_path=records/f'{stem}.json'
+        if args.skip_existing and image_path.exists():
+            print(json.dumps({'event':'bagel_prompt_skip','index':index,'image':str(image_path)}),flush=True)
+            if record_path.exists():
+                results.append(json.loads(record_path.read_text(encoding='utf-8')))
+            continue
         print(json.dumps({'event':'bagel_prompt_start','index':index,'prompt':prompt}),flush=True)
         image, thought=app.text_to_image(prompt,show_thinking=args.show_thinking,cfg_text_scale=args.cfg_text_scale,cfg_interval=args.cfg_interval,timestep_shift=args.timestep_shift,num_timesteps=args.num_timesteps,cfg_renorm_min=args.cfg_renorm_min,cfg_renorm_type=args.cfg_renorm_type,max_think_token_n=args.max_think_tokens,do_sample=args.do_sample,text_temperature=args.text_temperature,seed=seed,image_ratio=args.image_ratio)
         if image is None: raise RuntimeError('BAGEL returned no image')
