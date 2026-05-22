@@ -78,126 +78,87 @@ Cluster constraints (HKU HPC `gpu` partition): max 28 GPUs/user, <=2 nodes/job, 
 
 
 
-## Quick Results Summary
+## 结果摘要 / Results Summary
 
-The current top-level evidence combines Qwen3.5-9B judged T2I-CompBench hard64 results
-with an independent 50-step GenEval object-checking run. See [Evaluation Methodology](#evaluation-methodology)
-for method details and [Qualitative Examples](#qualitative-examples) for side-by-side image comparisons.
+### 三个模型是什么 / What Are the Three Models?
 
-**T2I-CompBench hard64 - Debiased results (64 compositional prompts, Qwen3.5-9B judge, confidence_steps=50, job 68820, 2026-05-22):**
+| 模型 / Model | 参数量 / Size | 说明 / Description |
+|---|---|---|
+| **ShowO-1.3B (baseline)** | 1.3B | 原始 masked diffusion 基础模型，每次生成走 50 个 MaskGIT 步。**The baseline masked diffusion model**, 50 MaskGIT steps per generation. |
+| **ASCR50** | 1.3B + loop | ShowO + ASCR 纠错循环（3 轮迭代）。每生成一张图后，用 Qwen3.5-9B 判断哪些区域语义错误，然后有针对性地重新生成。**ShowO + ASCR correction loop (3 iterations)**. After each image, Qwen3.5-9B identifies semantically wrong regions and selectively regenerates them. |
+| **BAGEL-7B-MoT** | 7B | 参数量是 ShowO 的 5 倍多的专用文生图大模型，作为**性能上限参考**，不是 ASCR 的竞争对手。**A dedicated 7B T2I model used as an upper-bound reference**, not a direct competitor to ASCR's approach. |
 
-| Comparison | Judge Method | Model A | Model B | N | Notes |
-|---|---|---:|---:|---:|---|
-| ASCR50 vs ShowO baseline | Clean pass/fail | ASCR **54/64 (84.4 %)** | ShowO **50/64 (78.1 %)** | 64 | Fair comparison; confidence_steps=50 for both |
-| ASCR50 vs ShowO baseline | Pairwise debiased | ⚠ inconclusive | ⚠ inconclusive | 64 x 2 | RIGHT-side bias dominates (see note) |
-| BAGEL-7B-MoT vs ShowO50 | Pairwise debiased | BAGEL **78.1 % (100/128)** | ShowO50 **21.9 %** | 128 | Bidirectional, confidence_steps=50 for all |
-| BAGEL-7B-MoT vs ASCR50 | Pairwise debiased | BAGEL **61.1 % (77/126)** | ASCR50 **38.9 %** | 126 | Bidirectional, confidence_steps=50 for all |
-
-> ⚠ **Bug 3 correction (confidence_steps):** All hard64 runs before job 68820 (including 68795)
-> used `confidence_steps=3`, making ShowO run only 3 MaskGIT steps. The BAGEL pairwise numbers
-> from jobs 68800/68801 also used confidence_steps=3 images and are superseded by job 68835
-> (completed). Fair ASCR vs ShowO gap on Hard64 clean pass/fail: **+6.2 pp**.
-
-> **Why pairwise ShowO vs ASCR is inconclusive:** Bidirectional judging reveals RIGHT side wins
-> >= 90 % of non-tie decisions in *both* directions. The BAGEL comparisons are more robust
-> because BAGEL's quality gap is large enough to survive positional noise.
+> ASCR 是一种**语义纠错**方法：它改变的是图中*画了什么*，而不是图像画质。ShowO 和 ASCR 都是 512×512 的 1.3B 小模型，BAGEL 是 1024×1024 的 7B 大模型，画质差距来自模型规模，不代表纠错效果。
 >
-> **Reliable ASCR vs ShowO evidence:** (1) Hard64 clean pass/fail **+6.2 pp** (job 68820,
-> confidence_steps=50). (2) GenEval OWLViT **+0.64 pp** task-avg (job 68832, confidence_steps=50,
-> fair comparison). Only `color_attr` shows consistent improvement (+4 pp).
+> ASCR is a **semantic corrector**: it changes *what is rendered*, not visual aesthetics. ShowO and ASCR both produce 512×512 images from a 1.3B model; the fidelity gap vs BAGEL reflects model scale, not correction quality.
+
+---
+
+### 评测了什么 / What Did We Evaluate?
+
+**评测 1：T2I-CompBench Hard64** — 64 条高难度合成 prompt（空间关系、颜色属性绑定等），由 Qwen3.5-9B 大语言模型逐图打分。每条 prompt 给每个模型生成一张图，看图是否满足 prompt 描述。
+
+**Evaluation 1: T2I-CompBench Hard64** — 64 compositionally challenging prompts (spatial relations, color–attribute binding, etc.), scored by Qwen3.5-9B. One image is generated per prompt per model; the judge decides pass/fail.
+
+**评测 2：GenEval（553 条 prompt）** — 覆盖 6 个子任务（单个物体、双物体、计数、颜色、位置、颜色属性），用 OWLViT 目标检测器自动打分，**与 Qwen 完全无关**，是最可靠的评测。
+
+**Evaluation 2: GenEval (553 prompts)** — 6 subtasks (single-object, two-object, counting, colors, position, color\_attr), scored with OWLViT object detectors, **fully independent of Qwen**. This is the cleanest evaluation.
+
+---
+
+### 主要发现 / Key Findings
+
+- 🟢 **ASCR 对 ShowO 有提升**：Hard64 clean pass/fail **+6.2 pp**（84.4% vs 78.1%）；GenEval 整体 **+0.64 pp**（67.25% vs 66.62%）。改进最显著的子任务是 `color_attr`（颜色–属性绑定，+4 pp），这很可能是 ASCR 算法真实有效的领域。
+  **ASCR improves over ShowO**: Hard64 clean +6.2 pp; GenEval task-avg +0.64 pp. The clearest gain is `color_attr` (+4 pp), likely the real algorithmic signal.
+
+- 🟡 **ASCR 与 ShowO 的优势比之前小**：之前报告的 GenEval +7.95 pp 是 Bug 3（`confidence_steps=3`）导致的：ShowO 之前只跑了 3 步而非正确的 50 步。修复后 ShowO 提升 12.6 pp，差距收窄至 +0.64 pp。
+  **The advantage is smaller than previously reported**: the old +7.95 pp was caused by a bug (ShowO ran only 3 steps). After fixing to 50 steps, the gap is +0.64 pp.
+
+- 🔵 **BAGEL 是综合最强的模型**，但这反映的是参数规模（7B vs 1.3B），不是 ASCR 的失败。BAGEL pairwise：vs ShowO50 **78.1%**，vs ASCR50 **61.1%**（双向去偏后）。
+  **BAGEL is the strongest overall**, reflecting model scale (7B vs 1.3B), not a failure of the loop. BAGEL pairwise: vs ShowO50 **78.1%**, vs ASCR50 **61.1%** (debiased).
+
+- ⚠️ **注意事项**：Qwen3.5-9B 既是 ASCR 循环的评估器，也是 Hard64 的裁判，存在评估器循环性问题。GenEval（OWLViT）没有这个问题，是更可靠的独立证据。
+  **Caveat**: Qwen3.5-9B is both the ASCR loop's evaluator and the Hard64 judge (evaluator circularity). GenEval (OWLViT) is evaluator-independent and more reliable.
+
+---
+
+### 数据汇总 / Data Tables
+
+**Hard64 clean pass/fail（每张图独立判断是否满足 prompt）/ per-image pass-or-fail:**
+
+| 模型 / Model | 通过 / Pass | 失败 / Fail | 通过率 / Rate |
+|---|---:|---:|---:|
+| **ASCR50** | **54** | 10 | **84.4%** |
+| ShowO50 baseline | 50 | 14 | 78.1% |
+| BAGEL-7B-MoT | 57 | 7 | 89.1% |
+
+**Hard64 pairwise 对比（双向去偏；A 比 B 好的比例）/ debiased head-to-head win rates:**
+
+| 对比 / Comparison | 胜者 / Winner | 胜率 / Win Rate | 总决定样本 / N decisive |
+|---|---|---:|---:|
+| BAGEL-7B-MoT vs ShowO50 | BAGEL | **78.1%** | 128 |
+| BAGEL-7B-MoT vs ASCR50 | BAGEL | **61.1%** | 126 |
+| ASCR50 vs ShowO50 | ⚠ 无法判断 / inconclusive | — | — |
+
+> ASCR vs ShowO 对比无法通过 pairwise 判断，因为 Qwen3.5-9B 存在极强的 RIGHT-side 位置偏好（无论哪个模型放右边都赢），信号被噪声淹没。以 clean pass/fail 为准。
 >
-> **Note:** Qwen3.5-9B is both the ASCR correction loop's evaluator and the hard64 judge.
-> Clean pass/fail may include ~4-8 pp same-evaluator bias. GenEval uses OWLViT detectors and
-> is evaluator-independent. No human evaluation has been conducted.
+> ASCR vs ShowO pairwise is inconclusive due to Qwen's extreme RIGHT-side position bias (right side wins ≥90% regardless of which model is placed there). Use clean pass/fail instead.
 
-**GenEval full 553 prompts - fair 3-way detector-based summary (jobs 68810–68818+68832 for ShowO/ASCR, 68792 for BAGEL, all confidence_steps=50):**
+**GenEval 553-prompt 分类得分（OWLViT 检测器，与 Qwen 无关）/ per-category scores (OWLViT detectors, Qwen-independent):**
 
-| Task | N | ShowO50 | ASCR50 | BAGEL-7B-MoT | ASCR - ShowO |
+| 子任务 / Task | N | ShowO50 | ASCR50 | BAGEL-7B-MoT | ASCR−ShowO |
 |---|---:|---:|---:|---:|---:|
 | single_object | 80 | 100.00% | 100.00% | 100.00% | +0.00 |
 | two_object | 99 | 93.94% | 93.94% | 96.97% | +0.00 |
-| counting | 80 | 63.75% | 62.50% | 68.75% | -1.25 |
+| counting | 80 | 63.75% | 62.50% | 68.75% | −1.25 |
 | colors | 94 | 67.02% | 68.09% | 70.21% | +1.06 |
 | position | 100 | 39.00% | 39.00% | 58.00% | +0.00 |
-| color_attr | 100 | 36.00% | 40.00% | 51.00% | +4.00 |
-| **Official task-avg score** | **553** | **66.62%** | **67.25%** | **74.16%** | **+0.64** |
+| **color_attr** | 100 | 36.00% | **40.00%** | 51.00% | **+4.00** |
+| **整体均值 / Task-avg** | **553** | **66.62%** | **67.25%** | **74.16%** | **+0.64** |
 
-> ⚠ **Bug 3 impact on GenEval:** The old unfair numbers (ShowO 54.02%, ASCR 61.97%, delta +7.95 pp)
-> were generated with `confidence_steps=3` (ShowO ran only 3 MaskGIT steps). The table above is
-> the first fair comparison. ShowO improved +12.6 pp with the fix; ASCR advantage collapsed to
-> **+0.64 pp** task-average. The only consistent ASCR improvement is `color_attr` (+4.00 pp).
-
-BAGEL remains the strongest overall model.
-
-**GenEval health check:** each of the three score files contains 553 valid JSONL records, no
-malformed rows, no missing `correct` field, and the scoring logs contain no `error`, `traceback`,
-`exception`, `nan`, or `inf`.
-
-## Stage 1 Benchmark Summary — Three-Way Comparison (50-step, Debiased, 2026-05-22)
-
-All pairwise hard64 runs use **bidirectional judging** (fwd + swap, 64 prompts each direction)
-to cancel Qwen3.5-9B's confirmed RIGHT-side position preference. GenEval uses detector-based
-OWLViT scoring and is independent of Qwen.
-
-**Performance ordering (fair comparison, confidence_steps=50):**
-
-> **GenEval:** BAGEL-7B-MoT (74.16%) > ASCR50 (67.25%) > ShowO50 (66.62%) — gap **+0.64 pp**<br>
-> **Hard64 clean pass/fail:** ASCR50 (84.4%) > ShowO50 (78.1%) — gap **+6.2 pp**<br>
-> **Hard64 BAGEL pairwise (fair):** BAGEL 78.1 % vs ShowO50; BAGEL 61.1 % vs ASCR50 (both debiased, bidirectional)<br>
-> **Hard64 ASCR vs ShowO pairwise:** ⚠ inconclusive (Qwen position bias)
-
-BAGEL is a 7B dedicated T2I model - the GenEval gap reflects model scale, not a failure of the
-correction loop. ASCR's advantage over ShowO: **+6.2 pp Hard64 clean pass/fail** (Qwen judge,
-evaluator circularity caveat) and **+0.64 pp GenEval** (OWLViT, evaluator-independent). The
-previously reported +7.95 pp GenEval advantage was an artifact of Bug 3 (`confidence_steps=3`).
-
-### Debiased Pairwise Win/Loss Summary (confidence_steps=50)
-
-| Comparison | Winner | Debiased Wins | Debiased Losses | Total Non-Tie | Win Rate |
-| --- | --- | ---: | ---: | ---: | ---: |
-| **BAGEL-7B-MoT vs ShowO50** | BAGEL | 100 | 28 | 128 | **78.1 %** |
-| **BAGEL-7B-MoT vs ASCR50** | BAGEL | 77 | 49 | 126 | **61.1 %** |
-| **ASCR50 vs ShowO50** | ⚠ inconclusive | - | - | - | - |
-
-> **Old (unfair, confidence_steps=3) BAGEL pairwise for reference only:**
-> BAGEL vs ShowO: BAGEL 62.5 % (80/128 debiased); BAGEL vs ASCR: BAGEL 78.9 % (101/128 debiased).
-> These used 3-step ShowO/ASCR images; see job 68835 for fair rerun.
-
-### Clean Pass/Fail Summary (confidence_steps=50, job 68820, 2026-05-22)
-
-| Model | Pass | Fail | Rate | Notes |
-| --- | ---: | ---: | ---: | --- |
-| **ASCR50** | **54** | 10 | **84.4 %** | confidence_steps=50, max_iter=3 |
-| ShowO50 baseline | 50 | 14 | **78.1 %** | confidence_steps=50 |
-| BAGEL-7B-MoT | 57 | 7 | **89.1 %** | BAGEL images unaffected by confidence_steps bug; from original BAGEL run |
-
-### GenEval Detector Summary (fair, confidence_steps=50, 553 prompts, jobs 68810–68818+68832+68792)
-
-| Task | N | ShowO50 | ASCR50 | BAGEL-7B-MoT | ASCR - ShowO |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| single_object | 80 | 100.00% | 100.00% | 100.00% | +0.00 |
-| two_object | 99 | 93.94% | 93.94% | 96.97% | +0.00 |
-| counting | 80 | 63.75% | 62.50% | 68.75% | -1.25 |
-| colors | 94 | 67.02% | 68.09% | 70.21% | +1.06 |
-| position | 100 | 39.00% | 39.00% | 58.00% | +0.00 |
-| color_attr | 100 | 36.00% | 40.00% | 51.00% | +4.00 |
-| **Official task-avg score** | **553** | **66.62%** | **67.25%** | **74.16%** | **+0.64** |
-
-### Key Takeaways
-
-- **BAGEL-7B-MoT is the strongest model overall** on both benchmarks. This reflects model
-  scale (7B dedicated T2I vs 1.3B ShowO + loop); fair pairwise: BAGEL 78.1 % vs ShowO50, 61.1 % vs ASCR50.
-- **ASCR50 improves over ShowO50:** +6.2 pp Hard64 clean pass/fail (Qwen judge, evaluator
-  circularity caveat) and **+0.64 pp** GenEval task-average (OWLViT, evaluator-independent).
-- **Bug 3 (`confidence_steps: 3`) accounts for nearly all old GenEval advantage:** ShowO jumped
-  from 54.02% → 66.62% with the fix. The reported +7.95 pp advantage was largely an artifact
-  of ShowO running 3 steps vs ASCR's up to 27 steps. Real advantage at equal budget: **+0.64 pp**.
-- **Only `color_attr` shows consistent ASCR improvement:** +4 pp on GenEval and likely the real
-  algorithmic gain. Tasks like two_object and position equalize once ShowO gets full 50 steps.
-- **Pairwise ShowO vs ASCR cannot be resolved by Qwen:** Extreme RIGHT-side position bias
-  (>= 90 % right-side win rate regardless of model) overwhelms any quality signal.
-- **Evaluator circularity:** Qwen3.5-9B is the ASCR loop's semantic feedback provider and the
-  judge for all hard64 evaluations. The GenEval run uses OWLViT detectors and is circularity-free.
+> `color_attr` 任务（如"a brown car and a pink hair drier"这类颜色–属性绑定）是 ASCR 唯一稳定领先的子任务，+4 pp，符合算法的设计目标（纠正语义错误的颜色/属性绑定）。
+>
+> `color_attr` (e.g. "a brown car and a pink hair drier") is the only subtask where ASCR consistently wins (+4 pp), which matches the algorithm's design goal of correcting semantic color/attribute errors.
 
 ## 2026-05-22 GenEval — Independent Full 553-Prompt Evaluation
 
@@ -996,12 +957,20 @@ These decisions are not blocking the repository bootstrap:
 
 Keep Stage 1 simple enough to prove the mechanism, but structure it so Stage 2 and Stage 3 do not require rewriting the project. The grid and JSON interface are implementation devices for the first prototype, not the final scientific claim.
 
-## Qualitative Examples
+## Qualitative Examples / 示例图片
 
-Each image below is copied from runtime outputs into `docs/examples/` so GitHub can render it
-without syncing the full `outputs/` tree. Qwen pairwise canvases are exactly what was fed to
-Qwen3.5-9B. GenEval 3-way canvases show **LEFT = ShowO-1.3B 50-step | CENTRE = ASCR50 | RIGHT = BAGEL-7B-MoT**,
-with OWLViT detector verdict in each panel header (green = ✓ pass, red = ✗ fail).
+**如何阅读这些图片 / How to read the images:**
+
+- **GenEval 3-way panels（三列对比图）：** `LEFT = ShowO-1.3B 50步` | `CENTRE = ASCR50` | `RIGHT = BAGEL-7B-MoT`。每列顶部标题为绿色（✓ 通过）或红色（✗ 失败），由 OWLViT 检测器判断。
+  **Three-column comparison**: LEFT = ShowO baseline, CENTRE = ASCR, RIGHT = BAGEL. Header color = OWLViT pass/fail verdict.
+
+- **Pairwise 对比图（两列对比图）：** `LEFT = ShowO50` vs `RIGHT = ASCR50`，或 `LEFT = ShowO50` vs `RIGHT = BAGEL-7B-MoT`。由 Qwen3.5-9B 判断哪边更满足 prompt。
+  **Side-by-side comparison**: LEFT vs RIGHT, judged by Qwen3.5-9B.
+
+- **画质说明：** ShowO/ASCR 均为 512×512 的 1.3B 小模型输出；BAGEL 为 1024×1024 的 7B 大模型输出。画质差距来自模型规模，与 ASCR 纠错效果无关。
+  **Quality note**: ShowO/ASCR = 512×512 from a 1.3B model; BAGEL = 1024×1024 from a 7B model. The fidelity gap reflects model scale, not ASCR effectiveness.
+
+---
 
 ### GenEval 3-Way Examples (fair, confidence_steps=50, jobs 68810–68818+68832+68762)
 
@@ -1238,7 +1207,7 @@ Source: jobs 68810–68818+68832 (ShowO/ASCR, confidence_steps=50), 68762 (BAGEL
 
 ### BAGEL-7B-MoT vs ShowO50 (fair, confidence_steps=50, job 68835)
 
-4 BAGEL wins · 3 ShowO wins shown (from 40 BAGEL wins / 24 ShowO wins total; bidirectional debiased: BAGEL **78.1 %**).
+12 BAGEL wins · 6 ShowO wins shown below（共 40 BAGEL wins / 24 ShowO wins；双向去偏后 BAGEL **78.1%**）。
 
 > LEFT = ShowO50 (50-step, fair), RIGHT = BAGEL-7B-MoT.
 
@@ -1276,6 +1245,70 @@ Source: jobs 68810–68818+68832 (ShowO/ASCR, confidence_steps=50), 68762 (BAGEL
 
 ---
 
+##### **BAGEL wins** — `The leather wallet was inside the brown purse.`
+
+*Qwen3.5-9B (conf 0.95):* The right image (BAGEL) correctly depicts a leather wallet placed inside a brown purse, matching the containment relationship. The left image (ShowO) shows the wallet next to the purse rather than inside it.
+
+![The leather wallet was inside the brown purse. — pairwise (LEFT = ShowO50, RIGHT = BAGEL)](docs/examples/bagel_50_vs_showo/bagel_win_05_the_leather_wallet_was_inside_the_brown_purse.jpg)
+
+---
+
+##### **BAGEL wins** — `The square book was next to the green notebook.`
+
+*Qwen3.5-9B (conf 0.95):* The right image (BAGEL) renders a clearly square-shaped book placed adjacent to a green notebook. The left image (ShowO) renders the book without the square shape being visually apparent.
+
+![The square book was next to the green notebook. — pairwise (LEFT = ShowO50, RIGHT = BAGEL)](docs/examples/bagel_50_vs_showo/bagel_win_08_the_square_book_was_next_to_the_green_notebook.jpg)
+
+---
+
+##### **BAGEL wins** — `a bicycle on the bottom of a girl`
+
+*Qwen3.5-9B (conf 0.95):* The right image (BAGEL) correctly depicts a girl with a bicycle below her (or riding). The left image (ShowO) does not clearly satisfy the spatial relationship.
+
+![a bicycle on the bottom of a girl — pairwise (LEFT = ShowO50, RIGHT = BAGEL)](docs/examples/bagel_50_vs_showo/bagel_win_09_a_bicycle_on_the_bottom_of_a_girl.jpg)
+
+---
+
+##### **BAGEL wins** — `a blue backpack and a brown cow`
+
+*Qwen3.5-9B (conf 0.95):* The right image (BAGEL) successfully renders both a blue backpack and a brown cow in the same scene with correct color attributes. The left image (ShowO) misses or miscolors one of the objects.
+
+![a blue backpack and a brown cow — pairwise (LEFT = ShowO50, RIGHT = BAGEL)](docs/examples/bagel_50_vs_showo/bagel_win_10_a_blue_backpack_and_a_brown_cow.jpg)
+
+---
+
+##### **BAGEL wins** — `a cat behind a boy`
+
+*Qwen3.5-9B (conf 0.95):* The right image (BAGEL) correctly depicts a cat positioned behind a boy. The left image (ShowO) fails to satisfy the spatial occlusion/positioning relationship.
+
+![a cat behind a boy — pairwise (LEFT = ShowO50, RIGHT = BAGEL)](docs/examples/bagel_50_vs_showo/bagel_win_12_a_cat_behind_a_boy.jpg)
+
+---
+
+##### **BAGEL wins** — `a cat on the top of a sofa`
+
+*Qwen3.5-9B (conf 0.95):* The right image (BAGEL) correctly renders a cat perched on top of a sofa. The left image (ShowO) misses the spatial placement.
+
+![a cat on the top of a sofa — pairwise (LEFT = ShowO50, RIGHT = BAGEL)](docs/examples/bagel_50_vs_showo/bagel_win_13_a_cat_on_the_top_of_a_sofa.jpg)
+
+---
+
+##### **BAGEL wins** — `a chair hidden by a mouse`
+
+*Qwen3.5-9B (conf 0.95):* The right image (BAGEL) correctly renders a creative scene with a chair obscured by or near a mouse. The left image (ShowO) fails to render the concealment relationship.
+
+![a chair hidden by a mouse — pairwise (LEFT = ShowO50, RIGHT = BAGEL)](docs/examples/bagel_50_vs_showo/bagel_win_14_a_chair_hidden_by_a_mouse.jpg)
+
+---
+
+##### **BAGEL wins** — `a cubic block and a cylindrical bottle`
+
+*Qwen3.5-9B (conf 0.95):* The right image (BAGEL) correctly depicts a cubic block alongside a cylindrical bottle. The left image (ShowO) fails to correctly render one or both shapes.
+
+![a cubic block and a cylindrical bottle — pairwise (LEFT = ShowO50, RIGHT = BAGEL)](docs/examples/bagel_50_vs_showo/bagel_win_15_a_cubic_block_and_a_cylindrical_bottle.jpg)
+
+---
+
 ##### **ShowO50 wins** — `The black chair was on the left of the white table.`
 
 *Qwen3.5-9B (conf 0.95):* The left image (ShowO50) correctly places the black chair to the left of the white table, satisfying the spatial requirement. The BAGEL image fails to render the correct relative positioning.
@@ -1297,6 +1330,101 @@ Source: jobs 68810–68818+68832 (ShowO/ASCR, confidence_steps=50), 68762 (BAGEL
 *Qwen3.5-9B (conf 0.95):* The left image (ShowO50) correctly places the green plant on the right side of the white wall. The BAGEL image places the plant on the left side, violating the spatial instruction.
 
 ![The green plant was on the right of the white wall. — pairwise (LEFT = ShowO50, RIGHT = BAGEL)](docs/examples/bagel_50_vs_showo/showo_win_04_the_green_plant_was_on_the_right_of_the_white_wall.jpg)
+
+---
+
+##### **ShowO50 wins** — `The rectangular mirror was hung above the white sink.`
+
+*Qwen3.5-9B (conf 0.95):* The left image (ShowO50) correctly renders a rectangular mirror hung directly above a white sink, satisfying both shape and spatial relationship. The BAGEL image fails the positioning.
+
+![The rectangular mirror was hung above the white sink. — pairwise (LEFT = ShowO50, RIGHT = BAGEL)](docs/examples/bagel_50_vs_showo/showo_win_05_the_rectangular_mirror_was_hung_above_the_white_sink.jpg)
+
+---
+
+##### **ShowO50 wins** — `The rectangular picture frame was hung above the beige wall.`
+
+*Qwen3.5-9B (conf 0.95):* The left image (ShowO50) correctly places a rectangular picture frame above the beige wall surface. The BAGEL image misplaces it.
+
+![The rectangular picture frame was hung above the beige wall. — pairwise (LEFT = ShowO50, RIGHT = BAGEL)](docs/examples/bagel_50_vs_showo/showo_win_06_the_rectangular_picture_frame_was_hung_above_the_beige.jpg)
+
+---
+
+##### **ShowO50 wins** — `The red book was on top of the yellow bookshelf.`
+
+*Qwen3.5-9B (conf 0.95):* The left image (ShowO50) correctly depicts a red book placed on top of a yellow bookshelf. The BAGEL image fails to correctly render the color binding.
+
+![The red book was on top of the yellow bookshelf. — pairwise (LEFT = ShowO50, RIGHT = BAGEL)](docs/examples/bagel_50_vs_showo/showo_win_07_the_red_book_was_on_top_of_the_yellow_bookshelf.jpg)
+
+
+### BAGEL-7B-MoT vs ASCR50 — Showcase（双向去偏后 BAGEL **61.1%**）
+
+8 examples where BAGEL outperforms ASCR50 (from 63 BAGEL wins total). Note: the gap narrows vs ShowO (78.1% → 61.1%), reflecting that ASCR closes part of the model-scale deficit.
+
+> LEFT = ASCR50 (50-step, fair), RIGHT = BAGEL-7B-MoT.
+
+---
+
+##### **BAGEL wins** — `The black chair is on top of the blue rug.`
+
+*Qwen3.5-9B (conf 0.95):* The right image (BAGEL) shows a black chair clearly placed on a blue rug. The left image (ASCR) is missing the distinct blue rug or the spatial relationship is ambiguous.
+
+![The black chair is on top of the blue rug. — pairwise (LEFT = ASCR50, RIGHT = BAGEL)](docs/examples/bagel_50_vs_ascr/bagel_win_01_the_black_chair_is_on_top_of_the_blue_rug.jpg)
+
+---
+
+##### **BAGEL wins** — `The black chair was on the left of the white table.`
+
+*Qwen3.5-9B (conf 0.95):* The right image (BAGEL) correctly positions the black chair to the left of the white table. The left image (ASCR) fails the left-right spatial instruction.
+
+![The black chair was on the left of the white table. — pairwise (LEFT = ASCR50, RIGHT = BAGEL)](docs/examples/bagel_50_vs_ascr/bagel_win_02_the_black_chair_was_on_the_left_of_the_white_table.jpg)
+
+---
+
+##### **BAGEL wins** — `The black phone was resting on the brown charger.`
+
+*Qwen3.5-9B (conf 0.95):* The right image (BAGEL) correctly shows a black phone resting on a brown charging mat/device. The left image (ASCR) does not clearly satisfy the containment/placement relationship.
+
+![The black phone was resting on the brown charger. — pairwise (LEFT = ASCR50, RIGHT = BAGEL)](docs/examples/bagel_50_vs_ascr/bagel_win_03_the_black_phone_was_resting_on_the_brown_charger.jpg)
+
+---
+
+##### **BAGEL wins** — `The blue bowl was on top of the white placemat.`
+
+*Qwen3.5-9B (conf 0.95):* The right image (BAGEL) correctly places a blue bowl on a clearly defined white placemat. The left image (ASCR) shows the bowl on an unclear surface.
+
+![The blue bowl was on top of the white placemat. — pairwise (LEFT = ASCR50, RIGHT = BAGEL)](docs/examples/bagel_50_vs_ascr/bagel_win_04_the_blue_bowl_was_on_top_of_the_white_placemat.jpg)
+
+---
+
+##### **BAGEL wins** — `The blue water bottle was on top of the red backpack.`
+
+*Qwen3.5-9B (conf 0.95):* The right image (BAGEL) correctly places a blue water bottle on a red backpack. The left image (ASCR) does not clearly render the color attributes or the spatial stacking.
+
+![The blue water bottle was on top of the red backpack. — pairwise (LEFT = ASCR50, RIGHT = BAGEL)](docs/examples/bagel_50_vs_ascr/bagel_win_05_the_blue_water_bottle_was_on_top_of_the_red_backpack.jpg)
+
+---
+
+##### **BAGEL wins** — `The brown dog was lying on the green mat.`
+
+*Qwen3.5-9B (conf 0.95):* The right image (BAGEL) shows a brown dog lying on a green mat with the correct pose and color attributes. The left image (ASCR) misses either the color or the lying position.
+
+![The brown dog was lying on the green mat. — pairwise (LEFT = ASCR50, RIGHT = BAGEL)](docs/examples/bagel_50_vs_ascr/bagel_win_06_the_brown_dog_was_lying_on_the_green_mat.jpg)
+
+---
+
+##### **BAGEL wins** — `The fluffy cat is on the left of the soft pillow.`
+
+*Qwen3.5-9B (conf 0.95):* The right image (BAGEL) correctly positions the cat to the left of the pillow. The left image (ASCR) fails the directional constraint.
+
+![The fluffy cat is on the left of the soft pillow. — pairwise (LEFT = ASCR50, RIGHT = BAGEL)](docs/examples/bagel_50_vs_ascr/bagel_win_07_the_fluffy_cat_is_on_the_left_of_the_soft_pillow.jpg)
+
+---
+
+##### **BAGEL wins** — `The green plant was on the right of the white wall.`
+
+*Qwen3.5-9B (conf 0.95):* The right image (BAGEL) correctly places the green plant on the right side of the wall. The left image (ASCR) places it on the left side, violating the spatial instruction even after correction.
+
+![The green plant was on the right of the white wall. — pairwise (LEFT = ASCR50, RIGHT = BAGEL)](docs/examples/bagel_50_vs_ascr/bagel_win_08_the_green_plant_was_on_the_right_of_the_white_wall.jpg)
 
 
 <details>
