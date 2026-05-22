@@ -1145,7 +1145,7 @@ Source: jobs 68810–68818+68832 (ShowO/ASCR, confidence_steps=50), 68762 (BAGEL
 
 *Qwen3.5-9B (conf 0.90):* The right image (ASCR) better satisfies the prompt by correctly rendering a single blue bowl on the floor, whereas the left image (baseline) erroneously includes an extra bowl on the bench with incorrect spatial arrangement.
 
-![a green bench and a blue bowl — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/ascr_win_1_a_green_bench_and_a_blue_bowl.png)
+![a green bench and a blue bowl — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/ascr_win_01_a_green_bench_and_a_blue_bowl.jpg)
 
 ---
 
@@ -1153,7 +1153,7 @@ Source: jobs 68810–68818+68832 (ShowO/ASCR, confidence_steps=50), 68762 (BAGEL
 
 *Qwen3.5-9B (conf 0.90):* The right image (ASCR) correctly generates six distinct airplanes with clear shapes. The left image (baseline) shows fewer aircraft with lower clarity and count fidelity.
 
-![six airplanes — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/ascr_win_2_six_airplanes.png)
+![six airplanes — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/ascr_win_02_six_airplanes.jpg)
 
 ---
 
@@ -1161,7 +1161,7 @@ Source: jobs 68810–68818+68832 (ShowO/ASCR, confidence_steps=50), 68762 (BAGEL
 
 *Qwen3.5-9B (conf 0.95):* The right image (ASCR) correctly identifies the blue cake and the green bench. The left image (baseline) fails to render the cake in the correct color.
 
-![a green bench and a blue cake — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/ascr_win_3_a_green_bench_and_a_blue_cake.png)
+![a green bench and a blue cake — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/ascr_win_03_a_green_bench_and_a_blue_cake.jpg)
 
 ---
 
@@ -1169,7 +1169,7 @@ Source: jobs 68810–68818+68832 (ShowO/ASCR, confidence_steps=50), 68762 (BAGEL
 
 *Qwen3.5-9B (conf 0.95):* The right image (ASCR) correctly places the green plant on the right side of the white wall. The left image (baseline) places the plant on the wrong side, violating the spatial instruction.
 
-![The green plant was on the right of the white wall. — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/ascr_win_4_the_green_plant_was_on_the_right_of_the_white_wall.png)
+![The green plant was on the right of the white wall. — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/ascr_win_04_the_green_plant_was_on_the_right_of_the_white_wall.jpg)
 
 ---
 
@@ -1177,7 +1177,7 @@ Source: jobs 68810–68818+68832 (ShowO/ASCR, confidence_steps=50), 68762 (BAGEL
 
 *Qwen3.5-9B (conf 0.95):* The right image (ASCR) correctly depicts a girl standing behind a cow, satisfying both objects and the spatial relation. The left image (baseline) is missing the girl entirely.
 
-![a girl behind a cow — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/ascr_win_5_a_girl_behind_a_cow.png)
+![a girl behind a cow — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/ascr_win_05_a_girl_behind_a_cow.jpg)
 
 ---
 
@@ -1185,7 +1185,7 @@ Source: jobs 68810–68818+68832 (ShowO/ASCR, confidence_steps=50), 68762 (BAGEL
 
 *Qwen3.5-9B (conf 0.90):* The right image (ASCR) correctly renders both jewelry items with distinct shapes. The left image (baseline) is glitchy and distorted, failing to clearly depict either object.
 
-![a diamond pendant and a round locket — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/ascr_win_6_a_diamond_pendant_and_a_round_locket.png)
+![a diamond pendant and a round locket — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/ascr_win_06_a_diamond_pendant_and_a_round_locket.jpg)
 
 ---
 
@@ -1193,7 +1193,7 @@ Source: jobs 68810–68818+68832 (ShowO/ASCR, confidence_steps=50), 68762 (BAGEL
 
 *Qwen3.5-9B (conf 0.95):* The right image (ASCR) correctly shows both a brown backpack and a blue cow. The left image (baseline) is missing the blue cow entirely, showing only the backpack.
 
-![a brown backpack and a blue cow — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/ascr_win_7_a_brown_backpack_and_a_blue_cow.png)
+![a brown backpack and a blue cow — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/ascr_win_07_a_brown_backpack_and_a_blue_cow.jpg)
 
 ---
 
@@ -1201,7 +1201,7 @@ Source: jobs 68810–68818+68832 (ShowO/ASCR, confidence_steps=50), 68762 (BAGEL
 
 *Qwen3.5-9B (conf 0.95):* The right image (ASCR) correctly depicts a rough brick placed on a smooth tile floor. The left image (baseline) fails to depict the brick, showing only the tile surface.
 
-![The rough brick was on top of the smooth tile. — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/ascr_win_8_the_rough_brick_was_on_top_of_the_smooth_tile.png)
+![The rough brick was on top of the smooth tile. — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/ascr_win_08_the_rough_brick_was_on_top_of_the_smooth_tile.jpg)
 
 ---
 
@@ -1209,7 +1209,7 @@ Source: jobs 68810–68818+68832 (ShowO/ASCR, confidence_steps=50), 68762 (BAGEL
 
 *Qwen3.5-9B (conf 0.90):* The left image (ShowO) correctly depicts an oblong eggplant and a teardrop melon. The right image (ASCR) introduces an unwanted face-like pattern on the melon and misrepresents the slice, causing hallucination artifacts.
 
-![an oblong eggplant and a teardrop melon — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/ascr_loss_1_an_oblong_eggplant_and_a_teardrop_melon.png)
+![an oblong eggplant and a teardrop melon — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/ascr_loss_01_an_oblong_eggplant_and_a_teardrop_melon.jpg)
 
 ---
 
@@ -1217,7 +1217,7 @@ Source: jobs 68810–68818+68832 (ShowO/ASCR, confidence_steps=50), 68762 (BAGEL
 
 *Qwen3.5-9B (conf 0.95):* Both images correctly depict the oblong cucumber and teardrop-shaped plum with comparable quality. No material difference between baseline and ASCR output.
 
-![an oblong cucumber and a teardrop plum — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/tie_1_an_oblong_cucumber_and_a_teardrop_plum.png)
+![an oblong cucumber and a teardrop plum — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/tie_01_an_oblong_cucumber_and_a_teardrop_plum.jpg)
 
 ---
 
@@ -1225,7 +1225,7 @@ Source: jobs 68810–68818+68832 (ShowO/ASCR, confidence_steps=50), 68762 (BAGEL
 
 *Qwen3.5-9B (conf 0.95):* Both images successfully depict a plastic toy and a glass bottle with similar quality and accuracy. The visual output is equivalent between the two models.
 
-![a plastic toy and a glass bottle — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/tie_2_a_plastic_toy_and_a_glass_bottle.png)
+![a plastic toy and a glass bottle — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/tie_02_a_plastic_toy_and_a_glass_bottle.jpg)
 
 ---
 
@@ -1233,7 +1233,7 @@ Source: jobs 68810–68818+68832 (ShowO/ASCR, confidence_steps=50), 68762 (BAGEL
 
 *Qwen3.5-9B (conf 0.95):* Both images correctly generate a giraffe next to a lamp with equivalent quality. ASCR is conservative and preserves the already-correct baseline output.
 
-![a giraffe next to a lamp — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/tie_3_a_giraffe_next_to_a_lamp.png)
+![a giraffe next to a lamp — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/tie_03_a_giraffe_next_to_a_lamp.jpg)
 
 
 ### BAGEL-7B-MoT vs ShowO50 (fair, confidence_steps=50, job 68835)
