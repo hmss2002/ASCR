@@ -992,11 +992,15 @@ with OWLViT detector verdict in each panel header (green = ✓ pass, red = ✗ f
 
 Each canvas: **LEFT = ShowO-1.3B 50-step | CENTRE = ASCR50 | RIGHT = BAGEL-7B-MoT**. Labels show the OWLViT detector verdict (green = ✓ pass, red = ✗ fail). Source: jobs 68794 (ShowO/ASCR), 68762 (BAGEL), 68802 (detector scoring).
 
+> **Image-quality note.** ShowO/ASCR panels are 512×512 from a 1.3 B-param model; BAGEL panels are 1024×1024 from a 7 B-param MoT model. The visible fidelity gap is expected and does not reflect a generation bug. **ASCR is a *semantic* corrector**: it reopens token regions identified as wrong (count / color / missing object) and re-denoises them. It changes *what* is rendered, not how photoreal it looks, so an ASCR-pass image can still look as crude as the ShowO base. The OWLViT verdict scores object/count/color correctness — not aesthetics — and is the standard GenEval protocol used by all reported numbers.
+
 **ASCR corrects ShowO · BAGEL also passes — task: two_object**
 
 *OWLViT: ShowO ✗ → ASCR ✓ · BAGEL ✓. ASCR brings ShowO to BAGEL-level on two-object detection.*
 
 ![GenEval two_object — a toothbrush and a snowboard (3-way 50-step)](docs/examples/geneval_3way/two_object_081_a_toothbrush_and_a_snowboard.jpg)
+
+![GenEval two_object — an oven and a bed (3-way 50-step)](docs/examples/geneval_3way/two_object_105_an_oven_and_a_bed.jpg)
 
 ---
 
@@ -1006,9 +1010,17 @@ Each canvas: **LEFT = ShowO-1.3B 50-step | CENTRE = ASCR50 | RIGHT = BAGEL-7B-Mo
 
 ![GenEval counting — two bears (3-way 50-step)](docs/examples/geneval_3way/counting_184_two_bears.jpg)
 
+![GenEval counting — three pizzas (3-way 50-step)](docs/examples/geneval_3way/counting_240_three_pizzas.jpg)
+
+![GenEval counting — three apples (3-way 50-step)](docs/examples/geneval_3way/counting_205_three_apples.jpg)
+
 ---
 
-![GenEval counting — three pizzas (3-way 50-step)](docs/examples/geneval_3way/counting_240_three_pizzas.jpg)
+**ASCR corrects ShowO · BAGEL also passes — task: position**
+
+*OWLViT: ShowO ✗ → ASCR ✓ · BAGEL ✓. Spatial relation recovered by ASCR's semantic loop.*
+
+![GenEval position — a hair drier left of a toilet (3-way 50-step)](docs/examples/geneval_3way/position_393_a_hair_drier_left_of_a_toilet.jpg)
 
 ---
 
@@ -1026,9 +1038,19 @@ Each canvas: **LEFT = ShowO-1.3B 50-step | CENTRE = ASCR50 | RIGHT = BAGEL-7B-Mo
 
 ![GenEval color_attr — a yellow pizza and a green oven (3-way 50-step)](docs/examples/geneval_3way/color_attr_504_a_yellow_pizza_and_a_green_oven.jpg)
 
----
+> *Detector-protocol note on the example above:* BAGEL renders a **pepperoni** pizza (red-dominant), so OWLViT's color classifier reports `found colors=['orange']` against expected `yellow` — a legitimate strict-color-binding failure, not a labelling bug. ASCR pushes the background to a large green region that OWLViT accepts as "green oven" with a yellow pizza in front; this illustrates how the **bounding-box-major-color** rule can favor large flat regions over photoreal renders. The protocol is identical for all three models so the comparison stays fair.
 
 ![GenEval color_attr — an orange cow and a purple sandwich (3-way 50-step)](docs/examples/geneval_3way/color_attr_544_an_orange_cow_and_a_purple_sandwich.jpg)
+
+---
+
+**Easy tasks — all three pass (single_object, colors)**
+
+*OWLViT: ShowO ✓ · ASCR ✓ · BAGEL ✓. On simple prompts ShowO already passes; ASCR is conservative and leaves it untouched.*
+
+![GenEval single_object — a skateboard (3-way 50-step)](docs/examples/geneval_3way/single_object_016_a_skateboard.jpg)
+
+![GenEval colors — a red backpack (3-way 50-step)](docs/examples/geneval_3way/colors_344_a_red_backpack.jpg)
 
 ---
 
@@ -1038,9 +1060,15 @@ Each canvas: **LEFT = ShowO-1.3B 50-step | CENTRE = ASCR50 | RIGHT = BAGEL-7B-Mo
 
 ![GenEval two_object — a horse and a computer keyboard (3-way 50-step)](docs/examples/geneval_3way/two_object_088_a_horse_and_a_computer_keyboard.jpg)
 
+![GenEval position — a baseball glove below an umbrella (3-way 50-step)](docs/examples/geneval_3way/position_368_a_baseball_glove_below_an_umbrella.jpg)
+
 ---
 
-![GenEval position — a baseball glove below an umbrella (3-way 50-step)](docs/examples/geneval_3way/position_368_a_baseball_glove_below_an_umbrella.jpg)
+**Hardest case — all three fail (color_attr)**
+
+*OWLViT: ShowO ✗ · ASCR ✗ · BAGEL ✗. Color-attribute binding on rare colors (blue pizza, yellow baseball glove) defeats every model; honest negative example.*
+
+![GenEval color_attr — a blue pizza and a yellow baseball glove (3-way 50-step)](docs/examples/geneval_3way/color_attr_552_a_blue_pizza_and_a_yellow_baseball_glove.jpg)
 
 
 ### ASCR vs ShowO Baseline — 50-step (job 68795)
