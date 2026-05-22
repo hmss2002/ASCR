@@ -342,6 +342,8 @@ designed to detect and repair these failures.
 
 ### Evaluation Method 1: Pairwise Side-by-Side Judge
 
+> **Note:** This section describes the **legacy Qwen3.5-9B composite-image judge** (single side-by-side canvas). Actual reported pairwise results use **GPT-5.5 A/B format** (separate image blocks per model, fwd+swap pooled for debiasing). See `scripts/judge_hard64_pairwise_gpt.py` for the current method.
+
 **What it is:** A *relative* comparison — for the same prompt, which of two images better
 follows the prompt description?
 
@@ -456,14 +458,21 @@ ASCR/
 │   ├── stage1_showo_local.yaml                  ← ShO-MMU evaluator config (legacy)
 │   ├── showo_local_512x512.yaml                 ← Show-o model hyperparams
 │   ├── cluster_gpu.yaml / cluster_gpu_shared.yaml      ← Slurm partition templates
-│   ├── prompts/
-│   │   ├── ★ t2i_compbench_hard64.txt           ← PRIMARY benchmark (64 prompts)
-│   │   ├── t2i_compbench_hard_smoke8.txt        ← 8-prompt smoke subset
-│   │   ├── drawbench_all.txt                    ← 200-prompt DrawBench
-│   │   ├── drawbench_smoke8.txt                 ← 8-prompt DrawBench smoke
-│   │   └── stage1_complex_prompts.txt           ← internal dev regression suite
-│   └── experiments/
-│       └── qwen36/                              ← Qwen3.6 full-precision (67 GiB, inactive)
+│   ├── benchmark_data/
+│   │   ├── dpg_bench.csv                        ← DPG-Bench 1065 prompts (VQA format)
+│   │   ├── dsg1k_anns.csv                       ← DSG-1k 1060 prompts (same VQA format)
+│   │   ├── genai_bench.jsonl                    ← GenAI-Bench 1600 prompts
+│   │   └── bench3_index.json                    ← 3725-entry map: item_id → {benchmark, prompt}
+│   └── prompts/
+│       ├── ★ t2i_compbench_hard64.txt           ← PRIMARY benchmark (64 prompts)
+│       ├── t2i_compbench_hard_smoke8.txt        ← 8-prompt smoke subset
+│       ├── drawbench_all.txt                    ← 200-prompt DrawBench
+│       ├── drawbench_smoke8.txt                 ← 8-prompt DrawBench smoke
+│       ├── stage1_complex_prompts.txt           ← internal dev regression suite
+│       ├── dpg_bench_1065.txt                   ← DPG-Bench prompts (bench3 expansion)
+│       ├── dsg1k_1060.txt                       ← DSG-1k prompts (bench3 expansion)
+│       ├── genai_bench_1600.txt                 ← GenAI-Bench prompts (bench3 expansion)
+│       └── bench3_combined.txt                  ← all 3725 bench3 prompts combined
 │
 ├── ascr/                                        ← Python package
 │   ├── cli/
@@ -540,12 +549,17 @@ ASCR/
 │   ├── download_owlvit_model.py                 ← OWLViT model download helper
 │   ├── download_detr_model.py                   ← DETR model download helper
 │   ├── submit_geneval_scoring_after_68794.sh    ← submit 3 scoring jobs after gen
-│   ├── run_stage1_debug.sh                      ← mock dry-run (no GPU needed)
-│   ├── run_showo_t2i_local.sh                   ← Show-o T2I subprocess (fallback path)
-│   ├── run_showo_inpaint_local.sh               ← Show-o inpaint subprocess (fallback)
+│   ├── judge_hard64_pairwise_gpt.py             ← GPT-5.5 A/B pairwise judge (Hard64)
+│   ├── prepare_bench_data.py                    ← download & index DPG/GenAI/DSG bench3 data
+│   ├── submit_bench_gen.sh                      ← submit ShowO+ASCR bench3 generation shards
+│   ├── submit_bench_bagel_shards.sh             ← submit BAGEL bench3 generation shards
+│   ├── submit_bench_showo_remaining.sh          ← submit remaining ShowO slices (5–7) + merge
+│   ├── submit_bench_bagel_remaining.sh          ← submit remaining BAGEL shards
+│   ├── build_bench_image_map.py                 ← build image_map.json for all 3 models
+│   ├── eval_csv_vqa_gpt.py                      ← GPT-5.5 VQA evaluator (DPG-Bench + DSG-1k)
+│   ├── eval_genai_gpt.py                        ← GPT-5.5 binary VQA evaluator (GenAI-Bench)
+│   ├── summarize_bench3.py                      ← 3-way comparison table across all benchmarks
 │   ├── download_showo.sh / download_showo_models.py  ← Show-o model download
-│   ├── download_qwen35_9b_snapshot.sh           ← Qwen3.5-9B snapshot download
-│   ├── download_qwen36_snapshot.sh              ← Qwen3.6 snapshot (inactive; 67 GiB)
 │   ├── sync_github.sh                           ← git add/commit/push helper
 │   └── create_env.sh / activate_env.sh          ← environment setup
 │
@@ -568,11 +582,11 @@ ASCR/
 │   │                                               judge (BAGEL vs ShowO50 vs ASCR50)
 │   ├── stage1_geneval_evaluate.sbatch           ← DEPRECATED: pairwise; use score_single
 │   ├── stage1_hard64_bagel_3way_judge.sbatch    ← DEPRECATED: 1-GPU; use *_sharded
-│   ├── stage2_train_selector_gpu.sbatch         ← Stage 2 placeholder
-│   ├── archived/                                ← legacy ShO-MMU evaluator jobs
-│   │                                               (superseded by Qwen3.5-9B path)
-│   └── experiments/
-│       └── qwen36/                              ← Qwen3.6 full-precision experiment jobs
+│   ├── ★ geneval_gen_shard.sbatch               ← bench3 ShowO+ASCR generation shard
+│   │                                               (8-GPU, arbitrary prompt file + range)
+│   ├── bench_bagel_gen_shard.sbatch             ← bench3 BAGEL generation shard
+│   │                                               (1-GPU gpu_shared, --offset/--limit)
+│   └── stage2_train_selector_gpu.sbatch         ← Stage 2 placeholder
 │
 ├── tests/
 │   ├── test_grid_projection.py                  ← 4×4→32×32 projection + dilation
@@ -958,8 +972,6 @@ Outputs go to `outputs/geneval_showo_ascr_<jobid>_<timestamp>/` with `geneval_ba
 and `geneval_ascr/` subdirectories ready for `scripts/evaluate_geneval_owlvit.py`
 (see `jobs/stage1_geneval_score_single.sbatch` for the scoring step).
 
-Legacy ShO-MMU evaluator jobs are preserved under `jobs/archived/`.
-
 ## Stage 1 Acceptance Criteria
 
 Stage 1 is considered complete when all of the following are true:
@@ -972,7 +984,7 @@ Stage 1 is considered complete when all of the following are true:
 - Fixed one-token dilation is implemented and tested.
 - Each run saves decoded images, grid images, evaluator JSON, selected masks, prompts, configs, and trace JSONL.
 - A small benchmark subset can compare ASCR with core baselines.
-- Slurm scripts support the `gpu` partition (legacy `gpu_shared` support preserved under `jobs/archived/`).
+- Slurm scripts support the `gpu` partition (and `gpu_shared` for single-GPU shard jobs).
 - README documents how to reproduce the latest working run.
 
 ## Open Decisions
@@ -994,8 +1006,10 @@ Keep Stage 1 simple enough to prove the mechanism, but structure it so Stage 2 a
 - **GenEval 3-way panels（三列对比图）：** `LEFT = ShowO-1.3B 50步` | `CENTRE = ASCR50` | `RIGHT = BAGEL-7B-MoT`。每列顶部标题为绿色（✓ 通过）或红色（✗ 失败），由 OWLViT 检测器判断。
   **Three-column comparison**: LEFT = ShowO baseline, CENTRE = ASCR, RIGHT = BAGEL. Header color = OWLViT pass/fail verdict.
 
-- **Pairwise 对比图（两列对比图）：** `LEFT = ShowO50` vs `RIGHT = ASCR50`，或 `LEFT = ShowO50` vs `RIGHT = BAGEL-7B-MoT`。由 Qwen3.5-9B 判断哪边更满足 prompt。
-  **Side-by-side comparison**: LEFT vs RIGHT, judged by Qwen3.5-9B.
+- **Pairwise 对比图（两列对比图）：** `LEFT = ShowO50` vs `RIGHT = ASCR50`，或 `LEFT = ShowO50`/`ASCR50` vs `RIGHT = BAGEL-7B-MoT`。
+  - **ASCR vs ShowO 对比**：由 Qwen3.5-9B 判断（`scripts/judge_showo_ascr_pairs_qwen.py`）。
+  - **BAGEL 相关对比**：由 **GPT-5.5 A/B 格式**判断（独立图像块，fwd+swap 双向去偏），见 `scripts/judge_hard64_pairwise_gpt.py`。
+  **Side-by-side comparison**: LEFT vs RIGHT. ASCR-vs-ShowO judged by Qwen3.5-9B; BAGEL comparisons judged by GPT-5.5 with fwd+swap debiasing.
 
 - **画质说明：** ShowO/ASCR 均为 512×512 的 1.3B 小模型输出；BAGEL 为 1024×1024 的 7B 大模型输出。画质差距来自模型规模，与 ASCR 纠错效果无关。
   **Quality note**: ShowO/ASCR = 512×512 from a 1.3B model; BAGEL = 1024×1024 from a 7B model. The fidelity gap reflects model scale, not ASCR effectiveness.
@@ -1767,6 +1781,12 @@ GPT-5.5 debiased (fwd+swap): **ASCR 51.7 %** (15/29 decisive) ⭐ — ASCR edges
 
 > **All 64 prompts** • LEFT = ASCR50 (fair), RIGHT = BAGEL-7B-MoT.
 
+> ⚠️ **Qwen 位置偏差说明 / Position-bias warning:**  
+> Qwen3.5-9B 在此次评测中表现出严重右侧偏好（63/64 判 BAGEL 胜），但其**文字描述**常与判决矛盾——许多条目的 reason 明确指出左侧（ASCR）更好地满足了 prompt。  
+> **这正是已知的右侧位置偏差（right-position bias）的典型表现**：Qwen 在 fwd 方向几乎无论质量好坏都倾向于选右侧图片。  
+> 可信结论来自 GPT-5.5 去偏评测（fwd+swap 双向）：**ASCR 51.7% (15/29 decisive)** ⭐。  
+> 本展示中图片归档按 Qwen raw verdict 分类，仅供参考；请勿将条目说明中的 "BAGEL wins" 标签视为实际质量判断。
+
 <details><summary><b>BAGEL wins</b> (63)</summary>
 
 **`The black chair is on top of the blue rug.`** *(conf 0.95)*  
@@ -2200,12 +2220,12 @@ The right image (BAGEL) perfectly satisfies the prompt by placing a full horse o
 <img src="docs/examples/bagel_50_vs_showo/bagel_win_18_a_desk_on_the_right_of_a_horse.jpg" width="700" alt="a desk on the right of a horse">
 
 **`a diamond pendant and a round locket`** *(conf 0.90)*  
-The right image (ascr) is a superior interpretation of the prompt, featuring a highly detailed, realistic locket with a glowing diamond, whereas the left image (baseline) is a generic, low-detail product shot that fails to capture the specific 'round locket' aesthetic or the dramatic lighting implied by the prompt.
+The right image (BAGEL-7B-MoT) is a superior interpretation of the prompt, featuring a highly detailed, realistic locket with a glowing diamond, whereas the left image (ShowO-1.3B) is a generic, low-detail product shot that fails to capture the specific 'round locket' aesthetic or the dramatic lighting implied by the prompt.
 
 <img src="docs/examples/bagel_50_vs_showo/bagel_win_19_a_diamond_pendant_and_a_round_locket.jpg" width="700" alt="a diamond pendant and a round locket">
 
 **`a dog in front of a desk`** *(conf 0.95)*  
-The right image (ascr) is a superior execution of the prompt 'a dog in front of a desk'. It features a high-quality, photorealistic dog positioned directly in front of a desk, with its paws resting on the surface, perfectly matching the spatial description. The lighting and texture are excellent. The left image (baseline) is significantly lower quality, appearing blurry and pixelated, with a dog that looks more like a cartoon or low-res render. While the dog is also in front of a desk, the overa
+The right image (BAGEL-7B-MoT) is a superior execution of the prompt 'a dog in front of a desk'. It features a high-quality, photorealistic dog positioned directly in front of a desk, with its paws resting on the surface, perfectly matching the spatial description. The lighting and texture are excellent. The left image (ShowO-1.3B) is significantly lower quality, appearing blurry and pixelated, with a dog that looks more like a cartoon or low-res render. While the dog is also in front of a desk, the overa
 
 <img src="docs/examples/bagel_50_vs_showo/bagel_win_20_a_dog_in_front_of_a_desk.jpg" width="700" alt="a dog in front of a desk">
 
