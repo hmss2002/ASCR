@@ -823,7 +823,7 @@ Acceptance:
 
 ### S1.8 Benchmark and Baselines
 
-Status: completed. Native Show-o-vs-ASCR comparison CLI completed. 50-step GenEval 553-prompt detector scoring (jobs 68794 + 68802) and T2I-CompBench hard64 pairwise + clean-pass/fail judging (jobs 68795 + 68800 + 68801) also completed. Results in the [Stage 1 Benchmark Summary](#stage-1-benchmark-summary--three-way-comparison-50-step-debiased-2026-05-22) section.
+Status: completed. Native Show-o-vs-ASCR comparison CLI completed. 50-step GenEval 553-prompt detector scoring (jobs 68794 + 68802) and T2I-CompBench hard64 pairwise + clean-pass/fail judging (jobs 68795 + 68800 + 68801) also completed. Results in the [Results Summary](#结果摘要--results-summary) section.
 
 Tasks:
 
@@ -1246,6 +1246,7 @@ Source: jobs 68810–68818+68832 (ShowO/ASCR, confidence_steps=50), 68762 (BAGEL
 
 <img src="docs/examples/showo_50/tie_03_a_giraffe_next_to_a_lamp.jpg" width="700" alt="a giraffe next to a lamp — pairwise (LEFT = ShowO50, RIGHT = ASCR50)">
 
+---
 
 ### BAGEL-7B-MoT vs ShowO50 (fair, confidence_steps=50, GPT-5.5 debiased)
 
@@ -1400,7 +1401,7 @@ Source: jobs 68810–68818+68832 (ShowO/ASCR, confidence_steps=50), 68762 (BAGEL
 
 ### BAGEL-7B-MoT vs ASCR50 — Showcase（GPT-5.5 双向去偏后 **ASCR 51.7%** ⭐）
 
-ASCR50 以 51.7%（15/29 决定性样本）略胜 BAGEL-7B-MoT。以下展示 BAGEL 赢的典型案例与 ASCR 赢的案例，两者均有呈现。
+ASCR50 以 51.7%（15/29 决定性样本）略胜 BAGEL-7B-MoT。以下展示 **Qwen 标注为 BAGEL 赢**的 8 个典型案例（Qwen 存在右侧位置偏好，请参见下方偏差说明）。GPT-5.5 去偏后的实际结论是 **ASCR 51.7% 胜出**（见下方 Key surprise 说明），ASCR 赢的案例可在完整图库中查阅。
 
 > **⭐ 关键惊喜**：GPT-5.5 独立评测显示，ASCR50（ShowO-1.3B + 零训练纠错循环）在 Hard64 直接对比中微胜 BAGEL-7B-MoT（7B 参数量）。与 Qwen 结果（BAGEL 61.1%）相反，这证实了 ASCR 算法能够有效弥补模型规模差距。
 >
@@ -2347,7 +2348,7 @@ The baseline image (left) strictly adheres to the prompt's spatial instruction, 
 <img src="docs/examples/bagel_50_vs_showo/showo_win_03_the_blue_bowl_was_on_top_of_the_white_placemat.jpg" width="700" alt="The blue bowl was on top of the white placemat.">
 
 **`The green plant was on the right of the white wall.`** *(conf 0.95)*  
-The prompt specifies the plant is on the right of the white wall. The baseline image (right) features a white wall with a plant positioned on the right side, perfectly matching the prompt. The ascr image (left) features a blue wall with a plant on the right, failing the color attribute.
+The prompt specifies the plant is on the right of the white wall. The ShowO image (left) features a white wall with a plant positioned on the right side, perfectly matching the prompt. The BAGEL image (right) features a blue wall with a plant on the right, failing the color attribute.
 
 <img src="docs/examples/bagel_50_vs_showo/showo_win_04_the_green_plant_was_on_the_right_of_the_white_wall.jpg" width="700" alt="The green plant was on the right of the white wall.">
 
@@ -2357,7 +2358,7 @@ The baseline image (left) strictly adheres to the prompt's spatial instruction, 
 <img src="docs/examples/bagel_50_vs_showo/showo_win_05_the_rectangular_mirror_was_hung_above_the_white_sink.jpg" width="700" alt="The rectangular mirror was hung above the white sink.">
 
 **`The rectangular picture frame was hung above the beige couch.`** *(conf 0.90)*  
-The baseline image (right) correctly depicts a rectangular picture frame hung above a beige couch, matching the prompt's spatial and object requirements. The ascr image (left) shows a frame above a couch, but the couch is grey, not beige, and the frame is suspended by wires rather than hung directly on the wall, deviating from the implied 'hung' action.
+The ShowO image (left) correctly depicts a rectangular picture frame hung above a beige couch, matching the prompt's spatial and object requirements. The BAGEL image (right) shows a frame above a couch, but the couch is grey, not beige, and the frame is suspended by wires rather than hung directly on the wall, deviating from the implied 'hung' action.
 
 <img src="docs/examples/bagel_50_vs_showo/showo_win_06_the_rectangular_picture_frame_was_hung_above_the_beige.jpg" width="700" alt="The rectangular picture frame was hung above the beige couch.">
 
@@ -2372,7 +2373,7 @@ The baseline image (left) correctly depicts a red hat resting on top of a brown 
 <img src="docs/examples/bagel_50_vs_showo/showo_win_08_the_red_hat_was_on_top_of_the_brown_coat_rack.jpg" width="700" alt="The red hat was on top of the brown coat rack.">
 
 **`a balloon on the right of a person`** *(conf 0.90)*  
-The baseline image (right) perfectly matches the prompt with a person standing in a field and a large red balloon floating to their right. The ascr image (left) fails to include a person, showing only a silhouette on the far left edge, and the balloon is yellow rather than red.
+The ShowO image (left) perfectly matches the prompt with a person standing in a field and a large red balloon floating to their right. The BAGEL image (right) fails to include a person, showing only a silhouette on the far left edge, and the balloon is yellow rather than red.
 
 <img src="docs/examples/bagel_50_vs_showo/showo_win_09_a_balloon_on_the_right_of_a_person.jpg" width="700" alt="a balloon on the right of a person">
 
@@ -2442,12 +2443,12 @@ The prompt 'one turtle' is satisfied by both images. The baseline image (left) f
 <img src="docs/examples/bagel_50_vs_showo/showo_win_22_one_turtle.jpg" width="700" alt="one turtle">
 
 **`rubber sole shoes and fluffy clouds`** *(conf 0.90)*  
-The baseline image (right) is a superior composition that fully satisfies the prompt. It features a pair of beige shoes with rubber soles floating in a sky filled with fluffy clouds, creating a cohesive and surreal scene. The ascr image (left) is a disjointed collage containing a single shoe sole, a large cloud, and a blank white space, failing to form a coherent image or fully represent the prompt's elements.
+The ShowO image (left) is a superior composition that fully satisfies the prompt. It features a pair of beige shoes with rubber soles floating in a sky filled with fluffy clouds, creating a cohesive and surreal scene. The BAGEL image (right) is a disjointed collage containing a single shoe sole, a large cloud, and a blank white space, failing to form a coherent image or fully represent the prompt's elements.
 
 <img src="docs/examples/bagel_50_vs_showo/showo_win_23_rubber_sole_shoes_and_fluffy_clouds.jpg" width="700" alt="rubber sole shoes and fluffy clouds">
 
 **`two rabbits`** *(conf 0.90)*  
-The prompt 'two rabbits' is satisfied by both images. The baseline (left) features two grey rabbits, while the ascr (right) features two white rabbits. Both images depict two rabbits clearly. The baseline image has a more distinct separation between the subjects and a cleaner composition, whereas the ascr image has slightly more cluttered whiskers and a less defined background. The baseline is slightly better due to cleaner rendering and clearer subject separation.
+The prompt 'two rabbits' is satisfied by both images. The baseline (left) features two grey rabbits, while the BAGEL image (right) features two white rabbits. Both images depict two rabbits clearly. The baseline image has a more distinct separation between the subjects and a cleaner composition, whereas the BAGEL image has slightly more cluttered whiskers and a less defined background. The baseline is slightly better due to cleaner rendering and clearer subject separation.
 
 <img src="docs/examples/bagel_50_vs_showo/showo_win_24_two_rabbits.jpg" width="700" alt="two rabbits">
 
