@@ -48,7 +48,8 @@ fi
 NODE_RUN_ROOT="${ARRAY_RUN_ROOT}/node_${SLURM_JOB_ID}"
 export RUN_ROOT="$NODE_RUN_ROOT"
 export PROMPTS_FILE="$SHARD_PROMPTS_FILE"
-unset PROMPT_LIMIT
+# Set PROMPT_LIMIT to total lines in the shard file so all prompts are processed
+export PROMPT_LIMIT=$(wc -l < "$SHARD_PROMPTS_FILE")
 
 echo "[geneval-shard] SLURM_JOB_ID=$SLURM_JOB_ID"
 echo "[geneval-shard] PROMPTS_FILE=$SHARD_PROMPTS_FILE ($(wc -l < "$SHARD_PROMPTS_FILE") prompts)"
