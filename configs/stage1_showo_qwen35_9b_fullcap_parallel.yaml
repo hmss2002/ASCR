@@ -1,7 +1,7 @@
 stage: 1
 run_name: stage1_showo_qwen35_9b_fullcap_parallel
 seed: 1234
-max_iterations: 8
+max_iterations: 3
 ascr_start_mode: baseline
 return_initial_on_max_error: true
 image_size: 512
@@ -22,7 +22,7 @@ generator:
   generation_timesteps: 50
   seed: 1234
   native_token_loop: true
-  confidence_steps: 3
+  confidence_steps: 50
 
 evaluator:
   name: qwen_vl
