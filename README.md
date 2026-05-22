@@ -104,6 +104,20 @@ Cluster constraints (HKU HPC `gpu` partition): max 28 GPUs/user, <=2 nodes/job, 
 
 **Evaluation 2: GenEval (553 prompts)** — 6 subtasks (single-object, two-object, counting, colors, position, color\_attr), scored with OWLViT object detectors, **fully independent of Qwen**. This is the cleanest evaluation.
 
+> 🚧 **评测扩展进行中 / Evaluation Expansion In Progress**
+>
+> 为提供更全面、更广覆盖的评测证据，我们正在对以下三个 benchmark 进行评测（图片生成作业已提交，GPT-5.5 评测待图片生成完成后运行）：
+>
+> To provide broader and more reliable evidence, we are currently evaluating all three models on three additional benchmarks (image generation jobs submitted; GPT-5.5 scoring to follow):
+>
+> | Benchmark | Prompts | 评测方式 / Method | 状态 / Status |
+> |---|---:|---|---|
+> | **DPG-Bench** | 1065 | GPT-5.5 VQA per-question + dependency graph | 🔄 图片生成中 / generating |
+> | **GenAI-Bench** | 1600 | GPT-5.5 binary VQA | 🔄 图片生成中 / generating |
+> | **DSG-1k** | 1060 | GPT-5.5 VQA per-question + dependency graph | 🔄 图片生成中 / generating |
+>
+> 结果将在评测完成后更新至此。Results will be added here once evaluation completes.
+
 ---
 
 ### 主要发现 / Key Findings
