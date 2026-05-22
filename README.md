@@ -26,7 +26,7 @@ Action items:
 - [x] **68802** GenEval detector scoring for ShowO50 + ASCR50 - COMPLETED in 00:01:45, exit `0:0`.
 - [x] Build 3-way GenEval summary with ShowO50 + ASCR50 + BAGEL and update this README with verified 50-step numbers.
 - [x] Close the proposed 50-step GenEval Qwen pairwise diagnostic for now: the detector-based GenEval result is evaluator-independent and is the stronger ASCR-vs-ShowO evidence.
-- [ ] Delete legacy 18-step outputs `outputs/geneval_showo_ascr_68753_*/` (~3.3 GB) after confirming no archived artifacts are still needed.
+- [x] Delete legacy 18-step outputs `outputs/geneval_showo_ascr_68753_*/` (~3.3 GB) — **DELETED 2026-05-22.**
 
 Job inventory snapshot (2026-05-22, post-run):
 
@@ -106,6 +106,130 @@ color-attribute binding; this is expected because BAGEL is a larger dedicated T2
 malformed rows, no missing `correct` field, and the scoring logs contain no `error`, `traceback`,
 `exception`, `nan`, or `inf`. Failure reasons are normal detector outcomes such as missing
 objects, wrong counts, wrong colors, inverted spatial relations, and failed attribute binding.
+
+## Stage 1 Benchmark Summary — Three-Way Comparison (50-step, Debiased, 2026-05-22)
+
+All pairwise hard64 runs use **bidirectional judging** (fwd + swap, 64 prompts each direction)
+to cancel Qwen3.5-9B's confirmed RIGHT-side position preference. GenEval uses detector-based
+OWLViT scoring and is independent of Qwen.
+
+**Performance ordering:**
+
+> **GenEval:** BAGEL-7B-MoT > ASCR50 > ShowO50<br>
+> **Hard64 pairwise:** BAGEL-7B-MoT >> ASCR50 ~= ShowO50<br>
+> **Hard64 clean pass/fail:** ASCR50 > BAGEL-7B-MoT > ShowO50
+
+BAGEL is a 7B dedicated T2I model - the GenEval and pairwise gap reflects model scale, not a
+failure of the correction loop. ASCR's advantage over ShowO is clearest in detector-based
+GenEval (+7.95 pp official task-average score) and clean pass/fail (+6.3 pp); pairwise comparison
+between ASCR and ShowO is unreliable due to extreme position bias.
+
+### Debiased Pairwise Win/Loss Summary (50-step)
+
+| Comparison | Winner | Debiased Wins | Debiased Losses | Total Non-Tie | Win Rate |
+| --- | --- | ---: | ---: | ---: | ---: |
+| **BAGEL-7B-MoT vs ShowO50** | **BAGEL** | **80** | 48 | 128 | **62.5 %** |
+| **BAGEL-7B-MoT vs ASCR50** | **BAGEL** | **101** | 27 | 128 | **78.9 %** |
+| **ASCR50 vs ShowO50** | ⚠ inconclusive | - | - | - | - |
+
+> ShowO vs ASCR debiased breakdown: fwd (ASCR RIGHT) ASCR 37 / ShowO 1 / Tie 26;
+> swap (ShowO RIGHT) ShowO 52 / ASCR 0 / Tie 12. RIGHT side wins >= 90 % of non-ties in both
+> directions - position bias larger than quality signal; numbers not interpretable.
+
+### Clean Pass/Fail Summary (50-step, Qwen independent per-image)
+
+| Model | Pass | Fail | Rate |
+| --- | ---: | ---: | ---: |
+| **ASCR50** | **57** | 7 | **89.1 %** |
+| BAGEL-7B-MoT | 54 | 10 | 84.4 % |
+| ShowO50 baseline | 53 | 11 | 82.8 % |
+
+### GenEval Detector Summary (50-step, 553 prompts)
+
+| Task | N | ShowO50 | ASCR50 | BAGEL-7B-MoT | ASCR - ShowO |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| single_object | 80 | 100.00% | 100.00% | 100.00% | +0.00 |
+| two_object | 99 | 65.66% | 79.80% | 96.97% | +14.14 |
+| counting | 80 | 40.00% | 47.50% | 68.75% | +7.50 |
+| colors | 94 | 74.47% | 75.53% | 70.21% | +1.06 |
+| position | 100 | 35.00% | 50.00% | 58.00% | +15.00 |
+| color_attr | 100 | 9.00% | 19.00% | 51.00% | +10.00 |
+| **Official task-avg score** | **553** | **54.02%** | **61.97%** | **74.15%** | **+7.95** |
+| Raw prompt/image accuracy | 553 | 52.62% | 60.94% | 73.42% | +8.32 |
+
+### Key Takeaways
+
+- **BAGEL-7B-MoT is the strongest model overall**, beating ShowO50 and ASCR50 in debiased
+  hard64 pairwise comparisons and in GenEval official task-average score. This reflects model
+  scale (7B dedicated T2I vs 1.3B ShowO + loop), not a surprising result.
+- **ASCR50 consistently improves over ShowO50** on independent detector-based GenEval (+7.95 pp
+  official score; +8.32 pp raw prompt/image accuracy) and Qwen clean pass/fail (+6.3 pp).
+- **The main ASCR gains are compositional:** two-object (+14.14 pp), position (+15.00 pp),
+  color-attribute binding (+10.00 pp), and counting (+7.50 pp).
+- **Pairwise ShowO vs ASCR cannot be resolved by Qwen:** Extreme RIGHT-side position bias
+  (>= 90 % right-side win rate regardless of model) overwhelms any quality signal. Do not
+  interpret the raw pairwise counts as evidence of model quality in either direction.
+- **50-step vs 18-step:** Debiased BAGEL vs ASCR numbers are identical at both step counts
+  (BAGEL 78.9 % both runs), suggesting more diffusion steps do not close the ASCR-BAGEL gap.
+- **Evaluator circularity:** Qwen3.5-9B is the ASCR loop's semantic feedback provider and the
+  judge for all hard64 evaluations. The GenEval run uses OWLViT detectors and is circularity-free;
+  it independently confirms ASCR improves over ShowO.
+
+## 2026-05-22 GenEval — Independent Full 553-Prompt Evaluation (50-step)
+
+This run evaluates the full GenEval 553-prompt suite for ShowO50 baseline, ASCR50, and
+BAGEL-7B-MoT using a non-Qwen, object-detection-based scorer. It is the cleanest evaluator-
+independent evidence for ASCR vs ShowO because it does not use the Qwen model that provides
+ASCR's semantic feedback.
+
+**Protocol:**
+
+- ShowO50/ASCR50 images: `outputs/geneval_showo_ascr_68794_20260522_042410/`.
+- BAGEL images: `outputs/geneval_bagel_68762_20260521_175812/geneval_bagel/`.
+- Evaluator: `scripts/evaluate_geneval_owlvit.py` with local `models/owlvit-base-patch32`.
+- ShowO50/ASCR50 scoring job: 68802, 8 GPU shards, completed in 00:01:45.
+- BAGEL scoring job: 68792, completed successfully.
+- Output files: `outputs/geneval_showo_ascr_68794_20260522_042410/results_baseline.jsonl`,
+  `outputs/geneval_showo_ascr_68794_20260522_042410/results_ascr.jsonl`, and
+  `outputs/geneval_showo_ascr_68784_20260521_224813/scores/BAGEL.jsonl`.
+- Generated 3-way summary: `outputs/geneval_showo_ascr_68794_20260522_042410/geneval_3way_summary.md`.
+
+**Evaluator fixes used for the final score:**
+
+- HSV pixel-histogram color classifier for color-attribute binding, replacing unreliable
+  OWLViT/CLIP pooler color similarities.
+- Per-class NMS at IoU 0.5 to remove duplicate overlapping detections.
+- Tag-aware detection threshold: default `--threshold 0.01` for recall-sensitive tasks, plus
+  `--counting-threshold 0.15` for counting to suppress low-confidence false positives.
+
+**Results:**
+
+| Task | N | ShowO50 | ASCR50 | BAGEL-7B-MoT | ASCR - ShowO |
+|---|---:|---:|---:|---:|---:|
+| single_object | 80 | 100.00% (80 / 80) | 100.00% (80 / 80) | 100.00% (80 / 80) | +0.00 |
+| two_object | 99 | 65.66% (65 / 99) | 79.80% (79 / 99) | 96.97% (96 / 99) | +14.14 |
+| counting | 80 | 40.00% (32 / 80) | 47.50% (38 / 80) | 68.75% (55 / 80) | +7.50 |
+| colors | 94 | 74.47% (70 / 94) | 75.53% (71 / 94) | 70.21% (66 / 94) | +1.06 |
+| position | 100 | 35.00% (35 / 100) | 50.00% (50 / 100) | 58.00% (58 / 100) | +15.00 |
+| color_attr | 100 | 9.00% (9 / 100) | 19.00% (19 / 100) | 51.00% (51 / 100) | +10.00 |
+| **Official task-avg score** | **553** | **54.02%** | **61.97%** | **74.15%** | **+7.95** |
+| Raw prompt/image accuracy | 553 | 52.62% (291 / 553) | 60.94% (337 / 553) | 73.42% (406 / 553) | +8.32 |
+
+**Sanity checks:**
+
+- All three result files contain exactly 553 records, matching the GenEval prompt count.
+- JSONL parsing is clean: no malformed rows and no missing `correct` fields.
+- Scoring logs show no `error`, `traceback`, `exception`, `nan`, `inf`, or similar failure signal.
+- Failure reasons are ordinary detector outcomes: missing objects, wrong counts, wrong colors,
+  inverted spatial relations, or incorrect color-attribute binding.
+
+**Interpretation:**
+
+The 50-step GenEval run confirms the same direction as the Qwen hard64 comparisons: ASCR
+substantially improves compositional prompt following over the ShowO50 baseline. The largest
+improvements are in two-object composition, spatial position, color-attribute binding, and
+counting. BAGEL remains ahead overall, especially on two-object and color-attribute tasks,
+which is consistent with its larger dedicated T2I model scale.
 
 ## Source Documents
 
@@ -530,6 +654,9 @@ outputs/<run-name>/
 > **Key rule:** `baseline_showo.png` and `final_decoded_image.png` are the only files used as
 > judge inputs. Grid overlay images (`grid.png`) are diagnostic artifacts for localization and
 > must never be used as benchmark images.
+<details>
+<summary><strong>Stage 1 Implementation Plan</strong> — development task tracking (S1.0–S1.10)</summary>
+
 ## Stage 1 Implementation Plan
 
 ### S1.0 Repository Bootstrap
@@ -717,6 +844,8 @@ Acceptance:
 
 - A future reader can reproduce what was run from the artifact folder alone.
 
+</details>
+
 ## Environment Policy
 
 This project must use dedicated virtual environments to avoid disturbing the server base
@@ -836,130 +965,6 @@ These decisions are not blocking the repository bootstrap:
 ## Design Rule
 
 Keep Stage 1 simple enough to prove the mechanism, but structure it so Stage 2 and Stage 3 do not require rewriting the project. The grid and JSON interface are implementation devices for the first prototype, not the final scientific claim.
-
-## Stage 1 Benchmark Summary — Three-Way Comparison (50-step, Debiased, 2026-05-22)
-
-All pairwise hard64 runs use **bidirectional judging** (fwd + swap, 64 prompts each direction)
-to cancel Qwen3.5-9B's confirmed RIGHT-side position preference. GenEval uses detector-based
-OWLViT scoring and is independent of Qwen.
-
-**Performance ordering:**
-
-> **GenEval:** BAGEL-7B-MoT > ASCR50 > ShowO50<br>
-> **Hard64 pairwise:** BAGEL-7B-MoT >> ASCR50 ~= ShowO50<br>
-> **Hard64 clean pass/fail:** ASCR50 > BAGEL-7B-MoT > ShowO50
-
-BAGEL is a 7B dedicated T2I model - the GenEval and pairwise gap reflects model scale, not a
-failure of the correction loop. ASCR's advantage over ShowO is clearest in detector-based
-GenEval (+7.95 pp official task-average score) and clean pass/fail (+6.3 pp); pairwise comparison
-between ASCR and ShowO is unreliable due to extreme position bias.
-
-### Debiased Pairwise Win/Loss Summary (50-step)
-
-| Comparison | Winner | Debiased Wins | Debiased Losses | Total Non-Tie | Win Rate |
-| --- | --- | ---: | ---: | ---: | ---: |
-| **BAGEL-7B-MoT vs ShowO50** | **BAGEL** | **80** | 48 | 128 | **62.5 %** |
-| **BAGEL-7B-MoT vs ASCR50** | **BAGEL** | **101** | 27 | 128 | **78.9 %** |
-| **ASCR50 vs ShowO50** | ⚠ inconclusive | - | - | - | - |
-
-> ShowO vs ASCR debiased breakdown: fwd (ASCR RIGHT) ASCR 37 / ShowO 1 / Tie 26;
-> swap (ShowO RIGHT) ShowO 52 / ASCR 0 / Tie 12. RIGHT side wins >= 90 % of non-ties in both
-> directions - position bias larger than quality signal; numbers not interpretable.
-
-### Clean Pass/Fail Summary (50-step, Qwen independent per-image)
-
-| Model | Pass | Fail | Rate |
-| --- | ---: | ---: | ---: |
-| **ASCR50** | **57** | 7 | **89.1 %** |
-| BAGEL-7B-MoT | 54 | 10 | 84.4 % |
-| ShowO50 baseline | 53 | 11 | 82.8 % |
-
-### GenEval Detector Summary (50-step, 553 prompts)
-
-| Task | N | ShowO50 | ASCR50 | BAGEL-7B-MoT | ASCR - ShowO |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| single_object | 80 | 100.00% | 100.00% | 100.00% | +0.00 |
-| two_object | 99 | 65.66% | 79.80% | 96.97% | +14.14 |
-| counting | 80 | 40.00% | 47.50% | 68.75% | +7.50 |
-| colors | 94 | 74.47% | 75.53% | 70.21% | +1.06 |
-| position | 100 | 35.00% | 50.00% | 58.00% | +15.00 |
-| color_attr | 100 | 9.00% | 19.00% | 51.00% | +10.00 |
-| **Official task-avg score** | **553** | **54.02%** | **61.97%** | **74.15%** | **+7.95** |
-| Raw prompt/image accuracy | 553 | 52.62% | 60.94% | 73.42% | +8.32 |
-
-### Key Takeaways
-
-- **BAGEL-7B-MoT is the strongest model overall**, beating ShowO50 and ASCR50 in debiased
-  hard64 pairwise comparisons and in GenEval official task-average score. This reflects model
-  scale (7B dedicated T2I vs 1.3B ShowO + loop), not a surprising result.
-- **ASCR50 consistently improves over ShowO50** on independent detector-based GenEval (+7.95 pp
-  official score; +8.32 pp raw prompt/image accuracy) and Qwen clean pass/fail (+6.3 pp).
-- **The main ASCR gains are compositional:** two-object (+14.14 pp), position (+15.00 pp),
-  color-attribute binding (+10.00 pp), and counting (+7.50 pp).
-- **Pairwise ShowO vs ASCR cannot be resolved by Qwen:** Extreme RIGHT-side position bias
-  (>= 90 % right-side win rate regardless of model) overwhelms any quality signal. Do not
-  interpret the raw pairwise counts as evidence of model quality in either direction.
-- **50-step vs 18-step:** Debiased BAGEL vs ASCR numbers are identical at both step counts
-  (BAGEL 78.9 % both runs), suggesting more diffusion steps do not close the ASCR-BAGEL gap.
-- **Evaluator circularity:** Qwen3.5-9B is the ASCR loop's semantic feedback provider and the
-  judge for all hard64 evaluations. The GenEval run uses OWLViT detectors and is circularity-free;
-  it independently confirms ASCR improves over ShowO.
-
-## 2026-05-22 GenEval — Independent Full 553-Prompt Evaluation (50-step)
-
-This run evaluates the full GenEval 553-prompt suite for ShowO50 baseline, ASCR50, and
-BAGEL-7B-MoT using a non-Qwen, object-detection-based scorer. It is the cleanest evaluator-
-independent evidence for ASCR vs ShowO because it does not use the Qwen model that provides
-ASCR's semantic feedback.
-
-**Protocol:**
-
-- ShowO50/ASCR50 images: `outputs/geneval_showo_ascr_68794_20260522_042410/`.
-- BAGEL images: `outputs/geneval_bagel_68762_20260521_175812/geneval_bagel/`.
-- Evaluator: `scripts/evaluate_geneval_owlvit.py` with local `models/owlvit-base-patch32`.
-- ShowO50/ASCR50 scoring job: 68802, 8 GPU shards, completed in 00:01:45.
-- BAGEL scoring job: 68792, completed successfully.
-- Output files: `outputs/geneval_showo_ascr_68794_20260522_042410/results_baseline.jsonl`,
-  `outputs/geneval_showo_ascr_68794_20260522_042410/results_ascr.jsonl`, and
-  `outputs/geneval_showo_ascr_68784_20260521_224813/scores/BAGEL.jsonl`.
-- Generated 3-way summary: `outputs/geneval_showo_ascr_68794_20260522_042410/geneval_3way_summary.md`.
-
-**Evaluator fixes used for the final score:**
-
-- HSV pixel-histogram color classifier for color-attribute binding, replacing unreliable
-  OWLViT/CLIP pooler color similarities.
-- Per-class NMS at IoU 0.5 to remove duplicate overlapping detections.
-- Tag-aware detection threshold: default `--threshold 0.01` for recall-sensitive tasks, plus
-  `--counting-threshold 0.15` for counting to suppress low-confidence false positives.
-
-**Results:**
-
-| Task | N | ShowO50 | ASCR50 | BAGEL-7B-MoT | ASCR - ShowO |
-|---|---:|---:|---:|---:|---:|
-| single_object | 80 | 100.00% (80 / 80) | 100.00% (80 / 80) | 100.00% (80 / 80) | +0.00 |
-| two_object | 99 | 65.66% (65 / 99) | 79.80% (79 / 99) | 96.97% (96 / 99) | +14.14 |
-| counting | 80 | 40.00% (32 / 80) | 47.50% (38 / 80) | 68.75% (55 / 80) | +7.50 |
-| colors | 94 | 74.47% (70 / 94) | 75.53% (71 / 94) | 70.21% (66 / 94) | +1.06 |
-| position | 100 | 35.00% (35 / 100) | 50.00% (50 / 100) | 58.00% (58 / 100) | +15.00 |
-| color_attr | 100 | 9.00% (9 / 100) | 19.00% (19 / 100) | 51.00% (51 / 100) | +10.00 |
-| **Official task-avg score** | **553** | **54.02%** | **61.97%** | **74.15%** | **+7.95** |
-| Raw prompt/image accuracy | 553 | 52.62% (291 / 553) | 60.94% (337 / 553) | 73.42% (406 / 553) | +8.32 |
-
-**Sanity checks:**
-
-- All three result files contain exactly 553 records, matching the GenEval prompt count.
-- JSONL parsing is clean: no malformed rows and no missing `correct` fields.
-- Scoring logs show no `error`, `traceback`, `exception`, `nan`, `inf`, or similar failure signal.
-- Failure reasons are ordinary detector outcomes: missing objects, wrong counts, wrong colors,
-  inverted spatial relations, or incorrect color-attribute binding.
-
-**Interpretation:**
-
-The 50-step GenEval run confirms the same direction as the Qwen hard64 comparisons: ASCR
-substantially improves compositional prompt following over the ShowO50 baseline. The largest
-improvements are in two-object composition, spatial position, color-attribute binding, and
-counting. BAGEL remains ahead overall, especially on two-object and color-attribute tasks,
-which is consistent with its larger dedicated T2I model scale.
 
 ## Qualitative Examples
 
