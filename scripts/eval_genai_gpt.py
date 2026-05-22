@@ -1,0 +1,193 @@
+#!/usr/bin/env python3
+"""
+Evaluate GenAI-Bench using GPT-5.5 as binary VQA judge.
+
+For each prompt: send image + "Does this image show '{prompt}'? Answer yes or no."
+Aggregates per basic_skills and advanced_skills tags.
+
+Outputs (in --output-dir):
+  scores.json            - overall accuracy + per-skill breakdowns
+  scores_by_skill.json   - detailed per-skill stats
+  answers.json           - raw per-item answers
+
+Usage:
+  python scripts/eval_genai_gpt.py \
+    --metadata configs/benchmark_data/genai_bench.jsonl \
+    --image-map outputs/bench3_image_map.json \
+    --model-key showo \
+    --output-dir outputs/bench3_eval/genai_showo \
+    --workers 30
+
+  export OFOX_API_KEY=sk-of-...
+"""
+
+import argparse
+import base64
+import json
+import os
+import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+from typing import Optional
+
+
+GPT_MODEL = "openai/gpt-5.5"
+API_BASE = "https://api.ofox.ai/v1"
+
+
+def encode_image(path: str) -> Optional[str]:
+    p = Path(path)
+    if not p.exists():
+        return None
+    return base64.b64encode(p.read_bytes()).decode("utf-8")
+
+
+def ask_gpt_yes_no(client, item_id: str, prompt: str, image_b64: str, mime: str = "image/png") -> dict:
+    question = (
+        f"Does this image show the following?\n\"{prompt}\"\n"
+        "Answer with a single word: yes or no."
+    )
+    response = client.chat.completions.create(
+        model=GPT_MODEL,
+        messages=[{
+            "role": "user",
+            "content": [
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{mime};base64,{image_b64}"},
+                },
+                {"type": "text", "text": question},
+            ],
+        }],
+        max_tokens=8,
+        temperature=0.0,
+    )
+    raw = response.choices[0].message.content.strip().lower()
+    answer = "yes" if raw.startswith("yes") else "no"
+    return {"item_id": item_id, "prompt": prompt, "answer": answer, "raw": raw}
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Evaluate GenAI-Bench with GPT-5.5.")
+    parser.add_argument("--metadata", default="configs/benchmark_data/genai_bench.jsonl",
+                        help="genai_bench.jsonl from prepare_bench_data.py")
+    parser.add_argument("--image-map", required=True, help="image_map.json from build_bench_image_map.py")
+    parser.add_argument("--model-key", required=True, choices=["showo", "ascr", "bagel"])
+    parser.add_argument("--output-dir", required=True)
+    parser.add_argument("--workers", type=int, default=30)
+    args = parser.parse_args()
+
+    api_key = os.environ.get("OFOX_API_KEY", "")
+    if not api_key:
+        print("ERROR: OFOX_API_KEY env var not set", file=sys.stderr)
+        sys.exit(1)
+
+    from openai import OpenAI
+    client = OpenAI(api_key=api_key, base_url=API_BASE)
+
+    # Load metadata
+    meta_lines = Path(args.metadata).read_text(encoding="utf-8").splitlines()
+    items = [json.loads(l) for l in meta_lines if l.strip()]
+    print(f"[GenAI-Bench/{args.model_key}] {len(items)} items loaded")
+
+    # Load image map
+    image_map = json.loads(Path(args.image_map).read_text(encoding="utf-8"))
+
+    # Build tasks
+    tasks = []
+    skipped = 0
+    for item in items:
+        item_id = item["item_id"]
+        entry = image_map.get(item_id)
+        if not entry:
+            skipped += 1
+            continue
+        img_path = entry.get(args.model_key, "")
+        if not img_path:
+            skipped += 1
+            continue
+        img_b64 = encode_image(img_path)
+        if img_b64 is None:
+            skipped += 1
+            continue
+        mime = "image/jpeg" if img_path.lower().endswith((".jpg", ".jpeg")) else "image/png"
+        tasks.append((item_id, item["prompt"], img_b64, mime, item.get("basic_skills", []),
+                      item.get("advanced_skills", [])))
+
+    if skipped:
+        print(f"[GenAI-Bench/{args.model_key}] Skipped {skipped} items (missing images)")
+    print(f"[GenAI-Bench/{args.model_key}] Submitting {len(tasks)} queries ({args.workers} workers)...")
+
+    answers = []
+    done = 0
+    with ThreadPoolExecutor(max_workers=args.workers) as pool:
+        def do_call(task):
+            item_id, prompt, img_b64, mime, basic, adv = task
+            r = ask_gpt_yes_no(client, item_id, prompt, img_b64, mime)
+            r["basic_skills"] = basic
+            r["advanced_skills"] = adv
+            return r
+
+        futures = {pool.submit(do_call, t): t for t in tasks}
+        for fut in as_completed(futures):
+            try:
+                answers.append(fut.result())
+                done += 1
+                if done % 200 == 0:
+                    print(f"  ... {done}/{len(tasks)} done")
+            except Exception as e:
+                print(f"  ERROR: {e}", file=sys.stderr)
+
+    print(f"[GenAI-Bench/{args.model_key}] Got {len(answers)} answers")
+
+    # Aggregate overall
+    n_yes = sum(1 for a in answers if a["answer"] == "yes")
+    overall = n_yes / len(answers) if answers else 0.0
+    print(f"\n[GenAI-Bench/{args.model_key}] Overall: {overall:.4f} ({n_yes}/{len(answers)})")
+
+    # Per-skill aggregation
+    basic_skills: dict = {}
+    advanced_skills: dict = {}
+
+    for a in answers:
+        correct = 1 if a["answer"] == "yes" else 0
+        for skill in a.get("basic_skills", []):
+            if skill not in basic_skills:
+                basic_skills[skill] = {"n_yes": 0, "n": 0}
+            basic_skills[skill]["n_yes"] += correct
+            basic_skills[skill]["n"] += 1
+        for skill in a.get("advanced_skills", []):
+            if skill not in advanced_skills:
+                advanced_skills[skill] = {"n_yes": 0, "n": 0}
+            advanced_skills[skill]["n_yes"] += correct
+            advanced_skills[skill]["n"] += 1
+
+    for d in {**basic_skills, **advanced_skills}.values():
+        d["score"] = d["n_yes"] / d["n"] if d["n"] > 0 else 0.0
+
+    print("\n  Basic skills:")
+    for skill, d in sorted(basic_skills.items()):
+        print(f"    {skill:30s}: {d['score']:.4f} ({d['n_yes']}/{d['n']})")
+    print("  Advanced skills:")
+    for skill, d in sorted(advanced_skills.items()):
+        print(f"    {skill:30s}: {d['score']:.4f} ({d['n_yes']}/{d['n']})")
+
+    # Save
+    out = Path(args.output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "answers.json").write_text(json.dumps(answers, indent=2, ensure_ascii=False), encoding="utf-8")
+    (out / "scores.json").write_text(json.dumps({
+        "overall": overall,
+        "n_yes": n_yes,
+        "n_total": len(answers),
+    }, indent=2), encoding="utf-8")
+    (out / "scores_by_skill.json").write_text(json.dumps({
+        "basic_skills": basic_skills,
+        "advanced_skills": advanced_skills,
+    }, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    print(f"\n[GenAI-Bench/{args.model_key}] Results saved to {out}")
+
+
+if __name__ == "__main__":
+    main()
