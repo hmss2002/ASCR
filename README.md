@@ -484,7 +484,8 @@ ASCR/
 │   │   ├── ★ schemas.py                         ← data contracts (SemanticEvaluation,
 │   │   │                                           RegionSelection, TokenReopenMask, …)
 │   │   ├── state.py                             ← GenerationState, IterationSummary
-│   │   └── artifacts.py                         ← per-run artifact file-system writer
+│   │   ├── artifacts.py                         ← per-run artifact file-system writer
+│   │   └── config.py                            ← config loading & merging helpers
 │   ├── generators/
 │   │   ├── ★ showo_native.py                    ← ShowONativeEngine: token-level ops
 │   │   │                                           (run_confidence_block, force_mask,
@@ -510,13 +511,17 @@ ASCR/
 │   ├── revision/
 │   │   ├── selector.py                          ← GridSemanticSelector (cell selection)
 │   │   └── prompt_composer.py                   ← correction prompt builder
+│   ├── traces/
+│   │   ├── schema.py                            ← trace event types (GenerationTrace, …)
+│   │   └── writer.py                            ← trace writer / JSONL serializer
 │   ├── benchmarks/
 │   │   ├── metrics.py                           ← score_image, compare_scores (heuristic)
 │   │   └── runner.py                            ← result_to_markdown helper
 │   └── training/
 │       ├── selector_model.py                    ← Stage 2 placeholder: learned selector
 │       │                                           interface (image + prompt → token scores)
-│       └── train_selector.py                    ← Stage 2 placeholder: training entry point
+│       ├── train_selector.py                    ← Stage 2 placeholder: training entry point
+│       └── ddp.py                               ← distributed training helpers (DDP setup)
 │
 ├── scripts/
 │   ├── ★ judge_showo_ascr_pairwise_qwen.py      ← side-by-side Qwen3.5-9B pairwise judge
@@ -550,6 +555,9 @@ ASCR/
 │   ├── download_detr_model.py                   ← DETR model download helper
 │   ├── submit_geneval_scoring.sh                ← submit 3 GenEval scoring jobs after gen
 │   ├── judge_hard64_pairwise_gpt.py             ← GPT-5.5 A/B pairwise judge (Hard64)
+│   ├── judge_geneval_gpt.py                     ← GPT-5.5 per-image GenEval scorer
+│   ├── submit_bagel_continuations.sh            ← resume timed-out BAGEL bench3 shards
+│   │                                               (afternotok + SHARD_OUT_OVERRIDE)
 │   ├── prepare_bench_data.py                    ← download & index DPG/GenAI/DSG bench3 data
 │   ├── submit_bench_gen.sh                      ← submit ShowO+ASCR bench3 generation shards
 │   ├── submit_bench_bagel_shards.sh             ← submit BAGEL bench3 generation shards
@@ -579,6 +587,7 @@ ASCR/
 │   │                                               judge (BAGEL vs ShowO50 vs ASCR50)
 │   ├── ★ geneval_gen_shard.sbatch               ← bench3 ShowO+ASCR generation shard
 │   │                                               (8-GPU, arbitrary prompt file + range)
+│   ├── geneval_merge_eval.sbatch               ← merge shards + trigger OWLViT scoring
 │   ├── bench_bagel_gen_shard.sbatch             ← bench3 BAGEL generation shard
 │   │                                               (1-GPU gpu_shared, --offset/--limit)
 │   └── stage2_train_selector_gpu.sbatch         ← Stage 2 placeholder
@@ -2430,7 +2439,7 @@ The baseline image (left) is a perfect match for the prompt, featuring a single 
 <img src="docs/examples/bagel_50_vs_showo/showo_win_20_a_rubber_band_and_a_wooden_floor.jpg" width="700" alt="a rubber band and a wooden floor">
 
 **`a vase hidden by a candle`** *(conf 0.90)*  
-The baseline image (right) correctly depicts a vase that is partially obscured by a candle, satisfying the prompt. The showo image (left) only shows a candle and lacks the vase entirely.
+The right image (BAGEL) correctly depicts a vase that is partially obscured by a candle, satisfying the prompt. The left image (ShowO) only shows a candle and lacks the vase entirely.
 
 <img src="docs/examples/bagel_50_vs_showo/showo_win_21_a_vase_hidden_by_a_candle.jpg" width="700" alt="a vase hidden by a candle">
 
