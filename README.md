@@ -4,7 +4,7 @@ ASCR is a research prototype for studying and correcting confidence-semantic inc
 
 This README is the project control document. It records the research plan, implementation plan, current progress, expected interfaces, cluster workflow, and GitHub synchronization policy. It should be updated whenever a meaningful implementation batch is completed.
  
-## Active TODO (2026-05-22, updated)
+## Stage 1 Status Log (all complete, 2026-05-22)
 
 **Two bugs discovered and fixed in commit `557d2fc` (2026-05-22):**
 
@@ -525,6 +525,15 @@ ASCR/
 │   │                                               ShowO/ASCR runs by prompt
 │   ├── pair_bagel_vs_showo_baseline.py          ← legacy pairing helper
 │   │                                               (only used by archived baseline job)
+│   ├── ★ evaluate_geneval_owlvit.py             ← GenEval OWLViT+DETR scorer;
+│   │                                               produces results.jsonl per model dir
+│   ├── convert_bagel_output_to_geneval.py       ← convert BAGEL suite.json to
+│   │                                               GenEval directory format
+│   ├── convert_showo_output_to_geneval.py       ← convert ASCR suite.json to
+│   │                                               GenEval directory format
+│   ├── download_owlvit_model.py                 ← OWLViT model download helper
+│   ├── download_detr_model.py                   ← DETR model download helper
+│   ├── submit_geneval_scoring_after_68794.sh    ← submit 3 scoring jobs after gen
 │   ├── run_stage1_debug.sh                      ← mock dry-run (no GPU needed)
 │   ├── run_showo_t2i_local.sh                   ← Show-o T2I subprocess (fallback path)
 │   ├── run_showo_inpaint_local.sh               ← Show-o inpaint subprocess (fallback)
@@ -541,6 +550,12 @@ ASCR/
 │   ├── stage1_t2i_compbench_qwen35_9b_smoke1.sbatch  ← 1-prompt smoke + both judges
 │   ├── stage1_qwen35_9b_smoke1gpu.sbatch        ← single-GPU full-flow smoke
 │   ├── stage1_qwen35_9b_parallel8.sbatch        ← 8-GPU parallel (dev suite)
+│   ├── ★ stage1_geneval_generate_8gpu.sbatch    ← GenEval 553-prompt generation
+│   │                                               (8-GPU ShowO+ASCR, 50-step)
+│   ├── stage1_geneval_bagel_generate.sbatch     ← BAGEL-7B-MoT GenEval generation
+│   ├── stage1_bagel_vs_showo_baseline_judge.sbatch ← BAGEL vs ShowO50 pairwise judge
+│   ├── stage1_hard64_showo_ascr_swap_judge.sbatch  ← hard64 ASCR/ShowO swap judge
+│   │                                               (debiasing: ShowO on RIGHT)
 │   ├── ★ stage1_geneval_score_single.sbatch     ← per-model GenEval scoring
 │   │                                               (8-GPU OWLViT, 1 dir at a time)
 │   ├── ★ stage1_hard64_bagel_3way_judge_sharded.sbatch  ← 8-GPU sharded Qwen
@@ -935,7 +950,7 @@ sbatch jobs/stage1_geneval_generate_8gpu.sbatch
 
 Outputs go to `outputs/geneval_showo_ascr_<jobid>_<timestamp>/` with `geneval_baseline/`
 and `geneval_ascr/` subdirectories ready for `scripts/evaluate_geneval_owlvit.py`
-(see `jobs/stage1_geneval_evaluate.sbatch` for the scoring step).
+(see `jobs/stage1_geneval_score_single.sbatch` for the scoring step).
 
 Legacy ShO-MMU evaluator jobs are preserved under `jobs/archived/`.
 
@@ -991,7 +1006,9 @@ Representative ASCR-only wins from the legacy 18-step GenEval detector run (job 
 
 ### ASCR vs ShowO Baseline
 
-2 wins · 2 losses · 2 ties shown (out of 13 wins / 6 losses / 45 ties total).
+> **Position-bias caveat:** These counts — 13 ASCR wins / 6 losses / 45 ties — come from a single-direction run where ASCR was always on the RIGHT, and Qwen3.5-9B exhibits a strong RIGHT-side preference. Images are qualitative illustrations; see the 50-step section below for debiased context.
+
+2 wins · 2 losses · 2 ties shown (out of 13 wins / 6 losses / 45 ties total — single-direction, biased).
 
 ##### **ASCR wins** — `a girl behind a cow`
 
@@ -1042,7 +1059,9 @@ Representative ASCR-only wins from the legacy 18-step GenEval detector run (job 
 
 ### ASCR vs BAGEL-7B-MoT
 
-2 wins · 2 losses shown (out of 50 wins / 14 losses / 0 ties total).
+> **Position-bias caveat:** These counts — 50 ASCR wins / 14 losses — come from a single-direction run where ASCR was always on the RIGHT. The debiased result is the opposite: BAGEL wins 78.9 % of decisions (see [Stage 1 Benchmark Summary](#stage-1-benchmark-summary--three-way-comparison-50-step-debiased-2026-05-22)). Images below are qualitative illustrations only.
+
+2 wins · 2 losses shown (out of 50 wins / 14 losses / 0 ties total — single-direction, biased).
 
 ##### **ASCR wins** — `an oblong cucumber and a teardrop plum`
 
@@ -1246,6 +1265,9 @@ Representative ASCR-only wins from the legacy 18-step GenEval detector run (job 
 
 ![The green plant was on the right of the white wall. — pairwise (LEFT = ShowO50, RIGHT = BAGEL)](docs/examples/bagel_50/showo_win_3_the_green_plant_was_on_the_right_of_the_white_wall.png)
 
+
+<details>
+<summary><strong>Full-Gallery Pairwise Examples</strong> — all 64 hard64 prompts × 3 comparisons (click to expand)</summary>
 
 ## Full-Gallery Pairwise Examples (all 64 hard64 prompts × 3 comparisons)
 
@@ -2264,8 +2286,10 @@ The prompt 'two rabbits' is satisfied by both images. The baseline (left) shows 
 </details>
 
 
+</details>
+
 ## Changelog
 
 Dated experiment narratives have been moved to [docs/changelog.md](docs/changelog.md)
-(latest first). The Active TODO, Quick Results Summary, Stage 1 Benchmark Summary, and
+(latest first). The Stage 1 Status Log, Quick Results Summary, Stage 1 Benchmark Summary, and
 the most recent independent GenEval section above remain the canonical current state.
