@@ -138,11 +138,17 @@ Cluster constraints (HKU HPC `gpu` partition): max 28 GPUs/user, <=2 nodes/job, 
 |---|---|---:|---:|
 | BAGEL-7B-MoT vs ShowO50 | BAGEL | **78.1%** | 128 |
 | BAGEL-7B-MoT vs ASCR50 | BAGEL | **61.1%** | 126 |
-| ASCR50 vs ShowO50 | ⚠ 无法判断 / inconclusive | — | — |
+| ASCR50 vs ShowO50 | ShowO | 47/55 **(85.5%)** | 55 |
 
-> ASCR vs ShowO 对比无法通过 pairwise 判断，因为 Qwen3.5-9B 存在极强的 RIGHT-side 位置偏好（无论哪个模型放右边都赢），信号被噪声淹没。以 clean pass/fail 为准。
+> **ASCR50 vs ShowO50 pairwise 详解（已运行双向，job 68841）：**
+> - Forward（LEFT=ShowO, RIGHT=ASCR）：ASCR(R) 8W / ShowO(L) 1W / 55 ties
+> - Swap（LEFT=ASCR, RIGHT=ShowO）：ShowO(R) 46W / ASCR(L) 0W / 17 ties / 1 abstain
+> - 去偏合计 / Debiased: ShowO **47/55 (85.5%)** · ASCR **8/55 (14.5%)**
 >
-> ASCR vs ShowO pairwise is inconclusive due to Qwen's extreme RIGHT-side position bias (right side wins ≥90% regardless of which model is placed there). Use clean pass/fail instead.
+> ⚠️ **注意此结果与 clean pass/fail 相反，需要谨慎解读：**
+> Qwen 在两个方向都优先选右侧（forward 右侧胜率 89%，swap 右侧胜率 98%），且两方向决定样本数严重不对称（9 vs 47），说明 Qwen 对 ShowO 这张图有更强的倾向性，去偏公式已无法完全消除偏差。**语义准确性指标（clean pass/fail）更可靠：ASCR 84.4% vs ShowO 78.1% (+6.2 pp)。**
+>
+> ⚠️ **Why this conflicts with clean pass/fail:** Qwen selects the right side ≥89% in both directions; decisive counts are highly asymmetric (9 fwd vs 47 swap). This suggests model-specific bias toward ShowO images that debiasing cannot fully remove. The per-image semantic accuracy (clean pass/fail) is the more reliable metric: ASCR **84.4%** vs ShowO **78.1%** (+6.2 pp).
 
 **GenEval 553-prompt 分类得分（OWLViT 检测器，与 Qwen 无关）/ per-category scores (OWLViT detectors, Qwen-independent):**
 
@@ -1209,7 +1215,9 @@ Source: jobs 68810–68818+68832 (ShowO/ASCR, confidence_steps=50), 68762 (BAGEL
 
 12 BAGEL wins · 6 ShowO wins shown below（共 40 BAGEL wins / 24 ShowO wins；双向去偏后 BAGEL **78.1%**）。
 
-> LEFT = ShowO50 (50-step, fair), RIGHT = BAGEL-7B-MoT.
+> **LEFT = ShowO50 (50-step, 512×512, 1.3B model), RIGHT = BAGEL-7B-MoT (1024×1024, 7B model).**
+> 两张图片尺寸不同是正常现象：ShowO 原生输出 512×512，BAGEL 输出 1024×1024；画质差距来自模型规模（1.3B vs 7B），不是 ASCR 的问题。
+> Image size difference is expected: ShowO natively generates 512×512; BAGEL generates 1024×1024. The fidelity gap reflects model scale, not the comparison methodology.
 
 ---
 
@@ -1360,7 +1368,12 @@ Source: jobs 68810–68818+68832 (ShowO/ASCR, confidence_steps=50), 68762 (BAGEL
 
 8 examples where BAGEL outperforms ASCR50 (from 63 BAGEL wins total). Note: the gap narrows vs ShowO (78.1% → 61.1%), reflecting that ASCR closes part of the model-scale deficit.
 
-> LEFT = ASCR50 (50-step, fair), RIGHT = BAGEL-7B-MoT.
+> **LEFT = ASCR50 (50-step, 512×512, 1.3B model), RIGHT = BAGEL-7B-MoT (1024×1024, 7B model).**
+
+> **为什么这里只有 BAGEL 赢的例子？/ Why only BAGEL wins here?**
+> 在 forward 方向（ASCR 在左，BAGEL 在右），BAGEL 赢得了全部 63 个可判定的比较（ASCR 赢 0 次）。这说明 BAGEL（7B）在图像质量和语义精度上全面压制 ASCR（1.3B），无一例外。ASCR 的"胜利"只出现在 swap 方向（ASCR 放右边时受到 Qwen 位置偏好的影响），不代表真实的质量优势。
+>
+> In the forward direction (ASCR on left, BAGEL on right), BAGEL won all 63 decisive comparisons — ASCR won zero. BAGEL (7B) comprehensively outperforms ASCR (1.3B) in every example. Any "ASCR wins" in the swap direction are due to Qwen's right-side position bias, not genuine quality superiority.
 
 ---
 
@@ -1715,7 +1728,6 @@ The baseline image correctly depicts a teardrop-shaped melon with a slice remove
 
 ![The red book was on top of the yellow bookshelf](docs/examples/showo_50_full/tie_55_the_red_book_was_on_top_of_the_yellow_bookshelf.jpg)
 
-</details>
 </details>
 
 
@@ -2394,8 +2406,6 @@ The baseline image (right) is a superior composition that fully satisfies the pr
 The prompt 'two rabbits' is satisfied by both images. The baseline (left) features two grey rabbits, while the ascr (right) features two white rabbits. Both images depict two rabbits clearly. The baseline image has a more distinct separation between the subjects and a cleaner composition, whereas the ascr image has slightly more cluttered whiskers and a less defined background. The baseline is slightly better due to cleaner rendering and clearer subject separation.
 
 ![two rabbits](docs/examples/bagel_50_vs_showo/showo_win_24_two_rabbits.jpg)
-
-</details>
 
 </details>
 
