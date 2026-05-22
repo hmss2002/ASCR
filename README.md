@@ -503,7 +503,6 @@ ASCR/
 │   │   ├── local_vlm.py                         ← heuristic color evaluator (legacy;
 │   │   │                                           only supports simple color checks)
 │   │   ├── base.py                              ← SemanticEvaluator ABC
-│   │   ├── schema_parser.py                     ← JSON extraction + repair helpers
 │   │   └── registry.py                          ← build_evaluator() factory
 │   ├── grids/
 │   │   ├── overlay.py                           ← 4×4 grid overlay renderer (512×512)

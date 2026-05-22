@@ -10,5 +10,11 @@
 set -euo pipefail
 cd /grp01/cds_bdai/JianyuZhang/ASCR
 mkdir -p logs checkpoints
-source .venv-qwen36/bin/activate
+
+ASCR_ENV=${ASCR_ENV:-.venv-qwen36}
+if [[ ! -x "$ASCR_ENV/bin/python" ]]; then
+  echo "Missing ASCR environment at $ASCR_ENV." >&2; exit 2
+fi
+source "$ASCR_ENV/bin/activate"
+
 torchrun --standalone --nproc_per_node=${SLURM_GPUS_ON_NODE:-4} -m ascr.training.train_selector --config configs/stage1_showo_local.yaml
