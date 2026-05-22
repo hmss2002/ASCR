@@ -7,7 +7,7 @@ from ascr.evaluators.qwen_vl import (
     QwenVLEvaluator,
     _extract_json_object,
     _normalize_payload,
-    _require_native_qwen35_moe_support,
+    _resolve_qwen_model_class,
 )
 from ascr.evaluators.registry import build_evaluator
 
@@ -126,34 +126,10 @@ class QwenVLEvaluatorHelpersTest(unittest.TestCase):
 
     def test_qwen35_moe_rejects_compat_config(self):
         CompatConfig = type("Qwen35MoeCompatConfig", (), {"model_type": "qwen3_5_moe"})
-        AutoModel = type("AutoModel", (), {"_model_mapping": {}})
         with self.assertRaises(RuntimeError) as ctx:
-            _require_native_qwen35_moe_support(CompatConfig(), AutoModel)
+            _resolve_qwen_model_class(CompatConfig(), object)
         self.assertIn("native Transformers support", str(ctx.exception))
         self.assertIn("Qwen3_5MoeConfig", str(ctx.exception))
-
-    def test_qwen35_moe_rejects_wrong_model_mapping(self):
-        NativeConfig = type("Qwen3_5MoeConfig", (), {"model_type": "qwen3_5_moe"})
-        WrongModel = type("Qwen3VLMoeForConditionalGeneration", (), {})
-        AutoModel = type("AutoModel", (), {"_model_mapping": {NativeConfig: WrongModel}})
-        with self.assertRaises(RuntimeError) as ctx:
-            _require_native_qwen35_moe_support(NativeConfig(), AutoModel)
-        self.assertIn("Qwen3_5MoeForConditionalGeneration", str(ctx.exception))
-
-    def test_qwen35_moe_requires_torchvision_for_processor(self):
-        NativeConfig = type("Qwen3_5MoeConfig", (), {"model_type": "qwen3_5_moe"})
-        NativeModel = type("Qwen3_5MoeForConditionalGeneration", (), {})
-        AutoModel = type("AutoModel", (), {"_model_mapping": {NativeConfig: NativeModel}})
-        with self._patch_torchvision_available(False), self.assertRaises(RuntimeError) as ctx:
-            _require_native_qwen35_moe_support(NativeConfig(), AutoModel)
-        self.assertIn("torchvision is required", str(ctx.exception))
-
-    def test_qwen35_moe_accepts_native_mapping(self):
-        NativeConfig = type("Qwen3_5MoeConfig", (), {"model_type": "qwen3_5_moe"})
-        NativeModel = type("Qwen3_5MoeForConditionalGeneration", (), {})
-        AutoModel = type("AutoModel", (), {"_model_mapping": {NativeConfig: NativeModel}})
-        with self._patch_torchvision_available(True):
-            _require_native_qwen35_moe_support(NativeConfig(), AutoModel)
 
     def test_qwen_max_memory_builds_cuda_map(self):
         class Cuda:

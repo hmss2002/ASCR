@@ -58,7 +58,10 @@ echo "[merge-eval]   Baseline: $GENEVAL_BASELINE"
 echo "[merge-eval]   ASCR:     $GENEVAL_ASCR"
 echo "[merge-eval] Submitting evaluation job..."
 
-EVAL_JID=$(GENEVAL_BASELINE="$GENEVAL_BASELINE" GENEVAL_ASCR="$GENEVAL_ASCR" \
-  sbatch --parsable jobs/stage1_geneval_evaluate.sbatch)
-echo "[merge-eval] Evaluation job submitted: $EVAL_JID"
-echo "[merge-eval] Monitor: squeue -j $EVAL_JID"
+JOB1=$(GENEVAL_IMAGES="$GENEVAL_BASELINE" GENEVAL_LABEL=ShowO50 \
+  sbatch --parsable jobs/stage1_geneval_score_single.sbatch)
+echo "[merge-eval] ShowO50 score job: $JOB1"
+JOB2=$(GENEVAL_IMAGES="$GENEVAL_ASCR" GENEVAL_LABEL=ASCR50 \
+  sbatch --parsable jobs/stage1_geneval_score_single.sbatch)
+echo "[merge-eval] ASCR50 score job: $JOB2"
+echo "[merge-eval] Monitor: squeue -j $JOB1,$JOB2"
