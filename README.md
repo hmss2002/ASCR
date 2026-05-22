@@ -604,7 +604,10 @@ ASCR/
 │   ├── show-o-512x512/
 │   ├── magvitv2/
 │   ├── phi-1_5/
-│   └── qwen3.5-9b/
+│   ├── qwen3.5-9b/
+│   ├── BAGEL-7B-MoT/                            ← BAGEL benchmark model
+│   ├── detr-resnet-50/                          ← GenEval object detector
+│   └── owlvit-base-patch32/                     ← GenEval open-vocab detector
 ├── outputs/                                     ← NOT in git; runtime benchmark artifacts
 └── logs/                                        ← NOT in git; Slurm stdout/stderr
 ```
