@@ -1,7 +1,7 @@
 stage: 1
 run_name: stage1_showo_qwen35_9b
 seed: 1234
-max_iterations: 8
+max_iterations: 3
 ascr_start_mode: baseline
 return_initial_on_max_error: true
 image_size: 512
@@ -19,10 +19,10 @@ generator:
   llm_model_path: models/phi-1_5
   device: cuda
   guidance_scale: 4
-  generation_timesteps: 18
+  generation_timesteps: 50
   seed: 1234
   native_token_loop: true
-  confidence_steps: 3
+  confidence_steps: 50
 
 evaluator:
   name: qwen_vl

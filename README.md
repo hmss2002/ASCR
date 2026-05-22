@@ -566,10 +566,7 @@ ASCR/
 ├── jobs/
 │   ├── ★ stage1_t2i_compbench_qwen35_9b_hard64_8gpu_reuse.sbatch  ← PRIMARY job
 │   │                                               8-GPU, 64 prompts, REUSE_MODELS=1
-│   ├── stage1_drawbench_qwen35_9b_smoke8.sbatch ← DrawBench 8-prompt smoke (8 GPU)
 │   ├── stage1_t2i_compbench_qwen35_9b_smoke1.sbatch  ← 1-prompt smoke + both judges
-│   ├── stage1_qwen35_9b_smoke1gpu.sbatch        ← single-GPU full-flow smoke
-│   ├── stage1_qwen35_9b_parallel8.sbatch        ← 8-GPU parallel (dev suite)
 │   ├── ★ stage1_geneval_generate_8gpu.sbatch    ← GenEval 553-prompt generation
 │   │                                               (8-GPU ShowO+ASCR, 50-step)
 │   ├── stage1_geneval_bagel_generate.sbatch     ← BAGEL-7B-MoT GenEval generation
@@ -598,10 +595,7 @@ ASCR/
 │   └── test_compare_showo_suite.py              ← end-to-end comparison CLI
 │
 ├── docs/
-│   ├── stage1_phase1_summary_20260519.md        ← T2I-CompBench hard64 benchmark summary
 │   ├── stage1_design.md                         ← ASCR algorithm design notes
-│   ├── benchmark_plan.md                        ← evaluation plan
-│   ├── cluster_notes.md                         ← HKU AI cluster usage notes
 │   ├── changelog.md                             ← dated experiment narratives
 │   └── examples/                                ← pairwise comparison images (git-tracked)
 │
