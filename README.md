@@ -108,8 +108,8 @@ Cluster constraints (HKU HPC `gpu` partition): max 28 GPUs/user, <=2 nodes/job, 
 
 ### 主要发现 / Key Findings
 
-- 🟢 **ASCR 对 ShowO 有提升**：Hard64 clean pass/fail **+6.2 pp**（84.4% vs 78.1%）；GenEval 整体 **+0.64 pp**（67.25% vs 66.62%）。改进最显著的子任务是 `color_attr`（颜色–属性绑定，+4 pp），这很可能是 ASCR 算法真实有效的领域。
-  **ASCR improves over ShowO**: Hard64 clean +6.2 pp; GenEval task-avg +0.64 pp. The clearest gain is `color_attr` (+4 pp), likely the real algorithmic signal.
+- 🟢 **ASCR 对 ShowO 有提升**：Hard64 clean pass/fail **+6.2 pp**（84.4% vs 78.1%）；GenEval 整体 **+0.64 pp**（67.25% vs 66.62%）；GPT-5.5 A/B pairwise **ASCR 58.8%**（10/17 决定性，103 平局）。改进最显著的子任务是 `color_attr`（颜色–属性绑定，+4 pp），这很可能是 ASCR 算法真实有效的领域。
+  **ASCR improves over ShowO**: Hard64 clean +6.2 pp; GenEval task-avg +0.64 pp; GPT-5.5 A/B pairwise **ASCR 58.8%** (10/17 decisive, 103 ties). The clearest gain is `color_attr` (+4 pp), likely the real algorithmic signal.
 
 - 🟡 **ASCR 与 ShowO 的优势比之前小**：之前报告的 GenEval +7.95 pp 是 Bug 3（`confidence_steps=3`）导致的：ShowO 之前只跑了 3 步而非正确的 50 步。修复后 ShowO 提升 12.6 pp，差距收窄至 +0.64 pp。
   **The advantage is smaller than previously reported**: the old +7.95 pp was caused by a bug (ShowO ran only 3 steps). After fixing to 50 steps, the gap is +0.64 pp.
@@ -138,17 +138,21 @@ Cluster constraints (HKU HPC `gpu` partition): max 28 GPUs/user, <=2 nodes/job, 
 |---|---|---:|---:|
 | BAGEL-7B-MoT vs ShowO50 | BAGEL | **78.1%** | 128 |
 | BAGEL-7B-MoT vs ASCR50 | BAGEL | **61.1%** | 126 |
-| ASCR50 vs ShowO50 | ShowO | 47/55 **(85.5%)** | 55 |
+| ASCR50 vs ShowO50 | ASCR | **58.8%** (GPT-5.5 A/B) | 17 |
 
-> **ASCR50 vs ShowO50 pairwise 详解（已运行双向，job 68841）：**
-> - Forward（LEFT=ShowO, RIGHT=ASCR）：ASCR(R) 8W / ShowO(L) 1W / 55 ties
-> - Swap（LEFT=ASCR, RIGHT=ShowO）：ShowO(R) 46W / ASCR(L) 0W / 17 ties / 1 abstain
-> - 去偏合计 / Debiased: ShowO **47/55 (85.5%)** · ASCR **8/55 (14.5%)**
+> **ASCR50 vs ShowO50 pairwise 详解（GPT-5.5 A/B 格式，双向去偏）：**
 >
-> ⚠️ **注意此结果与 clean pass/fail 相反，需要谨慎解读：**
-> Qwen 在两个方向都优先选右侧（forward 右侧胜率 89%，swap 右侧胜率 98%），且两方向决定样本数严重不对称（9 vs 47），说明 Qwen 对 ShowO 这张图有更强的倾向性，去偏公式已无法完全消除偏差。**语义准确性指标（clean pass/fail）更可靠：ASCR 84.4% vs ShowO 78.1% (+6.2 pp)。**
+> 旧结果（Qwen 拼接图，job 68841）因强烈的位置偏差（Qwen 两个方向都偏向右侧 ≥89%，两个方向的决定性样本数严重不对称 9 vs 47）已被新方法取代。
 >
-> ⚠️ **Why this conflicts with clean pass/fail:** Qwen selects the right side ≥89% in both directions; decisive counts are highly asymmetric (9 fwd vs 47 swap). This suggests model-specific bias toward ShowO images that debiasing cannot fully remove. The per-image semantic accuracy (clean pass/fail) is the more reliable metric: ASCR **84.4%** vs ShowO **78.1%** (+6.2 pp).
+> 新方法：`scripts/judge_hard64_pairwise_gpt.py`，使用 **GPT-5.5**（via ofox.ai）对两张独立图片分别标 A/B，无空间拼接，无 LEFT/RIGHT 语言。
+>
+> - Forward（A=ShowO, B=ASCR）：ASCR(B) **5W** / ShowO(A) **2W** / 53 ties / 4 abstain
+> - Swap（A=ASCR, B=ShowO）：ASCR(A) **5W** / ShowO(B) **5W** / 50 ties / 4 abstain
+> - 去偏合计 / Debiased: **ASCR 10/17 (58.8%)** · ShowO 7/17 (41.2%) · 103 ties · 8 abstains
+>
+> 结果：绝大多数 prompt（103/128 = 80.5%）是平局，说明两模型图像质量相当。在有差异的 17 个 case 中，ASCR 以 58.8% 小幅领先。此结论与 clean pass/fail 一致（ASCR **84.4%** vs ShowO **78.1%**，+6.2 pp）。
+>
+> **GPT-5.5 A/B debiased (128 total / fwd + swap):** ASCR wins 10, ShowO wins 7, ties 103, abstains 8. Of 17 decisive cases, **ASCR 58.8%**. The majority of prompts (80.5%) are rated a tie — both models produce comparable images. This is consistent with clean pass/fail: ASCR **84.4%** vs ShowO **78.1%** (+6.2 pp). Result files: `outputs/hard64_parallel_20260522_120250/gpt_pairwise_{fwd,swap,merged}.json`.
 
 **GenEval 553-prompt 分类得分（OWLViT 检测器，与 Qwen 无关）/ per-category scores (OWLViT detectors, Qwen-independent):**
 
@@ -383,13 +387,13 @@ the absolute improvement is real but per-prompt advantage is less consistent.
 4. **ASCR vs standalone model:** ASCR is ShowO + correction loop; BAGEL is a larger standalone
    model. Not architecture-to-architecture.
 5. **VLM position bias in pairwise judging:** Qwen3.5-9B exhibits a strong RIGHT-side preference
-   in side-by-side comparisons — cross-checking four pairwise comparisons found that whichever
-   model was placed on the RIGHT always won lopsidedly, regardless of actual image quality
-   (confirmed 2026-05-22, commit `557d2fc`). Pairwise numbers in this README were obtained with
-   ASCR always on the RIGHT and should be treated as **pre-debiasing estimates**. The corrected
-   protocol (running both forward and swapped directions, then averaging) is now implemented in
-   `jobs/stage1_hard64_bagel_3way_judge_sharded.sbatch`; debiased results are confirmed —
-   see [Stage 1 Benchmark Summary](#stage-1-benchmark-summary--three-way-comparison-50-step-debiased-2026-05-22).
+   in side-by-side composite comparisons (confirmed 2026-05-22, commit `557d2fc`). The BAGEL
+   3-way comparisons use a bidirectional (fwd + swap) debiasing protocol in
+   `jobs/stage1_hard64_bagel_3way_judge_sharded.sbatch`. For ASCR vs ShowO50, the Qwen composite
+   judge was **replaced** by a **GPT-5.5 A/B format judge** (`scripts/judge_hard64_pairwise_gpt.py`)
+   which sends two separate images labeled A and B (no spatial composite, no LEFT/RIGHT language),
+   eliminating the position anchor entirely. Debiased result: ASCR **58.8%** (10/17 decisive),
+   consistent with clean pass/fail (+6.2 pp).
 
 ## Stage 1 System Overview
 
