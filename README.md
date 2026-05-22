@@ -983,115 +983,64 @@ Keep Stage 1 simple enough to prove the mechanism, but structure it so Stage 2 a
 
 ## Qualitative Examples
 
-Each image below is a compact side-by-side comparison copied from runtime outputs into
-`docs/examples/` so GitHub can render it without syncing the full `outputs/` tree. For Qwen
-pairwise examples, the canvas is exactly what was fed to Qwen3.5-9B. For GenEval examples,
-the canvas is a README-only visualization with **LEFT = ShowO baseline** and **RIGHT = ASCR**.
+Each image below is copied from runtime outputs into `docs/examples/` so GitHub can render it
+without syncing the full `outputs/` tree. Qwen pairwise canvases are exactly what was fed to
+Qwen3.5-9B. GenEval 3-way canvases show **LEFT = ShowO-1.3B 50-step | CENTRE = ASCR50 | RIGHT = BAGEL-7B-MoT**,
+with OWLViT detector verdict in each panel header (green = ✓ pass, red = ✗ fail).
 
-### GenEval Detector Examples
+### GenEval 3-Way Examples (50-step, detector-verified)
 
-Representative ASCR-only wins from the legacy 18-step GenEval detector run (job 68776). These remain useful qualitative examples, while the current quantitative GenEval results above use the corrected 50-step run:
+Each canvas: **LEFT = ShowO-1.3B 50-step | CENTRE = ASCR50 | RIGHT = BAGEL-7B-MoT**. Labels show the OWLViT detector verdict (green = ✓ pass, red = ✗ fail). Source: jobs 68794 (ShowO/ASCR), 68762 (BAGEL), 68802 (detector scoring).
 
-![GenEval two_object — a photo of a toothbrush and a snowboard](docs/examples/geneval/two_object_081_a-photo-of-a-toothbrush-and-a-snowboard.png)
+**ASCR corrects ShowO · BAGEL also passes — task: two_object**
 
-![GenEval counting — a photo of two bears](docs/examples/geneval/counting_184_a-photo-of-two-bears.png)
+*OWLViT: ShowO ✗ → ASCR ✓ · BAGEL ✓. ASCR brings ShowO to BAGEL-level on two-object detection.*
 
-![GenEval counting — a photo of three pizzas](docs/examples/geneval/counting_240_a-photo-of-three-pizzas.png)
-
-![GenEval position — a photo of a bird left of a couch](docs/examples/geneval/position_400_a-photo-of-a-bird-left-of-a-couch.png)
-
-![GenEval color_attr — a photo of a yellow pizza and a green oven](docs/examples/geneval/color_attr_504_a-photo-of-a-yellow-pizza-and-a-green-oven.png)
-
-![GenEval color_attr — a photo of an orange cow and a purple sandwich](docs/examples/geneval/color_attr_544_a-photo-of-an-orange-cow-and-a-purple-sandwich.png)
-
-### ASCR vs ShowO Baseline
-
-> **Position-bias caveat:** These counts — 13 ASCR wins / 6 losses / 45 ties — come from a single-direction run where ASCR was always on the RIGHT, and Qwen3.5-9B exhibits a strong RIGHT-side preference. Images are qualitative illustrations; see the 50-step section below for debiased context.
-
-2 wins · 2 losses · 2 ties shown (out of 13 wins / 6 losses / 45 ties total — single-direction, biased).
-
-##### **ASCR wins** — `a girl behind a cow`
-
-*Qwen3.5-9B (conf 0.95):* The right image (ASCR) correctly includes the requested subject, a girl, positioned behind the cow, whereas the left image (baseline) completely omits the girl.
-
-![a girl behind a cow — pairwise (LEFT = ShowO Baseline, RIGHT = ASCR)](docs/examples/showo_baseline/ascr_win_1_a_girl_behind_a_cow.png)
+![GenEval two_object — a toothbrush and a snowboard (3-way 50-step)](docs/examples/geneval_3way/two_object_081_a_toothbrush_and_a_snowboard.jpg)
 
 ---
 
-##### **ASCR wins** — `a pentagonal stop sign and a spherical traffic light`
+**ASCR corrects ShowO · BAGEL also passes — task: counting**
 
-*Qwen3.5-9B (conf 0.90):* The prompt requests a pentagonal stop sign and a spherical traffic light. Both images feature octagonal stop signs, failing the shape constraint. However, the ASCR image's traffic light has a smoother, more rounded housing that is closer to spherical than the baseline's angular housing. Thus, ASCR better satisfies the prompt's specific shape requirements.
+*OWLViT: ShowO ✗ → ASCR ✓ · BAGEL ✓. Counting — ShowO generates wrong count, ASCR corrects it.*
 
-![a pentagonal stop sign and a spherical traffic light — pairwise (LEFT = ShowO Baseline, RIGHT = ASCR)](docs/examples/showo_baseline/ascr_win_2_a_pentagonal_stop_sign_and_a_spherical_traff.png)
-
----
-
-##### **ASCR loses** — `a mouse on side of a key`
-
-*Qwen3.5-9B (conf 0.95):* The baseline image perfectly matches the prompt, showing a single mouse standing on a single golden key. The ASCR image suffers from severe hallucinations, showing a distorted, multi-headed creature and a fragmented, glitchy key.
-
-![a mouse on side of a key — pairwise (LEFT = ShowO Baseline, RIGHT = ASCR)](docs/examples/showo_baseline/ascr_loss_1_a_mouse_on_side_of_a_key.png)
+![GenEval counting — two bears (3-way 50-step)](docs/examples/geneval_3way/counting_184_two_bears.jpg)
 
 ---
 
-##### **ASCR loses** — `a sheep in front of a key`
-
-*Qwen3.5-9B (conf 0.95):* The baseline image correctly depicts a sheep in front of a key, satisfying the prompt. The right image replaces the key with a metallic grate or mesh structure, failing to generate the requested object.
-
-![a sheep in front of a key — pairwise (LEFT = ShowO Baseline, RIGHT = ASCR)](docs/examples/showo_baseline/ascr_loss_2_a_sheep_in_front_of_a_key.png)
+![GenEval counting — three pizzas (3-way 50-step)](docs/examples/geneval_3way/counting_240_three_pizzas.jpg)
 
 ---
 
-##### **Tie** — `a green bench and a blue bowl`
+**ASCR uniquely corrects ShowO · BAGEL also fails — task: position**
 
-*Qwen3.5-9B (conf 0.95):* Both images perfectly satisfy the prompt, depicting a green bench and a blue bowl with accurate colors, counts, and spatial relations.
+*OWLViT: ShowO ✗ → ASCR ✓ · BAGEL ✗. Spatial-relation task where ASCR is the only model that passes.*
 
-![a green bench and a blue bowl — pairwise (LEFT = ShowO Baseline, RIGHT = ASCR)](docs/examples/showo_baseline/tie_1_a_green_bench_and_a_blue_bowl.png)
-
----
-
-##### **Tie** — `an oblong cucumber and a teardrop plum`
-
-*Qwen3.5-9B (conf 0.95):* Both images accurately depict an oblong cucumber and a teardrop-shaped plum against a green background. The objects, colors, and spatial relations are identical in both images, with no material differences affecting prompt adherence.
-
-![an oblong cucumber and a teardrop plum — pairwise (LEFT = ShowO Baseline, RIGHT = ASCR)](docs/examples/showo_baseline/tie_2_an_oblong_cucumber_and_a_teardrop_plum.png)
-
-
-### ASCR vs BAGEL-7B-MoT
-
-> **Position-bias caveat:** These counts — 50 ASCR wins / 14 losses — come from a single-direction run where ASCR was always on the RIGHT. The debiased result is the opposite: BAGEL wins 78.9 % of decisions (see [Stage 1 Benchmark Summary](#stage-1-benchmark-summary--three-way-comparison-50-step-debiased-2026-05-22)). Images below are qualitative illustrations only.
-
-2 wins · 2 losses shown (out of 50 wins / 14 losses / 0 ties total — single-direction, biased).
-
-##### **ASCR wins** — `an oblong cucumber and a teardrop plum`
-
-*Qwen3.5-9B (conf 0.95):* The right image (ASCR) correctly depicts an oblong cucumber and a teardrop-shaped plum, matching the prompt's object descriptions and spatial arrangement. The left image (baseline) misidentifies the plum as a pear, which is a significant object error.
-
-![an oblong cucumber and a teardrop plum — pairwise (LEFT = BAGEL, RIGHT = ASCR)](docs/examples/bagel/ascr_win_1_an_oblong_cucumber_and_a_teardrop_plum.png)
+![GenEval position — a bird left of a couch (3-way 50-step)](docs/examples/geneval_3way/position_400_a_bird_left_of_a_couch.jpg)
 
 ---
 
-##### **ASCR wins** — `two boys`
+**ASCR uniquely corrects ShowO · BAGEL also fails — task: color_attr**
 
-*Qwen3.5-9B (conf 0.95):* The right image (ASCR) is a faithful representation of the prompt 'two boys', showing two distinct individuals. The left image (BAGEL) depicts two identical clones of the same boy, which is a hallucination not present in the prompt.
+*OWLViT: ShowO ✗ → ASCR ✓ · BAGEL ✗. Color-attribute binding — the hardest GenEval category (ShowO 9 %, ASCR 19 %, BAGEL 51 %).*
 
-![two boys — pairwise (LEFT = BAGEL, RIGHT = ASCR)](docs/examples/bagel/ascr_win_2_two_boys.png)
-
----
-
-##### **ASCR loses** — `a giraffe next to a lamp`
-
-*Qwen3.5-9B (conf 0.95):* The left image (BAGEL) perfectly satisfies the prompt, showing a complete giraffe standing next to a lamp with correct spatial relations and lighting. The right image (ASCR) is severely cropped, cutting off the giraffe's body and showing only its head and neck, which fails to represent the full object described in the prompt.
-
-![a giraffe next to a lamp — pairwise (LEFT = BAGEL, RIGHT = ASCR)](docs/examples/bagel/ascr_loss_1_a_giraffe_next_to_a_lamp.png)
+![GenEval color_attr — a yellow pizza and a green oven (3-way 50-step)](docs/examples/geneval_3way/color_attr_504_a_yellow_pizza_and_a_green_oven.jpg)
 
 ---
 
-##### **ASCR loses** — `a girl on the top of a frog`
+![GenEval color_attr — an orange cow and a purple sandwich (3-way 50-step)](docs/examples/geneval_3way/color_attr_544_an_orange_cow_and_a_purple_sandwich.jpg)
 
-*Qwen3.5-9B (conf 0.95):* The left image (baseline) perfectly matches the prompt 'a girl on the top of a frog' with a cute, high-quality 3D render of a girl sitting on a large frog in a pond. The right image (ASCR) shows a girl sitting on a frog, but the frog is on a rock, not in water, and the overall style is less consistent with the prompt's implied whimsical nature. The left image is more visually appealing and adheres better to the spatial relation of being 'on top of' in a natural setting.
+---
 
-![a girl on the top of a frog — pairwise (LEFT = BAGEL, RIGHT = ASCR)](docs/examples/bagel/ascr_loss_2_a_girl_on_the_top_of_a_frog.png)
+**Honest contrast — only BAGEL passes (tasks: two_object, position)**
+
+*OWLViT: ShowO ✗ · ASCR ✗ · BAGEL ✓. Cases where BAGEL's larger capacity wins and ASCR cannot fully correct.*
+
+![GenEval two_object — a horse and a computer keyboard (3-way 50-step)](docs/examples/geneval_3way/two_object_088_a_horse_and_a_computer_keyboard.jpg)
+
+---
+
+![GenEval position — a baseball glove below an umbrella (3-way 50-step)](docs/examples/geneval_3way/position_368_a_baseball_glove_below_an_umbrella.jpg)
 
 
 ### ASCR vs ShowO Baseline — 50-step (job 68795)
