@@ -548,7 +548,7 @@ ASCR/
 │   │                                               GenEval directory format
 │   ├── download_owlvit_model.py                 ← OWLViT model download helper
 │   ├── download_detr_model.py                   ← DETR model download helper
-│   ├── submit_geneval_scoring_after_68794.sh    ← submit 3 scoring jobs after gen
+│   ├── submit_geneval_scoring.sh                ← submit 3 GenEval scoring jobs after gen
 │   ├── judge_hard64_pairwise_gpt.py             ← GPT-5.5 A/B pairwise judge (Hard64)
 │   ├── prepare_bench_data.py                    ← download & index DPG/GenAI/DSG bench3 data
 │   ├── submit_bench_gen.sh                      ← submit ShowO+ASCR bench3 generation shards
@@ -580,8 +580,6 @@ ASCR/
 │   │                                               (8-GPU OWLViT, 1 dir at a time)
 │   ├── ★ stage1_hard64_bagel_3way_judge_sharded.sbatch  ← 8-GPU sharded Qwen
 │   │                                               judge (BAGEL vs ShowO50 vs ASCR50)
-│   ├── stage1_geneval_evaluate.sbatch           ← DEPRECATED: pairwise; use score_single
-│   ├── stage1_hard64_bagel_3way_judge.sbatch    ← DEPRECATED: 1-GPU; use *_sharded
 │   ├── ★ geneval_gen_shard.sbatch               ← bench3 ShowO+ASCR generation shard
 │   │                                               (8-GPU, arbitrary prompt file + range)
 │   ├── bench_bagel_gen_shard.sbatch             ← bench3 BAGEL generation shard
@@ -604,7 +602,7 @@ ASCR/
 │   ├── stage1_design.md                         ← ASCR algorithm design notes
 │   ├── benchmark_plan.md                        ← evaluation plan
 │   ├── cluster_notes.md                         ← HKU AI cluster usage notes
-│   ├── project_status.md                        ← current status snapshot
+│   ├── changelog.md                             ← dated experiment narratives
 │   └── examples/                                ← pairwise comparison images (git-tracked)
 │
 ├── external/Show-o/                             ← NOT in git; clone separately
