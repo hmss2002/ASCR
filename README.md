@@ -4,7 +4,7 @@ ASCR is a research prototype for studying and correcting confidence-semantic inc
 
 This README is the project control document. It records the research plan, implementation plan, current progress, expected interfaces, cluster workflow, and GitHub synchronization policy. It should be updated whenever a meaningful implementation batch is completed.
  
-## Stage 1 Status Log (2026-05-22, fair-comparison rerun in progress)
+## Stage 1 Status Log (2026-05-22, fair-comparison rerun complete)
 
 **Three bugs discovered and fixed:**
 
@@ -12,7 +12,7 @@ This README is the project control document. It records the research plan, imple
 2. **Qwen pairwise RIGHT-position bias** (commit `557d2fc`, 2026-05-22): Whichever model was placed on the RIGHT always won lopsidedly. Fixed: `pair_bagel_vs_hard64_run.py` gains `--swap`; BAGEL 3-way judge now loops fwd + swap.
 3. **`confidence_steps: 3` root bug** (commit `3fb04b5`, 2026-05-22): `configs/stage1_showo_qwen35_9b_fullcap_parallel.yaml` had `confidence_steps: 3`. `ShowOAdapter.initialize()` passes this explicitly as `steps=self.confidence_steps` to `run_confidence_block()`, which uses `steps = int(steps or self.generation_timesteps)` — because `3` is truthy, the `generation_timesteps: 50` fallback was never reached. **ShowO baseline was running only 3 MaskGIT steps, not 50.** ASCR ran at most 3 + 8×3 = 27 steps vs ShowO's 3 — a 9× compute gap, not a fair comparison. Fixed: `confidence_steps: 3 → 50`, `max_iterations: 8 → 3` (4× ShowO budget). New parallel rerun submitted via `scripts/submit_parallel_rerun.sh`.
 
-> **Impact of Bug 3:** Hard64 clean pass/fail before fix: ASCR 50/64 (78.1 %) vs ShowO **35/64 (54.7 %)** (+23.4 pp). After fix (50-step ShowO): ASCR **54/64 (84.4 %)** vs ShowO **50/64 (78.1 %)** (+6.2 pp). GenEval fair-comparison numbers are pending job 68832.
+> **Impact of Bug 3:** Hard64 clean pass/fail before fix: ASCR 50/64 (78.1 %) vs ShowO **35/64 (54.7 %)** (+23.4 pp). After fix (50-step ShowO): ASCR **54/64 (84.4 %)** vs ShowO **50/64 (78.1 %)** (+6.2 pp). GenEval: ShowO(3-step) 54.02 % → ShowO50 **66.62 %** (after fix). ASCR advantage collapsed from +7.95 pp → **+0.64 pp**.
 
 Action items (Bug 1 + 2 batch, all done):
 
@@ -34,9 +34,10 @@ Action items (Bug 3 batch):
 - [x] **68810–68818** GenEval parallel generation (9 nodes × 8 GPU, confidence_steps=50) — COMPLETED. Run root: `outputs/geneval_parallel_20260522_120250/`.
 - [x] **68819** GenEval merge+eval (aggregate 9-node suite, convert to eval dirs, submit 68832) — COMPLETED in 00:02:46.
 - [x] **68820** Hard64 generation + Qwen judge (confidence_steps=50, max_iter=3) — COMPLETED in 00:23:18. ASCR **54/64 (84.4 %)** vs ShowO **50/64 (78.1 %)** clean pass/fail; pairwise 8W/1L/55T.
-- [ ] **68832** GenEval OWLViT scoring for 68810–68818 images — **PENDING** (queue: waiting for node SPGL-1-19, occupied by another user's job; estimated start 2026-05-23 00:28).
+- [x] **68832** GenEval OWLViT scoring for 68810–68818 images — **COMPLETED** (finished before expected ETA). ShowO50 **66.62 %**, ASCR50 **67.25 %**, delta **+0.64 pp**. Run: `outputs/geneval_parallel_20260522_120250/`.
+- [x] **68835** Hard64 BAGEL 3-way pairwise with fair confidence_steps=50 images — **SUBMITTED** to `gpu_shared` partition. Will produce `outputs/hard64_parallel_20260522_120250/bagel_3way/`.
 - [ ] Build fair 3-way GenEval summary (68832 + 68792 BAGEL) and update this README.
-- [ ] Re-run Hard64 BAGEL 3-way pairwise with confidence_steps=50 images.
+- [ ] Replace stale docs/examples images with fair 50-step versions (after 68835 completes).
 
 Job inventory snapshot (2026-05-22):
 
@@ -69,10 +70,11 @@ Job inventory snapshot (2026-05-22):
 68818 GenEval gen shard 8 (57 prompts, confidence_steps=50)  COMPLETED  18:20
 68819 GenEval merge+eval (aggregate + submit 68832)    COMPLETED  00:02:46 -> outputs/geneval_parallel_20260522_120250/
 68820 Hard64 gen+judge (confidence_steps=50, max_iter=3)     COMPLETED  00:23:18 -> ASCR 54/64 (84.4 %), ShowO 50/64 (78.1 %)
-68832 GenEval OWLViT scoring (confidence_steps=50 images)    PENDING    ETA 2026-05-23 00:28 (SPGL-1-19 occupied)
+68832 GenEval OWLViT scoring (confidence_steps=50)     COMPLETED  -> ShowO50 66.62 %, ASCR50 67.25 %, +0.64 pp (fair)
+68835 Hard64 BAGEL 3-way pairwise (fair, confidence_steps=50)  SUBMITTED -> gpu_shared, outputs/hard64_parallel_20260522_120250/bagel_3way/
 ```
 
-Cluster constraints (HKU HPC `gpu` partition): max 28 GPUs/user, <=2 nodes/job, 5 running jobs, 8 submitted. Visible GPU pool: 8 nodes (SPGL-1-12–19), 64 L40S GPUs. As of 2026-05-22 14:00, all 8 `gpu` nodes are occupied by other users; 68832 is backfill-scheduled for SPGL-1-19 when job 68831 (`goal_eval`, user zheliu12) finishes.
+Cluster constraints (HKU HPC `gpu` partition): max 28 GPUs/user, <=2 nodes/job, 5 running jobs, 8 submitted. Visible GPU pool: 8 nodes (SPGL-1-12–19), 64 L40S GPUs. Job 68835 submitted to `gpu_shared` partition (SPGL-1-6 / SPGL-1-10, 8 GPUs idle).
 
 
 
@@ -88,54 +90,48 @@ for method details and [Qualitative Examples](#qualitative-examples) for side-by
 |---|---|---:|---:|---:|---|
 | ASCR50 vs ShowO baseline | Clean pass/fail | ASCR **54/64 (84.4 %)** | ShowO **50/64 (78.1 %)** | 64 | Fair comparison; confidence_steps=50 for both |
 | ASCR50 vs ShowO baseline | Pairwise debiased | ⚠ inconclusive | ⚠ inconclusive | 64 x 2 | RIGHT-side bias dominates (see note) |
-| BAGEL-7B-MoT vs ShowO50 | Pairwise debiased | BAGEL **80/128 (62.5 %)** | ShowO 48/128 (37.5 %) | 128 | Bidirectional; reliable |
-| BAGEL-7B-MoT vs ASCR50 | Pairwise debiased | BAGEL **101/128 (78.9 %)** | ASCR 27/128 (21.1 %) | 128 | Bidirectional; reliable |
+| BAGEL-7B-MoT vs ShowO50 | Pairwise debiased | pending job 68835 | pending job 68835 | — | Fair rerun with confidence_steps=50 images |
+| BAGEL-7B-MoT vs ASCR50 | Pairwise debiased | pending job 68835 | pending job 68835 | — | Fair rerun with confidence_steps=50 images |
 
 > ⚠ **Bug 3 correction (confidence_steps):** All hard64 runs before job 68820 (including 68795)
-> used `confidence_steps=3`, making ShowO run only 3 MaskGIT steps. The numbers in the table above
-> reflect the new **fair** comparison from job 68820 (`confidence_steps=50` for ShowO baseline).
-> Old (unfair) numbers: ASCR 50/64 (78.1%) vs ShowO **35/64 (54.7%)** — inflated +23.4 pp gap
-> because ShowO was 3-step vs ASCR max 27-step. Fair gap: **+6.2 pp**.
+> used `confidence_steps=3`, making ShowO run only 3 MaskGIT steps. The BAGEL pairwise numbers
+> from jobs 68800/68801 also used confidence_steps=3 images and are superseded by job 68835
+> (running now on gpu_shared). Fair ASCR vs ShowO gap on Hard64 clean pass/fail: **+6.2 pp**.
 
-> **Why pairwise ShowO vs ASCR is inconclusive:** Bidirectional judging (fwd + swap, 64 prompts
-> each) reveals that the RIGHT side wins >= 90 % of non-tie decisions in *both* directions regardless
-> of which model occupies it. The BAGEL comparisons are robust because BAGEL's quality gap is
-> large enough to survive the positional noise.
+> **Why pairwise ShowO vs ASCR is inconclusive:** Bidirectional judging reveals RIGHT side wins
+> >= 90 % of non-tie decisions in *both* directions. The BAGEL comparisons are more robust
+> because BAGEL's quality gap is large enough to survive positional noise.
 >
-> **Reliable ASCR vs ShowO evidence:** (1) Clean pass/fail shows ASCR **+6.2 pp** on hard64
-> (fair comparison, job 68820). (2) Fair 50-step GenEval detector scoring (no Qwen) pending job
-> 68832; current numbers from job 68802 used confidence_steps=3 ShowO images (see GenEval section).
+> **Reliable ASCR vs ShowO evidence:** (1) Hard64 clean pass/fail **+6.2 pp** (job 68820,
+> confidence_steps=50). (2) GenEval OWLViT **+0.64 pp** task-avg (job 68832, confidence_steps=50,
+> fair comparison). Only `color_attr` shows consistent improvement (+4 pp).
 >
 > **Note:** Qwen3.5-9B is both the ASCR correction loop's evaluator and the hard64 judge.
 > Clean pass/fail may include ~4-8 pp same-evaluator bias. GenEval uses OWLViT detectors and
 > is evaluator-independent. No human evaluation has been conducted.
 
-**GenEval full 553 prompts - 50-step detector-based 3-way summary (jobs 68794+68802 for ShowO/ASCR, 68792 for BAGEL):**
-
-> ⚠ **Pending fair comparison:** ShowO50 numbers below used `confidence_steps=3` (Bug 3) —
-> ShowO ran only 3 MaskGIT steps. Fair-comparison images (confidence_steps=50) are generated in
-> jobs 68810–68818; OWLViT scoring in job **68832** is PENDING (ETA 2026-05-23 00:28).
-> The table below is shown for reference but **ShowO50 numbers will be revised when 68832 completes.**
+**GenEval full 553 prompts - fair 3-way detector-based summary (jobs 68810–68818+68832 for ShowO/ASCR, 68792 for BAGEL, all confidence_steps=50):**
 
 | Task | N | ShowO50 | ASCR50 | BAGEL-7B-MoT | ASCR - ShowO |
 |---|---:|---:|---:|---:|---:|
 | single_object | 80 | 100.00% | 100.00% | 100.00% | +0.00 |
-| two_object | 99 | 65.66% | 79.80% | 96.97% | +14.14 |
-| counting | 80 | 40.00% | 47.50% | 68.75% | +7.50 |
-| colors | 94 | 74.47% | 75.53% | 70.21% | +1.06 |
-| position | 100 | 35.00% | 50.00% | 58.00% | +15.00 |
-| color_attr | 100 | 9.00% | 19.00% | 51.00% | +10.00 |
-| **Official task-avg score** | **553** | **54.02%** | **61.97%** | **74.15%** | **+7.95** |
-| Raw prompt/image accuracy | 553 | 52.62% | 60.94% | 73.42% | +8.32 |
+| two_object | 99 | 93.94% | 93.94% | 96.97% | +0.00 |
+| counting | 80 | 63.75% | 62.50% | 68.75% | -1.25 |
+| colors | 94 | 67.02% | 68.09% | 70.21% | +1.06 |
+| position | 100 | 39.00% | 39.00% | 58.00% | +0.00 |
+| color_attr | 100 | 36.00% | 40.00% | 51.00% | +4.00 |
+| **Official task-avg score** | **553** | **66.62%** | **67.25%** | **74.16%** | **+0.64** |
 
-ASCR improves the ShowO50 baseline most strongly on **two_object**, **position**, **color_attr**,
-and **counting**. BAGEL remains the strongest overall model, especially on two-object and
-color-attribute binding; this is expected because BAGEL is a larger dedicated T2I model.
+> ⚠ **Bug 3 impact on GenEval:** The old unfair numbers (ShowO 54.02%, ASCR 61.97%, delta +7.95 pp)
+> were generated with `confidence_steps=3` (ShowO ran only 3 MaskGIT steps). The table above is
+> the first fair comparison. ShowO improved +12.6 pp with the fix; ASCR advantage collapsed to
+> **+0.64 pp** task-average. The only consistent ASCR improvement is `color_attr` (+4.00 pp).
+
+BAGEL remains the strongest overall model.
 
 **GenEval health check:** each of the three score files contains 553 valid JSONL records, no
 malformed rows, no missing `correct` field, and the scoring logs contain no `error`, `traceback`,
-`exception`, `nan`, or `inf`. Failure reasons are normal detector outcomes such as missing
-objects, wrong counts, wrong colors, inverted spatial relations, and failed attribute binding.
+`exception`, `nan`, or `inf`.
 
 ## Stage 1 Benchmark Summary — Three-Way Comparison (50-step, Debiased, 2026-05-22)
 
@@ -143,28 +139,29 @@ All pairwise hard64 runs use **bidirectional judging** (fwd + swap, 64 prompts e
 to cancel Qwen3.5-9B's confirmed RIGHT-side position preference. GenEval uses detector-based
 OWLViT scoring and is independent of Qwen.
 
-**Performance ordering:**
+**Performance ordering (fair comparison, confidence_steps=50):**
 
-> **GenEval:** BAGEL-7B-MoT > ASCR50 > ShowO50<br>
-> **Hard64 pairwise:** BAGEL-7B-MoT >> ASCR50 ~= ShowO50<br>
-> **Hard64 clean pass/fail:** ASCR50 > BAGEL-7B-MoT > ShowO50
+> **GenEval:** BAGEL-7B-MoT (74.16%) > ASCR50 (67.25%) > ShowO50 (66.62%) — gap **+0.64 pp**<br>
+> **Hard64 clean pass/fail:** ASCR50 (84.4%) > ShowO50 (78.1%) — gap **+6.2 pp**<br>
+> **Hard64 BAGEL pairwise (fair):** pending job 68835<br>
+> **Hard64 ASCR vs ShowO pairwise:** ⚠ inconclusive (Qwen position bias)
 
-BAGEL is a 7B dedicated T2I model - the GenEval and pairwise gap reflects model scale, not a
-failure of the correction loop. ASCR's advantage over ShowO is clearest in detector-based
-GenEval (+7.95 pp official task-average score) and clean pass/fail (+6.3 pp); pairwise comparison
-between ASCR and ShowO is unreliable due to extreme position bias.
+BAGEL is a 7B dedicated T2I model - the GenEval gap reflects model scale, not a failure of the
+correction loop. ASCR's advantage over ShowO: **+6.2 pp Hard64 clean pass/fail** (Qwen judge,
+evaluator circularity caveat) and **+0.64 pp GenEval** (OWLViT, evaluator-independent). The
+previously reported +7.95 pp GenEval advantage was an artifact of Bug 3 (`confidence_steps=3`).
 
-### Debiased Pairwise Win/Loss Summary (50-step)
+### Debiased Pairwise Win/Loss Summary (confidence_steps=50)
 
 | Comparison | Winner | Debiased Wins | Debiased Losses | Total Non-Tie | Win Rate |
 | --- | --- | ---: | ---: | ---: | ---: |
-| **BAGEL-7B-MoT vs ShowO50** | **BAGEL** | **80** | 48 | 128 | **62.5 %** |
-| **BAGEL-7B-MoT vs ASCR50** | **BAGEL** | **101** | 27 | 128 | **78.9 %** |
+| **BAGEL-7B-MoT vs ShowO50** | pending 68835 | — | — | — | — |
+| **BAGEL-7B-MoT vs ASCR50** | pending 68835 | — | — | — | — |
 | **ASCR50 vs ShowO50** | ⚠ inconclusive | - | - | - | - |
 
-> ShowO vs ASCR debiased breakdown: fwd (ASCR RIGHT) ASCR 37 / ShowO 1 / Tie 26;
-> swap (ShowO RIGHT) ShowO 52 / ASCR 0 / Tie 12. RIGHT side wins >= 90 % of non-ties in both
-> directions - position bias larger than quality signal; numbers not interpretable.
+> **Old (unfair, confidence_steps=3) BAGEL pairwise for reference only:**
+> BAGEL vs ShowO: BAGEL 62.5 % (80/128 debiased); BAGEL vs ASCR: BAGEL 78.9 % (101/128 debiased).
+> These used 3-step ShowO/ASCR images; see job 68835 for fair rerun.
 
 ### Clean Pass/Fail Summary (confidence_steps=50, job 68820, 2026-05-22)
 
@@ -179,112 +176,80 @@ between ASCR and ShowO is unreliable due to extreme position bias.
 | ShowO50 baseline | 50 | 14 | **78.1 %** | confidence_steps=50 |
 | BAGEL-7B-MoT | ~54 | ~10 | ~84.4 % | from old 3-step comparison; pending re-run |
 
-### GenEval Detector Summary (50-step, 553 prompts)
+### GenEval Detector Summary (fair, confidence_steps=50, 553 prompts, jobs 68810–68818+68832+68792)
 
 | Task | N | ShowO50 | ASCR50 | BAGEL-7B-MoT | ASCR - ShowO |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | single_object | 80 | 100.00% | 100.00% | 100.00% | +0.00 |
-| two_object | 99 | 65.66% | 79.80% | 96.97% | +14.14 |
-| counting | 80 | 40.00% | 47.50% | 68.75% | +7.50 |
-| colors | 94 | 74.47% | 75.53% | 70.21% | +1.06 |
-| position | 100 | 35.00% | 50.00% | 58.00% | +15.00 |
-| color_attr | 100 | 9.00% | 19.00% | 51.00% | +10.00 |
-| **Official task-avg score** | **553** | **54.02%** | **61.97%** | **74.15%** | **+7.95** |
-| Raw prompt/image accuracy | 553 | 52.62% | 60.94% | 73.42% | +8.32 |
+| two_object | 99 | 93.94% | 93.94% | 96.97% | +0.00 |
+| counting | 80 | 63.75% | 62.50% | 68.75% | -1.25 |
+| colors | 94 | 67.02% | 68.09% | 70.21% | +1.06 |
+| position | 100 | 39.00% | 39.00% | 58.00% | +0.00 |
+| color_attr | 100 | 36.00% | 40.00% | 51.00% | +4.00 |
+| **Official task-avg score** | **553** | **66.62%** | **67.25%** | **74.16%** | **+0.64** |
 
 ### Key Takeaways
 
-- **BAGEL-7B-MoT is the strongest model overall**, beating ShowO50 and ASCR50 in debiased
-  hard64 pairwise comparisons and in GenEval official task-average score. This reflects model
-  scale (7B dedicated T2I vs 1.3B ShowO + loop), not a surprising result.
-- **ASCR50 consistently improves over ShowO50** on independent detector-based GenEval (pending
-  fair numbers from job 68832; current comparison used confidence_steps=3 ShowO images) and
-  Qwen clean pass/fail **+6.2 pp** (fair comparison, job 68820, confidence_steps=50).
-- **Bug 3 (`confidence_steps: 3`) inflated earlier ASCR advantage:** Old unfair delta was
-  +23.4 pp (ASCR 78.1% vs ShowO 54.7%) because ShowO ran 3 steps vs ASCR max 27 steps (9× ratio).
-  Fair delta (50 vs 50 step) is **+6.2 pp** on hard64. GenEval fair numbers pending 68832.
-- **The main ASCR gains are compositional:** two-object, position, color-attribute binding, counting
-  (based on 68802 numbers; will be updated once 68832 fair comparison is available).
+- **BAGEL-7B-MoT is the strongest model overall** on both benchmarks. This reflects model
+  scale (7B dedicated T2I vs 1.3B ShowO + loop); fair BAGEL pairwise rerun pending (job 68835).
+- **ASCR50 improves over ShowO50:** +6.2 pp Hard64 clean pass/fail (Qwen judge, evaluator
+  circularity caveat) and **+0.64 pp** GenEval task-average (OWLViT, evaluator-independent).
+- **Bug 3 (`confidence_steps: 3`) accounts for nearly all old GenEval advantage:** ShowO jumped
+  from 54.02% → 66.62% with the fix. The reported +7.95 pp advantage was largely an artifact
+  of ShowO running 3 steps vs ASCR's up to 27 steps. Real advantage at equal budget: **+0.64 pp**.
+- **Only `color_attr` shows consistent ASCR improvement:** +4 pp on GenEval and likely the real
+  algorithmic gain. Tasks like two_object and position equalize once ShowO gets full 50 steps.
 - **Pairwise ShowO vs ASCR cannot be resolved by Qwen:** Extreme RIGHT-side position bias
-  (>= 90 % right-side win rate regardless of model) overwhelms any quality signal. Do not
-  interpret the raw pairwise counts as evidence of model quality in either direction.
-- **50-step vs 18-step:** Debiased BAGEL vs ASCR numbers are identical at both step counts
-  (BAGEL 78.9 % both runs), suggesting more diffusion steps do not close the ASCR-BAGEL gap.
+  (>= 90 % right-side win rate regardless of model) overwhelms any quality signal.
 - **Evaluator circularity:** Qwen3.5-9B is the ASCR loop's semantic feedback provider and the
-  judge for all hard64 evaluations. The GenEval run uses OWLViT detectors and is circularity-free;
-  it independently confirms ASCR improves over ShowO.
+  judge for all hard64 evaluations. The GenEval run uses OWLViT detectors and is circularity-free.
 
 ## 2026-05-22 GenEval — Independent Full 553-Prompt Evaluation
 
-> ⚠ **Two sub-runs; only the second (pending) is fair:**
->
-> **Sub-run A (jobs 68794+68802, confidence_steps=3):** ShowO images were generated with `confidence_steps=3`
-> (Bug 3). ShowO ran only 3 MaskGIT steps. Results are shown for reference but are **not a fair
-> comparison**; do not cite the ShowO50 numbers as true 50-step performance.
->
-> **Sub-run B (jobs 68810–68819+68832, confidence_steps=50):** Fair parallel rerun with `confidence_steps=50`.
-> Image generation complete; OWLViT scoring job **68832 is PENDING** (ETA 2026-05-23 00:28).
-> This README will be updated when 68832 completes.
+**Sub-run A (jobs 68794+68802, confidence_steps=3 — SUPERSEDED):** ShowO images used Bug 3
+(`confidence_steps=3`). All numbers from this run are stale; do not cite.
 
-This run evaluates the full GenEval 553-prompt suite for ShowO50 baseline, ASCR50, and
-BAGEL-7B-MoT using a non-Qwen, object-detection-based scorer. It is the cleanest evaluator-
-independent evidence for ASCR vs ShowO because it does not use the Qwen model that provides
-ASCR's semantic feedback.
+**Sub-run B (jobs 68810–68819+68832, confidence_steps=50 — CURRENT):** Fair parallel rerun.
+Results: ShowO50 66.62%, ASCR50 67.25% task-avg. See tables in Quick Results above.
 
-**Sub-run A Protocol (68794+68802, confidence_steps=3 ShowO — reference only):**
+This run evaluates the full GenEval 553-prompt suite using OWLViT object-detection-based scoring
+(no Qwen). It is the cleanest evaluator-independent evidence for ASCR vs ShowO.
 
-- ShowO/ASCR images: `outputs/geneval_showo_ascr_68794_20260522_042410/`.
-- BAGEL images: `outputs/geneval_bagel_68762_20260521_175812/geneval_bagel/`.
-- Evaluator: `scripts/evaluate_geneval_owlvit.py` with local `models/owlvit-base-patch32`.
-- ShowO/ASCR scoring job: 68802, 8 GPU shards, completed in 00:01:45.
-- BAGEL scoring job: 68792, completed successfully.
-- Output files: `outputs/geneval_showo_ascr_68794_20260522_042410/results_baseline.jsonl`,
-  `outputs/geneval_showo_ascr_68794_20260522_042410/results_ascr.jsonl`, and
-  `outputs/geneval_showo_ascr_68784_20260521_224813/scores/BAGEL.jsonl`.
-- Generated 3-way summary: `outputs/geneval_showo_ascr_68794_20260522_042410/geneval_3way_summary.md`.
-
-**Sub-run B Protocol (68810–68819+68832, confidence_steps=50 — fair, pending scoring):**
+**Sub-run B Protocol:**
 
 - ShowO/ASCR images: `outputs/geneval_parallel_20260522_120250/geneval_baseline/` (553 imgs) and `geneval_ascr/` (553 imgs).
 - Generation: 9-node parallel job (68810–68818), merged by 68819.
-- Scoring: job 68832 pending. Expected output: `outputs/geneval_parallel_20260522_120250/results_*.jsonl`.
+- Scoring: job 68832, 8 GPU shards. Output: `outputs/geneval_parallel_20260522_120250/results_baseline.jsonl` and `results_ascr.jsonl`.
+- BAGEL: job 68792, output at `outputs/geneval_showo_ascr_68784_20260521_224813/scores/BAGEL.jsonl`.
 
 **Evaluator fixes used for the final score:**
 
-- HSV pixel-histogram color classifier for color-attribute binding, replacing unreliable
-  OWLViT/CLIP pooler color similarities.
+- HSV pixel-histogram color classifier for color-attribute binding.
 - Per-class NMS at IoU 0.5 to remove duplicate overlapping detections.
-- Tag-aware detection threshold: default `--threshold 0.01` for recall-sensitive tasks, plus
-  `--counting-threshold 0.15` for counting to suppress low-confidence false positives.
+- Tag-aware detection threshold: default `--threshold 0.01`, plus `--counting-threshold 0.15` for counting.
 
-**Results:**
+**Fair Results (Sub-run B):**
 
 | Task | N | ShowO50 | ASCR50 | BAGEL-7B-MoT | ASCR - ShowO |
 |---|---:|---:|---:|---:|---:|
 | single_object | 80 | 100.00% (80 / 80) | 100.00% (80 / 80) | 100.00% (80 / 80) | +0.00 |
-| two_object | 99 | 65.66% (65 / 99) | 79.80% (79 / 99) | 96.97% (96 / 99) | +14.14 |
-| counting | 80 | 40.00% (32 / 80) | 47.50% (38 / 80) | 68.75% (55 / 80) | +7.50 |
-| colors | 94 | 74.47% (70 / 94) | 75.53% (71 / 94) | 70.21% (66 / 94) | +1.06 |
-| position | 100 | 35.00% (35 / 100) | 50.00% (50 / 100) | 58.00% (58 / 100) | +15.00 |
-| color_attr | 100 | 9.00% (9 / 100) | 19.00% (19 / 100) | 51.00% (51 / 100) | +10.00 |
-| **Official task-avg score** | **553** | **54.02%** | **61.97%** | **74.15%** | **+7.95** |
-| Raw prompt/image accuracy | 553 | 52.62% (291 / 553) | 60.94% (337 / 553) | 73.42% (406 / 553) | +8.32 |
+| two_object | 99 | 93.94% (93 / 99) | 93.94% (93 / 99) | 96.97% (96 / 99) | +0.00 |
+| counting | 80 | 63.75% (51 / 80) | 62.50% (50 / 80) | 68.75% (55 / 80) | -1.25 |
+| colors | 94 | 67.02% (63 / 94) | 68.09% (64 / 94) | 70.21% (66 / 94) | +1.06 |
+| position | 100 | 39.00% (39 / 100) | 39.00% (39 / 100) | 58.00% (58 / 100) | +0.00 |
+| color_attr | 100 | 36.00% (36 / 100) | 40.00% (40 / 100) | 51.00% (51 / 100) | +4.00 |
+| **Official task-avg score** | **553** | **66.62%** | **67.25%** | **74.16%** | **+0.64** |
 
-**Sanity checks:**
+**Stale Sub-run A results (confidence_steps=3 — do not cite):**
 
-- All three result files contain exactly 553 records, matching the GenEval prompt count.
-- JSONL parsing is clean: no malformed rows and no missing `correct` fields.
-- Scoring logs show no `error`, `traceback`, `exception`, `nan`, `inf`, or similar failure signal.
-- Failure reasons are ordinary detector outcomes: missing objects, wrong counts, wrong colors,
-  inverted spatial relations, or incorrect color-attribute binding.
+| Task | ShowO50 (stale) | ASCR50 (stale) | ASCR - ShowO |
+|---|---:|---:|---:|
+| two_object | 65.66% | 79.80% | +14.14 |
+| position | 35.00% | 50.00% | +15.00 |
+| color_attr | 9.00% | 19.00% | +10.00 |
+| **Official task-avg** | **54.02%** | **61.97%** | **+7.95** |
 
-**Interpretation:**
-
-The 50-step GenEval run confirms the same direction as the Qwen hard64 comparisons: ASCR
-substantially improves compositional prompt following over the ShowO50 baseline. The largest
-improvements are in two-object composition, spatial position, color-attribute binding, and
-counting. BAGEL remains ahead overall, especially on two-object and color-attribute tasks,
-which is consistent with its larger dedicated T2I model scale.
+*All stale advantages evaporate or shrink dramatically once ShowO gets the full 50 steps.*
 
 ## Source Documents
 
@@ -1043,11 +1008,16 @@ without syncing the full `outputs/` tree. Qwen pairwise canvases are exactly wha
 Qwen3.5-9B. GenEval 3-way canvases show **LEFT = ShowO-1.3B 50-step | CENTRE = ASCR50 | RIGHT = BAGEL-7B-MoT**,
 with OWLViT detector verdict in each panel header (green = ✓ pass, red = ✗ fail).
 
-### GenEval 3-Way Examples (50-step, detector-verified)
+### GenEval 3-Way Examples (⚠️ STALE — confidence_steps=3 ShowO images, pending replacement)
 
-Each canvas: **LEFT = ShowO-1.3B 50-step | CENTRE = ASCR50 | RIGHT = BAGEL-7B-MoT**. Labels show the OWLViT detector verdict (green = ✓ pass, red = ✗ fail). Source: jobs 68794 (ShowO/ASCR), 68762 (BAGEL), 68802 (detector scoring).
+> ⚠️ **STALE IMAGES:** These examples were generated with `confidence_steps=3` (Bug 3). ShowO
+> ran only 3 MaskGIT steps instead of 50. Any ShowO ✗ → ASCR ✓ improvements shown here may
+> reflect the unfair step-count gap, not genuine algorithmic gain. **These will be replaced with
+> confidence_steps=50 fair images from jobs 68810–68818+68832.** BAGEL images are unaffected.
 
-> **Image-quality note.** ShowO/ASCR panels are 512×512 from a 1.3 B-param model; BAGEL panels are 1024×1024 from a 7 B-param MoT model. The visible fidelity gap is expected and does not reflect a generation bug. **ASCR is a *semantic* corrector**: it reopens token regions identified as wrong (count / color / missing object) and re-denoises them. It changes *what* is rendered, not how photoreal it looks, so an ASCR-pass image can still look as crude as the ShowO base. The OWLViT verdict scores object/count/color correctness — not aesthetics — and is the standard GenEval protocol used by all reported numbers.
+Each canvas: **LEFT = ShowO-1.3B | CENTRE = ASCR | RIGHT = BAGEL-7B-MoT**. Labels show the OWLViT detector verdict (green = ✓ pass, red = ✗ fail). Source: jobs 68794 (ShowO/ASCR, confidence_steps=3), 68762 (BAGEL), 68802 (detector scoring).
+
+> **Image-quality note.** ShowO/ASCR panels are 512×512 from a 1.3 B-param model; BAGEL panels are 1024×1024 from a 7 B-param MoT model. The visible fidelity gap is expected. **ASCR is a *semantic* corrector**: it changes *what* is rendered, not aesthetics. The OWLViT verdict scores object/count/color correctness — not aesthetics.
 
 **ASCR corrects ShowO · BAGEL also passes — task: two_object**
 
@@ -1126,13 +1096,16 @@ Each canvas: **LEFT = ShowO-1.3B 50-step | CENTRE = ASCR50 | RIGHT = BAGEL-7B-Mo
 ![GenEval color_attr — a blue pizza and a yellow baseball glove (3-way 50-step)](docs/examples/geneval_3way/color_attr_552_a_blue_pizza_and_a_yellow_baseball_glove.jpg)
 
 
-### ASCR vs ShowO Baseline — 50-step (job 68795)
+### ASCR vs ShowO Baseline — ⚠️ STALE (confidence_steps=3, job 68795, pending replacement)
+
+> ⚠️ **STALE IMAGES:** These pairwise images used ShowO and ASCR generated with `confidence_steps=3`
+> (only 3 MaskGIT steps each). ASCR "wins" may partly reflect the unfair compute budget (ASCR
+> ran up to 27 steps vs ShowO 3 steps). Will be replaced with job 68820 fair images.
 
 8 wins · 1 loss · 3 ties shown (out of 37 wins / 1 loss / 26 ties total).
 
-> All images: LEFT = ShowO50 baseline, RIGHT = ASCR50. Images are the exact canvases fed to
-> Qwen3.5-9B. Note: pairwise ASCR/ShowO counts are unreliable (RIGHT-side bias dominates);
-> these images illustrate *what the correction loop produces* rather than serving as metric evidence.
+> All images: LEFT = ShowO baseline (3-step), RIGHT = ASCR (3-step max 27). These images
+> illustrate what the correction loop produces qualitatively; do not cite counts as metric evidence.
 
 ---
 
@@ -1231,15 +1204,15 @@ Each canvas: **LEFT = ShowO-1.3B 50-step | CENTRE = ASCR50 | RIGHT = BAGEL-7B-Mo
 ![The blue water bottle was on top of the red backpack. — pairwise (LEFT = ShowO50, RIGHT = ASCR50)](docs/examples/showo_50/tie_3_the_blue_water_bottle_was_on_top_of_the_red_backpack.png)
 
 
-### BAGEL-7B-MoT vs ShowO50 Baseline (50-step, debiased context)
+### BAGEL-7B-MoT vs ShowO Baseline — ⚠️ STALE (confidence_steps=3 ShowO, job 68800, pending replacement)
 
-4 BAGEL wins · 3 ShowO wins shown (debiased: BAGEL 62.5 % overall, 80/128 non-tie decisions).
+> ⚠️ **STALE IMAGES:** ShowO images used `confidence_steps=3` (only 3 MaskGIT steps). BAGEL wins
+> against this artificially weakened ShowO are not a fair comparison. Will be replaced with job
+> 68835 (fair confidence_steps=50 ShowO images). BAGEL images themselves are unaffected.
 
-> LEFT = ShowO50 baseline, RIGHT = BAGEL-7B-MoT (fwd direction, job 68800).
-> These images come from the **fwd** direction where ShowO is LEFT and BAGEL is RIGHT.
-> In the fwd direction alone BAGEL wins only 17/64 (position disadvantage); debiased result
-> across both directions is BAGEL 62.5 %. BAGEL wins shown here are genuine object-level
-> corrections confirmed across both fwd and swap directions.
+4 BAGEL wins · 3 ShowO wins shown.
+
+> LEFT = ShowO baseline (3-step, stale), RIGHT = BAGEL-7B-MoT.
 
 ---
 
@@ -1301,9 +1274,15 @@ Each canvas: **LEFT = ShowO-1.3B 50-step | CENTRE = ASCR50 | RIGHT = BAGEL-7B-Mo
 <details>
 <summary><strong>Full-Gallery Pairwise Examples</strong> — all 64 hard64 prompts × 3 comparisons (click to expand)</summary>
 
-## Full-Gallery Pairwise Examples (all 64 hard64 prompts × 3 comparisons)
+## Full-Gallery Pairwise Examples (⚠️ STALE — confidence_steps=3, pending replacement)
 
-These collapsible galleries contain every prompt from the 50-step hard64 run (job 68795 + 68800), organized by verdict. Each entry shows Qwen3.5-9B's confidence and one-sentence summary alongside the exact LEFT/RIGHT canvas. Images are JPG-compressed (1024 px) to keep the repo lightweight; raw PNGs remain in `outputs/.../pairwise_images/`.
+> ⚠️ **STALE IMAGES:** All three galleries below used images from job 68795 (ShowO/ASCR with
+> `confidence_steps=3`, only 3 MaskGIT steps) and job 68800 (BAGEL pairwise on same stale images).
+> These will be replaced with fair 50-step images from jobs 68820 (ShowO/ASCR) and 68835 (BAGEL).
+> Qualitative patterns may be misleading — especially ShowO ✗ cases that could be explained by
+> insufficient step count.
+
+These collapsible galleries contain every prompt from the hard64 run (job 68795 + 68800), organized by verdict. Each entry shows Qwen3.5-9B's confidence alongside the LEFT/RIGHT canvas. Images are JPG-compressed (1024 px); raw PNGs remain in `outputs/.../pairwise_images/`.
 
 ### Full Gallery — ShowO50 baseline vs ASCR50 (all 64 hard64 prompts)
 
@@ -1646,11 +1625,15 @@ Both images depict a candle placed on a surface, with a vase-like object partial
 
 ---
 
-### Full Gallery — ASCR50 vs BAGEL-7B-MoT (all 64 hard64 prompts)
+### Full Gallery — ASCR50 vs BAGEL-7B-MoT (⚠️ STALE — confidence_steps=3 ASCR, pending replacement)
 
-Source: job 68800 fwd direction (ASCR on LEFT, BAGEL on RIGHT). Bidirectional debiased result for BAGEL vs ASCR50 is BAGEL 78.9 % (101/128). The fwd-only numbers shown here exaggerate BAGEL's win rate due to RIGHT-side bias, but BAGEL's lead survives debiasing — the wins are real.
+> ⚠️ **STALE IMAGES:** ASCR images here used `confidence_steps=3` (only 3 MaskGIT steps, job 68800).
+> BAGEL wins against this artificially weakened ASCR are not a fair comparison. Will be replaced
+> with job 68835 (fair confidence_steps=50 ASCR images). BAGEL images are unaffected.
 
-> **All 64 prompts** • LEFT = ASCR50 (final), RIGHT = BAGEL-7B-MoT. `pair_NNN` images are the exact canvases shown to Qwen3.5-9B.
+Source: job 68800 fwd direction (ASCR on LEFT, BAGEL on RIGHT). **Note: ASCR was confidence_steps=3 (stale).**
+
+> **All 64 prompts** • LEFT = ASCR (3-step, stale), RIGHT = BAGEL-7B-MoT.
 
 <details><summary><b>BAGEL wins</b> (62)</summary>
 
@@ -1983,11 +1966,15 @@ The right image (BAGEL) perfectly matches the prompt, featuring a pair of beige 
 
 ---
 
-### Full Gallery — ShowO50 baseline vs BAGEL-7B-MoT (all 64 hard64 prompts)
+### Full Gallery — ShowO50 baseline vs BAGEL-7B-MoT (⚠️ STALE — confidence_steps=3 ShowO, pending replacement)
 
-Source: job 68800 fwd direction (ShowO on LEFT, BAGEL on RIGHT). Bidirectional debiased result for BAGEL vs ShowO50 is BAGEL 62.5 % (80/128). In this fwd-only direction ShowO appears to win 47/64 (LEFT-position penalty for BAGEL), but the swap direction reverses this completely (BAGEL 63/64 from LEFT).
+> ⚠️ **STALE IMAGES:** ShowO images here used `confidence_steps=3` (only 3 MaskGIT steps, job 68800).
+> BAGEL wins against this artificially weakened ShowO are not a fair comparison. Will be replaced
+> with job 68835 (fair confidence_steps=50 ShowO images). BAGEL images are unaffected.
 
-> **All 64 prompts** • LEFT = ShowO50 baseline, RIGHT = BAGEL-7B-MoT. `pair_NNN` images are the exact canvases shown to Qwen3.5-9B.
+Source: job 68800 fwd direction (ShowO on LEFT, BAGEL on RIGHT). **Note: ShowO was confidence_steps=3 (stale).**
+
+> **All 64 prompts** • LEFT = ShowO baseline (3-step, stale), RIGHT = BAGEL-7B-MoT.
 
 <details><summary><b>BAGEL wins</b> (17)</summary>
 
