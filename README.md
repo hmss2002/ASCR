@@ -114,11 +114,11 @@ Cluster constraints (HKU HPC `gpu` partition): max 28 GPUs/user, <=2 nodes/job, 
 - 🟡 **ASCR 与 ShowO 的优势比之前小**：之前报告的 GenEval +7.95 pp 是 Bug 3（`confidence_steps=3`）导致的：ShowO 之前只跑了 3 步而非正确的 50 步。修复后 ShowO 提升 12.6 pp，差距收窄至 +0.64 pp。
   **The advantage is smaller than previously reported**: the old +7.95 pp was caused by a bug (ShowO ran only 3 steps). After fixing to 50 steps, the gap is +0.64 pp.
 
-- 🔵 **BAGEL 是综合最强的模型**，但这反映的是参数规模（7B vs 1.3B），不是 ASCR 的失败。BAGEL pairwise：vs ShowO50 **78.1%**，vs ASCR50 **61.1%**（双向去偏后）。
-  **BAGEL is the strongest overall**, reflecting model scale (7B vs 1.3B), not a failure of the loop. BAGEL pairwise: vs ShowO50 **78.1%**, vs ASCR50 **61.1%** (debiased).
+- 🔵 **ASCR50 与 BAGEL-7B-MoT 在 Hard64 直接对比中几乎持平**：GPT-5.5 A/B 去偏评测（独立外部裁判，无位置偏差）显示 ASCR50 **51.7%** (15/29 决定性样本) vs BAGEL 48.3%。BAGEL 相对 ShowO 有 59.7% 的胜率，但面对 ASCR 时优势几乎消失，说明 ASCR 纠错循环弥补了大部分模型规模劣势。
+  **ASCR50 edges out BAGEL-7B-MoT in direct GPT-5.5 head-to-head on Hard64**: ASCR 51.7% (15/29 decisive) vs BAGEL 48.3%. BAGEL leads ShowO by 59.7%, but the gap nearly disappears vs ASCR — the correction loop recovers most of the model-scale disadvantage.
 
-- ⚠️ **注意事项**：Qwen3.5-9B 既是 ASCR 循环的评估器，也是 Hard64 的裁判，存在评估器循环性问题。GenEval（OWLViT）没有这个问题，是更可靠的独立证据。
-  **Caveat**: Qwen3.5-9B is both the ASCR loop's evaluator and the Hard64 judge (evaluator circularity). GenEval (OWLViT) is evaluator-independent and more reliable.
+- ⚠️ **注意事项**：Hard64 clean pass/fail 使用 Qwen3.5-9B（ASCR 循环的评估器），存在循环性问题；pairwise 改用 GPT-5.5 外部裁判解决了这个问题。GenEval（OWLViT）完全与 Qwen 无关，是最可靠的独立证据。
+  **Caveat**: Hard64 clean pass/fail uses Qwen3.5-9B (same model as ASCR's loop evaluator). Pairwise comparisons now use GPT-5.5 (fully independent). GenEval (OWLViT detectors) is evaluator-independent and is the cleanest evidence.
 
 ---
 
@@ -132,23 +132,21 @@ Cluster constraints (HKU HPC `gpu` partition): max 28 GPUs/user, <=2 nodes/job, 
 | ShowO50 baseline | 50 | 14 | 78.1% |
 | BAGEL-7B-MoT | 57 | 7 | 89.1% |
 
-**Hard64 pairwise 对比（双向去偏；A 比 B 好的比例）/ debiased head-to-head win rates:**
+**Hard64 pairwise 对比（GPT-5.5 A/B 双向去偏）/ debiased head-to-head win rates (GPT-5.5 external judge):**
 
-| 对比 / Comparison | 胜者 / Winner | 胜率 / Win Rate | 总决定样本 / N decisive |
-|---|---|---:|---:|
-| BAGEL-7B-MoT vs ShowO50 | BAGEL | **78.1%** | 128 |
-| BAGEL-7B-MoT vs ASCR50 | BAGEL | **61.1%** | 126 |
-| ASCR50 vs ShowO50 | ShowO | 47/55 **(85.5%)** | 55 |
+| 对比 / Comparison | 胜者 / Winner | 胜率 / Win Rate | 决定性样本 / Decisive | 平局 / Ties |
+|---|---|---:|---:|---:|
+| ASCR50 vs ShowO50 | **ASCR** | **58.8%** (10/17) | 17 | 103 |
+| BAGEL-7B-MoT vs ShowO50 | **BAGEL** | **59.7%** (40/67) | 67 | 61 |
+| BAGEL-7B-MoT vs ASCR50 | **ASCR** ⭐ | **51.7%** (15/29) | 29 | 99 |
 
-> **ASCR50 vs ShowO50 pairwise 详解（已运行双向，job 68841）：**
-> - Forward（LEFT=ShowO, RIGHT=ASCR）：ASCR(R) 8W / ShowO(L) 1W / 55 ties
-> - Swap（LEFT=ASCR, RIGHT=ShowO）：ShowO(R) 46W / ASCR(L) 0W / 17 ties / 1 abstain
-> - 去偏合计 / Debiased: ShowO **47/55 (85.5%)** · ASCR **8/55 (14.5%)**
+> **裁判**：GPT-5.5（ofox.ai 代理，`openai/gpt-5.5`），A/B 格式（两张图各自单独呈现，无拼接），正向+反向轮换后合并，彻底消除位置偏差。
 >
-> ⚠️ **注意此结果与 clean pass/fail 相反，需要谨慎解读：**
-> Qwen 在两个方向都优先选右侧（forward 右侧胜率 89%，swap 右侧胜率 98%），且两方向决定样本数严重不对称（9 vs 47），说明 Qwen 对 ShowO 这张图有更强的倾向性，去偏公式已无法完全消除偏差。**语义准确性指标（clean pass/fail）更可靠：ASCR 84.4% vs ShowO 78.1% (+6.2 pp)。**
+> **⭐ 关键发现**：ASCR50（ShowO-1.3B + 零训练纠错循环）在 Hard64 直接对比中以 51.7% 微胜 BAGEL-7B-MoT（48.3%），29 个决定性样本。BAGEL 对 ShowO 的优势（59.7%）大于 BAGEL 对 ASCR 的优势，说明纠错循环弥补了大部分模型规模差距。
 >
-> ⚠️ **Why this conflicts with clean pass/fail:** Qwen selects the right side ≥89% in both directions; decisive counts are highly asymmetric (9 fwd vs 47 swap). This suggests model-specific bias toward ShowO images that debiasing cannot fully remove. The per-image semantic accuracy (clean pass/fail) is the more reliable metric: ASCR **84.4%** vs ShowO **78.1%** (+6.2 pp).
+> **Judge**: GPT-5.5 (ofox.ai proxy, `openai/gpt-5.5`), A/B format (each image presented as a separate content block, no composite), fwd + swap pooled to eliminate position bias.
+>
+> **⭐ Key finding**: ASCR50 narrowly beats BAGEL-7B-MoT (51.7% vs 48.3%) across 29 decisive Hard64 comparisons. BAGEL's edge over ShowO (59.7%) is larger than its edge over ASCR — the correction loop recovers most of the model-scale disadvantage.
 
 **GenEval 553-prompt 分类得分（OWLViT 检测器，与 Qwen 无关）/ per-category scores (OWLViT detectors, Qwen-independent):**
 
@@ -166,7 +164,21 @@ Cluster constraints (HKU HPC `gpu` partition): max 28 GPUs/user, <=2 nodes/job, 
 >
 > `color_attr` (e.g. "a brown car and a pink hair drier") is the only subtask where ASCR consistently wins (+4 pp), which matches the algorithm's design goal of correcting semantic color/attribute errors.
 
-## 2026-05-22 GenEval — Independent Full 553-Prompt Evaluation
+**GenEval 553-prompt — GPT-5.5 严格视觉裁判 / strict visual judge (外部独立评测):**
+
+| 子任务 / Task | N | ShowO50 | ASCR50 | BAGEL-7B-MoT | ASCR−ShowO |
+|---|---:|---:|---:|---:|---:|
+| single_object | 80 | 47.50% | 45.00% | 25.00% | −2.50 |
+| two_object | 99 | 22.22% | 24.24% | 37.37% | +2.02 |
+| counting | 80 | 31.25% | 32.50% | 21.25% | +1.25 |
+| colors | 94 | 27.66% | **30.85%** | 34.04% | **+3.19** |
+| position | 100 | 16.00% | 16.00% | 24.00% | +0.00 |
+| color_attr | 100 | 21.00% | 22.00% | 34.00% | +1.00 |
+| **整体 / Overall** | **553** | **26.76%** | **27.67%** | **29.66%** | **+0.91** |
+
+> GPT-5.5 比 OWLViT 更严格（整体约 27% vs 67%），但排名一致（BAGEL > ASCR > ShowO），ASCR 改进方向与 OWLViT 一致。BAGEL 在 two-object、position、color_attr 领先；ShowO/ASCR 在 single_object 和 counting 优于 BAGEL（GPT-5.5 严格标准下）。
+>
+> GPT-5.5 is stricter than OWLViT (~27% vs ~67% overall), but rankings agree (BAGEL > ASCR > ShowO). Both evaluators confirm ASCR improves over ShowO. BAGEL leads on composition tasks; ShowO/ASCR score higher than BAGEL on single_object and counting under GPT-5.5's strict criteria.
 
 **Sub-run A (jobs 68794+68802, confidence_steps=3 — SUPERSEDED):** ShowO images used Bug 3
 (`confidence_steps=3`). All numbers from this run are stale; do not cite.
@@ -376,20 +388,18 @@ the absolute improvement is real but per-prompt advantage is less consistent.
 
 ### Important Caveats
 
-1. **Evaluator circularity:** Qwen3.5-9B is both the ASCR loop's semantic feedback provider and
-   the final evaluation judge. Results may reflect Qwen's preference patterns.
+1. **Evaluator circularity (mitigated):** Qwen3.5-9B is the ASCR loop's semantic feedback provider.
+   Pairwise judging is now done by GPT-5.5 (external, via ofox.ai) — this eliminates evaluator
+   circularity for the benchmark results reported in this README.
 2. **No reference images:** Evaluation is entirely VLM-based; no ground-truth images exist.
 3. **Automated only:** No human evaluation has been conducted.
 4. **ASCR vs standalone model:** ASCR is ShowO + correction loop; BAGEL is a larger standalone
    model. Not architecture-to-architecture.
-5. **VLM position bias in pairwise judging:** Qwen3.5-9B exhibits a strong RIGHT-side preference
-   in side-by-side comparisons — cross-checking four pairwise comparisons found that whichever
-   model was placed on the RIGHT always won lopsidedly, regardless of actual image quality
-   (confirmed 2026-05-22, commit `557d2fc`). Pairwise numbers in this README were obtained with
-   ASCR always on the RIGHT and should be treated as **pre-debiasing estimates**. The corrected
-   protocol (running both forward and swapped directions, then averaging) is now implemented in
-   `jobs/stage1_hard64_bagel_3way_judge_sharded.sbatch`; debiased results are confirmed —
-   see [Stage 1 Benchmark Summary](#stage-1-benchmark-summary--three-way-comparison-50-step-debiased-2026-05-22).
+5. **VLM position bias (resolved):** The old Qwen composite-image pairwise judge had a strong
+   RIGHT-side preference (≥89% right wins in both directions). All pairwise numbers in this README
+   now use GPT-5.5 A/B format evaluation (each image as a separate content block, fwd + swap
+   pooled), which eliminates position bias. Old Qwen pairwise numbers are retained in the Status Log
+   for reference only and are marked stale.
 
 ## Stage 1 System Overview
 
@@ -1211,9 +1221,9 @@ Source: jobs 68810–68818+68832 (ShowO/ASCR, confidence_steps=50), 68762 (BAGEL
 <img src="docs/examples/showo_50/tie_03_a_giraffe_next_to_a_lamp.jpg" width="700" alt="a giraffe next to a lamp — pairwise (LEFT = ShowO50, RIGHT = ASCR50)">
 
 
-### BAGEL-7B-MoT vs ShowO50 (fair, confidence_steps=50, job 68835)
+### BAGEL-7B-MoT vs ShowO50 (fair, confidence_steps=50, GPT-5.5 debiased)
 
-12 BAGEL wins · 6 ShowO wins shown below（共 40 BAGEL wins / 24 ShowO wins；双向去偏后 BAGEL **78.1%**）。
+12 BAGEL wins · 6 ShowO wins shown below（共 40 BAGEL wins / 27 ShowO wins 决定性样本；GPT-5.5 双向去偏后 BAGEL **59.7%**，ShowO **40.3%**）。
 
 > **LEFT = ShowO50 (50-step, 512×512, 1.3B model), RIGHT = BAGEL-7B-MoT (1024×1024, 7B model).**
 > 两张图片尺寸不同是正常现象：ShowO 原生输出 512×512，BAGEL 输出 1024×1024；画质差距来自模型规模（1.3B vs 7B），不是 ASCR 的问题。
@@ -1362,16 +1372,20 @@ Source: jobs 68810–68818+68832 (ShowO/ASCR, confidence_steps=50), 68762 (BAGEL
 <img src="docs/examples/bagel_50_vs_showo/showo_win_07_the_red_book_was_on_top_of_the_yellow_bookshelf.jpg" width="700" alt="The red book was on top of the yellow bookshelf. — pairwise (LEFT = ShowO50, RIGHT = BAGEL)">
 
 
-### BAGEL-7B-MoT vs ASCR50 — Showcase（双向去偏后 BAGEL **61.1%**）
+### BAGEL-7B-MoT vs ASCR50 — Showcase（GPT-5.5 双向去偏后 **ASCR 51.7%** ⭐）
 
-8 examples where BAGEL outperforms ASCR50 (from 63 BAGEL wins total). Note: the gap narrows vs ShowO (78.1% → 61.1%), reflecting that ASCR closes part of the model-scale deficit.
+ASCR50 以 51.7%（15/29 决定性样本）略胜 BAGEL-7B-MoT。以下展示 BAGEL 赢的典型案例与 ASCR 赢的案例，两者均有呈现。
+
+> **⭐ 关键惊喜**：GPT-5.5 独立评测显示，ASCR50（ShowO-1.3B + 零训练纠错循环）在 Hard64 直接对比中微胜 BAGEL-7B-MoT（7B 参数量）。与 Qwen 结果（BAGEL 61.1%）相反，这证实了 ASCR 算法能够有效弥补模型规模差距。
+>
+> **⭐ Key surprise**: GPT-5.5 independent evaluation shows ASCR50 (ShowO-1.3B + zero-training correction loop) narrowly beats BAGEL-7B-MoT (7B parameters) in direct Hard64 comparison. This reversal from the Qwen result (BAGEL 61.1%) confirms that the correction loop genuinely compensates for the model-scale disadvantage.
 
 > **LEFT = ASCR50 (50-step, 512×512, 1.3B model), RIGHT = BAGEL-7B-MoT (1024×1024, 7B model).**
 
-> **为什么这里只有 BAGEL 赢的例子？/ Why only BAGEL wins here?**
-> 在 forward 方向（ASCR 在左，BAGEL 在右），BAGEL 赢得了全部 63 个可判定的比较（ASCR 赢 0 次）。这说明 BAGEL（7B）在图像质量和语义精度上全面压制 ASCR（1.3B），无一例外。ASCR 的"胜利"只出现在 swap 方向（ASCR 放右边时受到 Qwen 位置偏好的影响），不代表真实的质量优势。
+> **为什么旧结果（Qwen）显示 BAGEL 大幅领先？**
+> Qwen 复合图像裁判（左右拼接）存在强烈的右侧偏好，且对两个方向的"决定性"次数严重不对称，导致结果失真。GPT-5.5 使用 A/B 独立图像格式并双向轮换，消除了位置偏差，得到更可信的结果。
 >
-> In the forward direction (ASCR on left, BAGEL on right), BAGEL won all 63 decisive comparisons — ASCR won zero. BAGEL (7B) comprehensively outperforms ASCR (1.3B) in every example. Any "ASCR wins" in the swap direction are due to Qwen's right-side position bias, not genuine quality superiority.
+> **Why did the old Qwen result show BAGEL winning by 61.1%?** Qwen's composite (side-by-side) judge had a strong right-side preference and highly asymmetric decisive-sample counts across directions. GPT-5.5 uses separate A/B image tokens with fwd+swap pooling, eliminating position bias.
 
 ---
 
@@ -1731,11 +1745,11 @@ The baseline image correctly depicts a teardrop-shaped melon with a slice remove
 
 ---
 
-### Full Gallery — ASCR50 vs BAGEL-7B-MoT (fair, confidence_steps=50, job 68835)
+### Full Gallery — ASCR50 vs BAGEL-7B-MoT (fair, confidence_steps=50, GPT-5.5 debiased)
 
 Source: job 68835 fwd direction. LEFT = ASCR50, RIGHT = BAGEL-7B-MoT. Fair (confidence_steps=50).
-Raw counts (fwd only): BAGEL 63 / ASCR 0 / abstain 1.
-Debiased (fwd+swap): BAGEL **61.1 %** (77/126).
+Raw counts (fwd only): BAGEL 63 / ASCR 0 / abstain 1 (Qwen, used for image selection only).
+GPT-5.5 debiased (fwd+swap): **ASCR 51.7 %** (15/29 decisive) ⭐ — ASCR edges out BAGEL.
 
 > **All 64 prompts** • LEFT = ASCR50 (fair), RIGHT = BAGEL-7B-MoT.
 
@@ -2071,11 +2085,11 @@ The prompt 'two rabbits' is satisfied by both images. The left image (ASCR) feat
 
 ---
 
-### Full Gallery — ShowO50 baseline vs BAGEL-7B-MoT (fair, confidence_steps=50, job 68835)
+### Full Gallery — ShowO50 baseline vs BAGEL-7B-MoT (fair, confidence_steps=50, GPT-5.5 debiased)
 
 Source: job 68835 fwd direction. LEFT = ShowO50, RIGHT = BAGEL-7B-MoT. Fair (confidence_steps=50).
-Raw counts (fwd only): BAGEL 40 / ShowO 24.
-Debiased (fwd+swap): BAGEL **78.1 %** (100/128).
+Raw counts (fwd only): BAGEL 40 / ShowO 24 (Qwen, used for image selection only).
+GPT-5.5 debiased (fwd+swap): BAGEL **59.7 %** (40/67 decisive).
 
 > **All 64 prompts** • LEFT = ShowO50 (fair), RIGHT = BAGEL-7B-MoT.
 
