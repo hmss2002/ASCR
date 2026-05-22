@@ -4,53 +4,75 @@ ASCR is a research prototype for studying and correcting confidence-semantic inc
 
 This README is the project control document. It records the research plan, implementation plan, current progress, expected interfaces, cluster workflow, and GitHub synchronization policy. It should be updated whenever a meaningful implementation batch is completed.
  
-## Stage 1 Status Log (all complete, 2026-05-22)
+## Stage 1 Status Log (2026-05-22, fair-comparison rerun in progress)
 
-**Two bugs discovered and fixed in commit `557d2fc` (2026-05-22):**
+**Three bugs discovered and fixed:**
 
-1. **GENERATION_TIMESTEPS default override:** `compare_showo_ascr_parallel.py` always forwarded `--generation-timesteps ${GENERATION_TIMESTEPS}` to the worker CLI, silently overriding yaml's `generation_timesteps: 50` with the sbatch default of 18. md5 comparison confirmed 68784 == 68753 baseline images are byte-identical (both 18-step). Fixed: sbatch defaults changed to 50.
-2. **Qwen pairwise RIGHT-position bias:** Cross-checking four pairwise comparisons found that whichever model was placed on the RIGHT always won lopsidedly, regardless of actual quality. Fixed: `pair_bagel_vs_hard64_run.py` gains `--swap`; `stage1_hard64_bagel_3way_judge_sharded.sbatch` now loops over `fwd` + `swap` directions.
+1. **GENERATION_TIMESTEPS default override** (commit `557d2fc`, 2026-05-22): `compare_showo_ascr_parallel.py` always forwarded `--generation-timesteps ${GENERATION_TIMESTEPS}` to the worker CLI, silently overriding yaml's `generation_timesteps: 50` with the sbatch default of 18. Fixed: sbatch defaults changed to 50.
+2. **Qwen pairwise RIGHT-position bias** (commit `557d2fc`, 2026-05-22): Whichever model was placed on the RIGHT always won lopsidedly. Fixed: `pair_bagel_vs_hard64_run.py` gains `--swap`; BAGEL 3-way judge now loops fwd + swap.
+3. **`confidence_steps: 3` root bug** (commit `3fb04b5`, 2026-05-22): `configs/stage1_showo_qwen35_9b_fullcap_parallel.yaml` had `confidence_steps: 3`. `ShowOAdapter.initialize()` passes this explicitly as `steps=self.confidence_steps` to `run_confidence_block()`, which uses `steps = int(steps or self.generation_timesteps)` — because `3` is truthy, the `generation_timesteps: 50` fallback was never reached. **ShowO baseline was running only 3 MaskGIT steps, not 50.** ASCR ran at most 3 + 8×3 = 27 steps vs ShowO's 3 — a 9× compute gap, not a fair comparison. Fixed: `confidence_steps: 3 → 50`, `max_iterations: 8 → 3` (4× ShowO budget). New parallel rerun submitted via `scripts/submit_parallel_rerun.sh`.
 
-Action items:
+> **Impact of Bug 3:** Hard64 clean pass/fail before fix: ASCR 50/64 (78.1 %) vs ShowO **35/64 (54.7 %)** (+23.4 pp). After fix (50-step ShowO): ASCR **54/64 (84.4 %)** vs ShowO **50/64 (78.1 %)** (+6.2 pp). GenEval fair-comparison numbers are pending job 68832.
+
+Action items (Bug 1 + 2 batch, all done):
 
 - [x] Fix sbatch `GENERATION_TIMESTEPS` defaults 18 -> 50 (two production sbatches).
 - [x] Add bidirectional (fwd + swap) pairwise judging to hard64 BAGEL 3-way judge.
 - [x] Commit + push fixes (commit `557d2fc`, README doc in `8d41b77`).
-- [x] **68795** hard64 64 regen @ 50-step - COMPLETED. Run root: `outputs/benchmarks_t2i_compbench_qwen35_hard64_8gpu_reuse_68795/`.
+- [x] **68795** hard64 64 regen @ 50-step - COMPLETED. ← still used confidence_steps=3 (Bug 3); superseded by 68820.
 - [x] **68798** bidir BAGEL 3-way pairwise on 18-step data - COMPLETED (debiased: BAGEL 62.5 % vs ShowO, 78.9 % vs ASCR).
 - [x] **68799** swap ShowO-vs-ASCR pairwise on 18-step GenEval data - COMPLETED (confirmed strong RIGHT-position bias).
-- [x] **68800** hard64 bidir 3-way BAGEL judge on 50-step data - COMPLETED (debiased: BAGEL 62.5 % vs ShowO50, 78.9 % vs ASCR50 - same as 18-step).
-- [x] **68801** hard64 ShowO50-vs-ASCR50 SWAP internal judge - COMPLETED (combined with 68795 fwd: ASCR 37 / ShowO 53 / Tie 38; bias-dominated, **inconclusive**).
-- [x] **68794** GenEval 553 regen @ 50-step - COMPLETED in 03:47:57. Run root: `outputs/geneval_showo_ascr_68794_20260522_042410/`.
-- [x] **68796** auto-submit GenEval scoring - FAILED because `/tmp/submit_geneval_scoring.sh` was cleaned; replaced by **68802**.
-- [x] **68802** GenEval detector scoring for ShowO50 + ASCR50 - COMPLETED in 00:01:45, exit `0:0`.
-- [x] Build 3-way GenEval summary with ShowO50 + ASCR50 + BAGEL and update this README with verified 50-step numbers.
-- [x] Close the proposed 50-step GenEval Qwen pairwise diagnostic for now: the detector-based GenEval result is evaluator-independent and is the stronger ASCR-vs-ShowO evidence.
+- [x] **68800** hard64 bidir 3-way BAGEL judge on 68795 data - COMPLETED (debiased: BAGEL 62.5 % vs ShowO, 78.9 % vs ASCR — both with confidence_steps=3).
+- [x] **68801** hard64 ShowO50-vs-ASCR50 SWAP internal judge - COMPLETED → bias-dominated; inconclusive.
+- [x] **68794** GenEval 553 regen @ generation_timesteps=50 - COMPLETED. ← confidence_steps=3 (Bug 3); superseded by 68810–68819.
+- [x] **68802** GenEval detector scoring for 68794 images - COMPLETED → ShowO(3-step) 54.02 %, ASCR 61.97 %. ← superseded by 68832.
 - [x] Delete legacy 18-step outputs `outputs/geneval_showo_ascr_68753_*/` (~3.3 GB) — **DELETED 2026-05-22.**
 
-Job inventory snapshot (2026-05-22, post-run):
+Action items (Bug 3 batch):
+
+- [x] Fix `confidence_steps: 3 → 50`, `max_iterations: 8 → 3` (commit `3fb04b5`).
+- [x] **68810–68818** GenEval parallel generation (9 nodes × 8 GPU, confidence_steps=50) — COMPLETED. Run root: `outputs/geneval_parallel_20260522_120250/`.
+- [x] **68819** GenEval merge+eval (aggregate 9-node suite, convert to eval dirs, submit 68832) — COMPLETED in 00:02:46.
+- [x] **68820** Hard64 generation + Qwen judge (confidence_steps=50, max_iter=3) — COMPLETED in 00:23:18. ASCR **54/64 (84.4 %)** vs ShowO **50/64 (78.1 %)** clean pass/fail; pairwise 8W/1L/55T.
+- [ ] **68832** GenEval OWLViT scoring for 68810–68818 images — **PENDING** (queue: waiting for node SPGL-1-19, occupied by another user's job; estimated start 2026-05-23 00:28).
+- [ ] Build fair 3-way GenEval summary (68832 + 68792 BAGEL) and update this README.
+- [ ] Re-run Hard64 BAGEL 3-way pairwise with confidence_steps=50 images.
+
+Job inventory snapshot (2026-05-22):
 
 ```
-68762 BAGEL GenEval generation                       COMPLETED
-68753 ShowO+ASCR GenEval gen @ 18-step               COMPLETED  <- BUG (should be 50-step); superseded by 68794
-68784 ShowO+ASCR GenEval gen @ 18-step (re-attempt)  COMPLETED  <- BUG (same bug); superseded by 68794
-68785 ShowO+ASCR hard64 gen @ 18-step                COMPLETED  <- BUG (same bug); superseded by 68795
-68790 GenEval score ShowO50 (dep 68784)               COMPLETED  <- on buggy 18-step data; superseded by 68802
-68791 GenEval score ASCR50  (dep 68784)               COMPLETED  <- on buggy 18-step data; superseded by 68802
-68792 GenEval score BAGEL   (dep 68762)               COMPLETED  <- valid BAGEL 50-step score
-68793 hard64 BAGEL 3-way judge fwd-only               COMPLETED  <- position-biased; superseded by 68800
-68794 GenEval 553 regen @ 50-step                     COMPLETED  -> 553 ShowO50 + 553 ASCR50 images
-68795 hard64 64 regen @ 50-step                       COMPLETED  <- 50-step run root in use by all 6880x judges below
-68796 auto-submit GenEval scoring                      FAILED     (/tmp script cleaned; replaced by 68802)
-68797 auto-submit hard64 bidir 3-way judge             FAILED     (/tmp script cleaned; resubmitted as 68800)
-68798 DIAG: bidir BAGEL 3-way on 18-step (68785)      COMPLETED  -> BAGEL 62.5 % vs ShowO, 78.9 % vs ASCR (debiased)
-68799 DIAG: swap ShowO-vs-ASCR on 18-step GenEval     COMPLETED  -> confirmed strong RIGHT-position bias
-68800 hard64 bidir 3-way BAGEL judge on 68795 data    COMPLETED  -> BAGEL 62.5 % vs ShowO50, 78.9 % vs ASCR50 (debiased)
-68801 hard64 ShowO50-vs-ASCR50 SWAP internal judge    COMPLETED  -> bias-dominated; inconclusive (see Quick Results)
-68802 GenEval detector scoring ShowO50 + ASCR50       COMPLETED  -> ShowO50 0.54021, ASCR50 0.61972
+68762 BAGEL GenEval generation                        COMPLETED  <- valid; BAGEL unaffected by confidence_steps
+68753 ShowO+ASCR GenEval gen @ 18-step                COMPLETED  <- Bug 1+3; superseded by 68810-68818
+68784 ShowO+ASCR GenEval gen @ 18-step (re-attempt)   COMPLETED  <- Bug 1+3; superseded by 68810-68818
+68785 ShowO+ASCR hard64 gen @ 18-step                 COMPLETED  <- Bug 1+3; superseded by 68820
+68790 GenEval score ShowO50 (dep 68784)                COMPLETED  <- on buggy data; superseded by 68832
+68791 GenEval score ASCR50  (dep 68784)                COMPLETED  <- on buggy data; superseded by 68832
+68792 GenEval score BAGEL   (dep 68762)                COMPLETED  <- valid BAGEL score
+68793 hard64 BAGEL 3-way judge fwd-only                COMPLETED  <- position-biased; superseded by 68800
+68794 GenEval 553 regen @ generation_timesteps=50      COMPLETED  <- Bug 3 (confidence_steps=3); superseded by 68810-68818
+68795 hard64 64 regen @ generation_timesteps=50        COMPLETED  <- Bug 3 (confidence_steps=3); superseded by 68820
+68796 auto-submit GenEval scoring                       FAILED     (/tmp script cleaned; replaced by 68802)
+68797 auto-submit hard64 bidir 3-way judge              FAILED     (/tmp script cleaned; resubmitted as 68800)
+68798 DIAG: bidir BAGEL 3-way on 18-step (68785)       COMPLETED  -> BAGEL 62.5 % vs ShowO, 78.9 % vs ASCR (debiased, both 3-step)
+68799 DIAG: swap ShowO-vs-ASCR on 18-step GenEval      COMPLETED  -> confirmed strong RIGHT-position bias
+68800 hard64 bidir 3-way BAGEL judge on 68795 data     COMPLETED  -> BAGEL 62.5 % vs ShowO, 78.9 % vs ASCR (debiased, confidence_steps=3 data)
+68801 hard64 ShowO50-vs-ASCR50 SWAP internal judge     COMPLETED  -> bias-dominated; inconclusive
+68802 GenEval detector scoring for 68794 images        COMPLETED  -> ShowO(3-step) 54.02 %, ASCR 61.97 % <- superseded by 68832
+68810 GenEval gen shard 0 (62 prompts, confidence_steps=50)  COMPLETED  17:58
+68811 GenEval gen shard 1 (62 prompts, confidence_steps=50)  COMPLETED  18:48
+68812 GenEval gen shard 2 (62 prompts, confidence_steps=50)  COMPLETED  19:47
+68813 GenEval gen shard 3 (62 prompts, confidence_steps=50)  COMPLETED  25:13
+68814 GenEval gen shard 4 (62 prompts, confidence_steps=50)  COMPLETED  21:37
+68815 GenEval gen shard 5 (62 prompts, confidence_steps=50)  COMPLETED  27:17
+68816 GenEval gen shard 6 (62 prompts, confidence_steps=50)  COMPLETED  27:01
+68817 GenEval gen shard 7 (62 prompts, confidence_steps=50)  COMPLETED  23:56
+68818 GenEval gen shard 8 (57 prompts, confidence_steps=50)  COMPLETED  18:20
+68819 GenEval merge+eval (aggregate + submit 68832)    COMPLETED  00:02:46 -> outputs/geneval_parallel_20260522_120250/
+68820 Hard64 gen+judge (confidence_steps=50, max_iter=3)     COMPLETED  00:23:18 -> ASCR 54/64 (84.4 %), ShowO 50/64 (78.1 %)
+68832 GenEval OWLViT scoring (confidence_steps=50 images)    PENDING    ETA 2026-05-23 00:28 (SPGL-1-19 occupied)
 ```
 
-Cluster constraints (HKU HPC `gpu` partition): max 28 GPUs/user, <=2 nodes/job, 5 running jobs, 8 submitted. Visible GPU pool: 19 L40S nodes, 151 GPUs total. Current Slurm queue for this account is empty.
+Cluster constraints (HKU HPC `gpu` partition): max 28 GPUs/user, <=2 nodes/job, 5 running jobs, 8 submitted. Visible GPU pool: 8 nodes (SPGL-1-12–19), 64 L40S GPUs. As of 2026-05-22 14:00, all 8 `gpu` nodes are occupied by other users; 68832 is backfill-scheduled for SPGL-1-19 when job 68831 (`goal_eval`, user zheliu12) finishes.
 
 
 
@@ -60,32 +82,40 @@ The current top-level evidence combines Qwen3.5-9B judged T2I-CompBench hard64 r
 with an independent 50-step GenEval object-checking run. See [Evaluation Methodology](#evaluation-methodology)
 for method details and [Qualitative Examples](#qualitative-examples) for side-by-side image comparisons.
 
-**T2I-CompBench hard64 - Debiased results (64 compositional prompts, Qwen3.5-9B judge, 50-step, 2026-05-22):**
+**T2I-CompBench hard64 - Debiased results (64 compositional prompts, Qwen3.5-9B judge, confidence_steps=50, job 68820, 2026-05-22):**
 
 | Comparison | Judge Method | Model A | Model B | N | Notes |
 |---|---|---:|---:|---:|---|
-| ASCR50 vs ShowO baseline | Clean pass/fail | ASCR **57/64 (89.1 %)** | ShowO 53/64 (82.8 %) | 64 | Absolute; no position bias |
+| ASCR50 vs ShowO baseline | Clean pass/fail | ASCR **54/64 (84.4 %)** | ShowO **50/64 (78.1 %)** | 64 | Fair comparison; confidence_steps=50 for both |
 | ASCR50 vs ShowO baseline | Pairwise debiased | ⚠ inconclusive | ⚠ inconclusive | 64 x 2 | RIGHT-side bias dominates (see note) |
 | BAGEL-7B-MoT vs ShowO50 | Pairwise debiased | BAGEL **80/128 (62.5 %)** | ShowO 48/128 (37.5 %) | 128 | Bidirectional; reliable |
 | BAGEL-7B-MoT vs ASCR50 | Pairwise debiased | BAGEL **101/128 (78.9 %)** | ASCR 27/128 (21.1 %) | 128 | Bidirectional; reliable |
 
+> ⚠ **Bug 3 correction (confidence_steps):** All hard64 runs before job 68820 (including 68795)
+> used `confidence_steps=3`, making ShowO run only 3 MaskGIT steps. The numbers in the table above
+> reflect the new **fair** comparison from job 68820 (`confidence_steps=50` for ShowO baseline).
+> Old (unfair) numbers: ASCR 50/64 (78.1%) vs ShowO **35/64 (54.7%)** — inflated +23.4 pp gap
+> because ShowO was 3-step vs ASCR max 27-step. Fair gap: **+6.2 pp**.
+
 > **Why pairwise ShowO vs ASCR is inconclusive:** Bidirectional judging (fwd + swap, 64 prompts
-> each, job 68795 fwd + job 68801 swap) reveals that the RIGHT side wins >= 90 % of non-tie
-> decisions in *both* directions regardless of which model occupies it. Debiased non-tie tally:
-> ASCR 37 / ShowO 53 / 90 total - but these numbers are noise-dominated; the positional effect
-> is larger than any quality signal. The BAGEL comparisons are more robust because BAGEL's
-> quality gap is large enough to survive the positional noise (BAGEL wins 63/64 on LEFT vs 17/64
-> on RIGHT - directionally consistent and much larger than the ~23-vote position bonus).
+> each) reveals that the RIGHT side wins >= 90 % of non-tie decisions in *both* directions regardless
+> of which model occupies it. The BAGEL comparisons are robust because BAGEL's quality gap is
+> large enough to survive the positional noise.
 >
-> **Reliable ASCR vs ShowO evidence:** (1) Clean pass/fail shows ASCR +6.3 pp on hard64.
-> (2) 50-step GenEval detector scoring (no Qwen) shows ASCR +7.95 pp over ShowO on the
-> official task-average score (+8.32 pp raw prompt/image accuracy). See the GenEval section below.
+> **Reliable ASCR vs ShowO evidence:** (1) Clean pass/fail shows ASCR **+6.2 pp** on hard64
+> (fair comparison, job 68820). (2) Fair 50-step GenEval detector scoring (no Qwen) pending job
+> 68832; current numbers from job 68802 used confidence_steps=3 ShowO images (see GenEval section).
 >
 > **Note:** Qwen3.5-9B is both the ASCR correction loop's evaluator and the hard64 judge.
 > Clean pass/fail may include ~4-8 pp same-evaluator bias. GenEval uses OWLViT detectors and
 > is evaluator-independent. No human evaluation has been conducted.
 
-**GenEval full 553 prompts - 50-step detector-based 3-way summary (jobs 68794, 68802, 68792):**
+**GenEval full 553 prompts - 50-step detector-based 3-way summary (jobs 68794+68802 for ShowO/ASCR, 68792 for BAGEL):**
+
+> ⚠ **Pending fair comparison:** ShowO50 numbers below used `confidence_steps=3` (Bug 3) —
+> ShowO ran only 3 MaskGIT steps. Fair-comparison images (confidence_steps=50) are generated in
+> jobs 68810–68818; OWLViT scoring in job **68832** is PENDING (ETA 2026-05-23 00:28).
+> The table below is shown for reference but **ShowO50 numbers will be revised when 68832 completes.**
 
 | Task | N | ShowO50 | ASCR50 | BAGEL-7B-MoT | ASCR - ShowO |
 |---|---:|---:|---:|---:|---:|
@@ -136,13 +166,18 @@ between ASCR and ShowO is unreliable due to extreme position bias.
 > swap (ShowO RIGHT) ShowO 52 / ASCR 0 / Tie 12. RIGHT side wins >= 90 % of non-ties in both
 > directions - position bias larger than quality signal; numbers not interpretable.
 
-### Clean Pass/Fail Summary (50-step, Qwen independent per-image)
+### Clean Pass/Fail Summary (confidence_steps=50, job 68820, 2026-05-22)
 
-| Model | Pass | Fail | Rate |
-| --- | ---: | ---: | ---: |
-| **ASCR50** | **57** | 7 | **89.1 %** |
-| BAGEL-7B-MoT | 54 | 10 | 84.4 % |
-| ShowO50 baseline | 53 | 11 | 82.8 % |
+> ⚠ **BAGEL row pending:** The BAGEL clean judge ran against confidence_steps=3 images (job
+> 68800/old run). The number below is from the BAGEL-vs-ASCR run (57/64) on 3-step images and
+> is not directly comparable to the new 50-step ShowO/ASCR numbers. A re-run with 50-step images
+> is pending.
+
+| Model | Pass | Fail | Rate | Notes |
+| --- | ---: | ---: | ---: | --- |
+| **ASCR50** | **54** | 10 | **84.4 %** | confidence_steps=50, max_iter=3 |
+| ShowO50 baseline | 50 | 14 | **78.1 %** | confidence_steps=50 |
+| BAGEL-7B-MoT | ~54 | ~10 | ~84.4 % | from old 3-step comparison; pending re-run |
 
 ### GenEval Detector Summary (50-step, 553 prompts)
 
@@ -162,10 +197,14 @@ between ASCR and ShowO is unreliable due to extreme position bias.
 - **BAGEL-7B-MoT is the strongest model overall**, beating ShowO50 and ASCR50 in debiased
   hard64 pairwise comparisons and in GenEval official task-average score. This reflects model
   scale (7B dedicated T2I vs 1.3B ShowO + loop), not a surprising result.
-- **ASCR50 consistently improves over ShowO50** on independent detector-based GenEval (+7.95 pp
-  official score; +8.32 pp raw prompt/image accuracy) and Qwen clean pass/fail (+6.3 pp).
-- **The main ASCR gains are compositional:** two-object (+14.14 pp), position (+15.00 pp),
-  color-attribute binding (+10.00 pp), and counting (+7.50 pp).
+- **ASCR50 consistently improves over ShowO50** on independent detector-based GenEval (pending
+  fair numbers from job 68832; current comparison used confidence_steps=3 ShowO images) and
+  Qwen clean pass/fail **+6.2 pp** (fair comparison, job 68820, confidence_steps=50).
+- **Bug 3 (`confidence_steps: 3`) inflated earlier ASCR advantage:** Old unfair delta was
+  +23.4 pp (ASCR 78.1% vs ShowO 54.7%) because ShowO ran 3 steps vs ASCR max 27 steps (9× ratio).
+  Fair delta (50 vs 50 step) is **+6.2 pp** on hard64. GenEval fair numbers pending 68832.
+- **The main ASCR gains are compositional:** two-object, position, color-attribute binding, counting
+  (based on 68802 numbers; will be updated once 68832 fair comparison is available).
 - **Pairwise ShowO vs ASCR cannot be resolved by Qwen:** Extreme RIGHT-side position bias
   (>= 90 % right-side win rate regardless of model) overwhelms any quality signal. Do not
   interpret the raw pairwise counts as evidence of model quality in either direction.
@@ -175,24 +214,40 @@ between ASCR and ShowO is unreliable due to extreme position bias.
   judge for all hard64 evaluations. The GenEval run uses OWLViT detectors and is circularity-free;
   it independently confirms ASCR improves over ShowO.
 
-## 2026-05-22 GenEval — Independent Full 553-Prompt Evaluation (50-step)
+## 2026-05-22 GenEval — Independent Full 553-Prompt Evaluation
+
+> ⚠ **Two sub-runs; only the second (pending) is fair:**
+>
+> **Sub-run A (jobs 68794+68802, confidence_steps=3):** ShowO images were generated with `confidence_steps=3`
+> (Bug 3). ShowO ran only 3 MaskGIT steps. Results are shown for reference but are **not a fair
+> comparison**; do not cite the ShowO50 numbers as true 50-step performance.
+>
+> **Sub-run B (jobs 68810–68819+68832, confidence_steps=50):** Fair parallel rerun with `confidence_steps=50`.
+> Image generation complete; OWLViT scoring job **68832 is PENDING** (ETA 2026-05-23 00:28).
+> This README will be updated when 68832 completes.
 
 This run evaluates the full GenEval 553-prompt suite for ShowO50 baseline, ASCR50, and
 BAGEL-7B-MoT using a non-Qwen, object-detection-based scorer. It is the cleanest evaluator-
 independent evidence for ASCR vs ShowO because it does not use the Qwen model that provides
 ASCR's semantic feedback.
 
-**Protocol:**
+**Sub-run A Protocol (68794+68802, confidence_steps=3 ShowO — reference only):**
 
-- ShowO50/ASCR50 images: `outputs/geneval_showo_ascr_68794_20260522_042410/`.
+- ShowO/ASCR images: `outputs/geneval_showo_ascr_68794_20260522_042410/`.
 - BAGEL images: `outputs/geneval_bagel_68762_20260521_175812/geneval_bagel/`.
 - Evaluator: `scripts/evaluate_geneval_owlvit.py` with local `models/owlvit-base-patch32`.
-- ShowO50/ASCR50 scoring job: 68802, 8 GPU shards, completed in 00:01:45.
+- ShowO/ASCR scoring job: 68802, 8 GPU shards, completed in 00:01:45.
 - BAGEL scoring job: 68792, completed successfully.
 - Output files: `outputs/geneval_showo_ascr_68794_20260522_042410/results_baseline.jsonl`,
   `outputs/geneval_showo_ascr_68794_20260522_042410/results_ascr.jsonl`, and
   `outputs/geneval_showo_ascr_68784_20260521_224813/scores/BAGEL.jsonl`.
 - Generated 3-way summary: `outputs/geneval_showo_ascr_68794_20260522_042410/geneval_3way_summary.md`.
+
+**Sub-run B Protocol (68810–68819+68832, confidence_steps=50 — fair, pending scoring):**
+
+- ShowO/ASCR images: `outputs/geneval_parallel_20260522_120250/geneval_baseline/` (553 imgs) and `geneval_ascr/` (553 imgs).
+- Generation: 9-node parallel job (68810–68818), merged by 68819.
+- Scoring: job 68832 pending. Expected output: `outputs/geneval_parallel_20260522_120250/results_*.jsonl`.
 
 **Evaluator fixes used for the final score:**
 
