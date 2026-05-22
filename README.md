@@ -1389,11 +1389,11 @@ Source: jobs 68810–68818+68832 (ShowO/ASCR, confidence_steps=50), 68762 (BAGEL
 
 ---
 
-##### **ShowO50 wins** — `The rectangular picture frame was hung above the beige wall.`
+##### **ShowO50 wins** — `The rectangular picture frame was hung above the beige couch.`
 
-*Qwen3.5-9B (conf 0.95):* The left image (ShowO50) correctly places a rectangular picture frame above the beige wall surface. The BAGEL image misplaces it.
+*Qwen3.5-9B (conf 0.95):* The left image (ShowO50) correctly places a rectangular picture frame above the beige couch. The BAGEL image misplaces it.
 
-<img src="docs/examples/bagel_50_vs_showo/showo_win_06_the_rectangular_picture_frame_was_hung_above_the_beige.jpg" width="700" alt="The rectangular picture frame was hung above the beige wall. — pairwise (LEFT = ShowO50, RIGHT = BAGEL)">
+<img src="docs/examples/bagel_50_vs_showo/showo_win_06_the_rectangular_picture_frame_was_hung_above_the_beige.jpg" width="700" alt="The rectangular picture frame was hung above the beige couch. — pairwise (LEFT = ShowO50, RIGHT = BAGEL)">
 
 ---
 
@@ -1656,9 +1656,9 @@ The baseline image correctly depicts a teardrop-shaped melon with a slice remove
 
 <img src="docs/examples/showo_50_full/tie_26_one_turtle.jpg" width="700" alt="One turtle">
 
-**`The rectangular picture frame was hung above the beige`**
+**`The rectangular picture frame was hung above the beige couch`**
 
-<img src="docs/examples/showo_50_full/tie_27_the_rectangular_picture_frame_was_hung_above_the_beige_.jpg" width="700" alt="The rectangular picture frame was hung above the beige">
+<img src="docs/examples/showo_50_full/tie_27_the_rectangular_picture_frame_was_hung_above_the_beige_.jpg" width="700" alt="The rectangular picture frame was hung above the beige couch">
 
 **`A brown horse and a blue vase`**
 
@@ -1894,7 +1894,7 @@ The left image (ASCR) is a clean, high-quality generation that perfectly matches
 <img src="docs/examples/bagel_50_vs_ascr/bagel_win_20_a_blue_backpack_and_a_brown_cow.jpg" width="700" alt="a blue backpack and a brown cow">
 
 **`a blue bench and a green bowl`** *(conf 0.90)*  
-The left image (ascr) is a clean, minimalist composition that perfectly matches the prompt's request for a blue bench and a green bowl. The right image (baseline) introduces significant extraneous elements like a window and peeling walls, and the bowl is placed on the floor rather than on the bench, deviating from the implied spatial relationship.
+The left image (ASCR) is a clean, minimalist composition that perfectly matches the prompt's request for a blue bench and a green bowl. The right image (BAGEL) introduces significant extraneous elements like a window and peeling walls, and the bowl is placed on the floor rather than on the bench, deviating from the implied spatial relationship.
 
 <img src="docs/examples/bagel_50_vs_ascr/bagel_win_21_a_blue_bench_and_a_green_bowl.jpg" width="700" alt="a blue bench and a green bowl">
 
@@ -1954,7 +1954,7 @@ The ASCR image correctly places the desk to the right of the horse, matching the
 <img src="docs/examples/bagel_50_vs_ascr/bagel_win_32_a_desk_on_the_right_of_a_horse.jpg" width="700" alt="a desk on the right of a horse">
 
 **`a diamond pendant and a round locket`** *(conf 0.90)*  
-The ASCR image (right) is a superior artistic interpretation of the prompt, featuring a highly detailed, realistic diamond pendant and a round locket with dramatic lighting and depth. The BAGEL image (left) is a flat, low-resolution rendering that lacks the visual fidelity and detail of the ASCR image.
+The BAGEL image (right) is a superior artistic interpretation of the prompt, featuring a highly detailed, realistic diamond pendant and a round locket with dramatic lighting and depth. The ASCR image (left) is a flat, low-resolution rendering that lacks the visual fidelity and detail of the BAGEL image.
 
 <img src="docs/examples/bagel_50_vs_ascr/bagel_win_33_a_diamond_pendant_and_a_round_locket.jpg" width="700" alt="a diamond pendant and a round locket">
 
@@ -2130,6 +2130,10 @@ Raw counts (fwd only): BAGEL 40 / ShowO 24 (Qwen, used for image selection only)
 GPT-5.5 debiased (fwd+swap): BAGEL **59.7 %** (40/67 decisive).
 
 > **All 64 prompts** • LEFT = ShowO50 (fair), RIGHT = BAGEL-7B-MoT.
+
+> ⚠️ **Qwen 一致性说明 / Qwen inconsistency note:**  
+> 部分条目的文字说明与其所在分类（ShowO wins / BAGEL wins）矛盾，这是 Qwen 判决与推理不一致的已知现象。  
+> Official comparison uses GPT-5.5 debiasing (fwd+swap): BAGEL **59.7%** (40/67 decisive). Raw Qwen verdicts are used for image selection only.
 
 <details><summary><b>BAGEL wins</b> (40)</summary>
 
@@ -2383,7 +2387,7 @@ The ShowO image (left) perfectly matches the prompt with a person standing in a 
 <img src="docs/examples/bagel_50_vs_showo/showo_win_09_a_balloon_on_the_right_of_a_person.jpg" width="700" alt="a balloon on the right of a person">
 
 **`a bee on the right of a refrigerator`** *(conf 0.90)*  
-The baseline image (left) correctly places the bee on the right side of the refrigerator, adhering to the prompt. The bagel image (right) places the bee on the left side of the refrigerator, violating the spatial constraint.
+The baseline image (left) correctly places the bee on the right side of the refrigerator, adhering to the prompt. The BAGEL image (right) places the bee on the left side of the refrigerator, violating the spatial constraint.
 
 <img src="docs/examples/bagel_50_vs_showo/showo_win_10_a_bee_on_the_right_of_a_refrigerator.jpg" width="700" alt="a bee on the right of a refrigerator">
 
