@@ -11,7 +11,7 @@ from ascr.generators.showo_native import ShowONativeEngine, compact_token_payloa
 
 
 class ShowOAdapter(GeneratorAdapter):
-    def __init__(self, repo_path=None, checkpoint_path=None, vq_model_path=None, llm_model_path=None, showo_config_path=None, device="cuda", token_grid_size=32, image_size=512, guidance_scale=4.0, generation_timesteps=18, seed=1234, native_token_loop=True, confidence_steps=2):
+    def __init__(self, repo_path=None, checkpoint_path=None, vq_model_path=None, llm_model_path=None, showo_config_path=None, device="cuda", token_grid_size=32, image_size=512, guidance_scale=4.0, generation_timesteps=50, seed=1234, native_token_loop=True, confidence_steps=50):
         self.project_root = Path.cwd()
         self.repo_path = Path(repo_path or "external/Show-o")
         self.checkpoint_path = Path(checkpoint_path or "models/show-o-512x512")

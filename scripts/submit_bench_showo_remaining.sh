@@ -1,29 +1,29 @@
 #!/usr/bin/env bash
+# Re-submit ShowO/ASCR bench3 shards that missed due to QOS limit.
+# Required env vars:
+#   ARRAY_RUN_ROOT     - run root from the original submit_bench_gen.sh run
+#   COMPLETED_JIDS     - colon-separated IDs of already-completed shard jobs (for merge dependency)
+#   SLICES             - space-separated shard indices to resubmit (e.g. "5 6 7")
 set -euo pipefail
 cd /grp01/cds_bdai/JianyuZhang/ASCR
-ARRAY_RUN_ROOT="outputs/bench3_showo_20260522_210258"
+
+ARRAY_RUN_ROOT="${ARRAY_RUN_ROOT:?Must set ARRAY_RUN_ROOT to the bench3 ShowO run directory}"
+COMPLETED_JIDS="${COMPLETED_JIDS:?Must set COMPLETED_JIDS to colon-separated IDs of completed shard jobs}"
+SLICES="${SLICES:-5 6 7}"
 SPLIT_DIR="$ARRAY_RUN_ROOT/prompt_splits"
 
-# Submit slices 5-7 (missed due to QOS limit)
-JID5=$(sbatch --parsable --partition=gpu_shared \
-  --export=ALL,SHARD_PROMPTS_FILE="$SPLIT_DIR/slice_5.txt",ARRAY_RUN_ROOT="$ARRAY_RUN_ROOT" \
-  jobs/geneval_gen_shard.sbatch)
-echo "  slice 5: job $JID5"
+NEW_JIDS=()
+for i in $SLICES; do
+  JID=$(sbatch --parsable --partition=gpu_shared \
+    --export=ALL,SHARD_PROMPTS_FILE="$SPLIT_DIR/slice_${i}.txt",ARRAY_RUN_ROOT="$ARRAY_RUN_ROOT" \
+    jobs/geneval_gen_shard.sbatch)
+  NEW_JIDS+=("$JID")
+  echo "  slice $i: job $JID"
+done
 
-JID6=$(sbatch --parsable --partition=gpu_shared \
-  --export=ALL,SHARD_PROMPTS_FILE="$SPLIT_DIR/slice_6.txt",ARRAY_RUN_ROOT="$ARRAY_RUN_ROOT" \
-  jobs/geneval_gen_shard.sbatch)
-echo "  slice 6: job $JID6"
-
-JID7=$(sbatch --parsable --partition=gpu_shared \
-  --export=ALL,SHARD_PROMPTS_FILE="$SPLIT_DIR/slice_7.txt",ARRAY_RUN_ROOT="$ARRAY_RUN_ROOT" \
-  jobs/geneval_gen_shard.sbatch)
-echo "  slice 7: job $JID7"
-
-# Merge depends on 68878-68882 + new 3 jobs
-DEP="afterok:68878:68879:68880:68881:68882:$JID5:$JID6:$JID7"
-MERGE_JID=$(sbatch --parsable --dependency="$DEP" \
+DEP_IDS=$(IFS=:; echo "${COMPLETED_JIDS}:${NEW_JIDS[*]}")
+MERGE_JID=$(sbatch --parsable --dependency="afterok:${DEP_IDS}" \
   --export=ALL,ARRAY_RUN_ROOT="$ARRAY_RUN_ROOT" \
   jobs/geneval_merge_eval.sbatch)
-echo "  merge: job $MERGE_JID (dep: $DEP)"
+echo "  merge: job $MERGE_JID (dep: afterok:${DEP_IDS})"
 echo "Done! Run root: $ARRAY_RUN_ROOT"

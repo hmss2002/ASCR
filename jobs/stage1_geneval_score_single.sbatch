@@ -77,6 +77,6 @@ done
 echo "[geneval-score] merged → $MERGED ($(wc -l < "$MERGED") records)"
 
 echo "=== ${GENEVAL_LABEL} Scores ==="
-python3 external/geneval/evaluation/summary_scores.py "$MERGED"
+"$PYTHON_BIN" external/geneval/evaluation/summary_scores.py "$MERGED"
 
 echo "[geneval-score] Done. Results at $MERGED"

@@ -19,9 +19,9 @@ def build_generator(name, config):
             token_grid_size=int(config.get('token_grid_size', generator_config.get('token_grid_size', 32))),
             image_size=int(config.get('image_size', generator_config.get('image_size', 512))),
             guidance_scale=float(generator_config.get('guidance_scale', 4.0)),
-            generation_timesteps=int(generator_config.get('generation_timesteps', 18)),
+            generation_timesteps=int(generator_config.get('generation_timesteps', 50)),
             seed=int(config.get('seed', generator_config.get('seed', 1234))),
             native_token_loop=bool(generator_config.get('native_token_loop', True)),
-            confidence_steps=int(generator_config.get('confidence_steps', 2)),
+            confidence_steps=int(generator_config.get('confidence_steps', 50)),
         )
     raise ValueError(f'Unknown generator: {name}')

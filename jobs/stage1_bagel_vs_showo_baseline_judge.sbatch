@@ -25,8 +25,8 @@ export TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-1}
 export HF_HUB_DISABLE_TELEMETRY=1
 export TOKENIZERS_PARALLELISM=false
 
-BAGEL_DIR="outputs/bagel_t2i_compbench_hard64_8gpu_20260519_202625"
-ASCR_RUN="outputs/benchmarks_t2i_compbench_qwen35_hard64_slurm8gpu_reuse_20260519_191652"
+BAGEL_DIR="${BAGEL_DIR:?BAGEL_DIR must be set to the BAGEL bench run directory (e.g. outputs/bench3_bagel_YYYYMMDD_HHMMSS)}"
+ASCR_RUN="${ASCR_RUN:?ASCR_RUN must be set to the ShowO/ASCR bench run root (e.g. outputs/bench3_showo_YYYYMMDD_HHMMSS)}"
 CONFIG="configs/stage1_showo_qwen35_9b_fullcap_parallel.yaml"
 SUITE_OUT="$BAGEL_DIR/bagel_vs_showo_baseline_suite.json"
 JUDGE_OUT="$BAGEL_DIR/qwen_pairwise_bagel_vs_showo_baseline.json"
