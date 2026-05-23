@@ -77,11 +77,11 @@ Job inventory snapshot (2026-05-22):
 68869–68877 BAGEL bench3 gen shards (8×466–463 prompts)         COMPLETED  -> outputs/bench3_bagel_20260522_193546/ (partial; continued by 68927–68934)
 68878,68879,68881,68882 ShowO bench3 slices 0–1,3–4             COMPLETED  -> outputs/bench3_showo_20260522_210258/node_68878–82
 68927–68934 BAGEL bench3 continuation shards (skip-existing)    COMPLETED  -> 3725/3725 images done
-68936 ShowO bench3 slice_5 (2331–2796, 466 prompts)             COMPLETED  -> outputs/bench3_showo_20260522_210258/node_68936
-68937 ShowO bench3 slice_7 (3263–3725, 463 prompts)             COMPLETED  -> outputs/bench3_showo_20260522_210258/node_68937
+68936 ShowO bench3 slice_5 (2331–2796, 466 prompts)             RUNNING    -> outputs/bench3_showo_20260522_210258/node_68936
+68937 ShowO bench3 slice_7 (3263–3725, 463 prompts)             RUNNING    -> outputs/bench3_showo_20260522_210258/node_68937 (bottleneck)
 68939 ShowO bench3 slice_6 (2797–3262, 466 prompts)             COMPLETED  -> outputs/bench3_showo_20260522_210258/node_68939
 68940 ShowO bench3 slice_2 (933–1398, 466 prompts)              COMPLETED  -> outputs/bench3_showo_20260522_210258/node_68940
-68941 ShowO bench3 merge-eval (aggregate + convert + OWLViT)    PENDING (afterany:68936:68937:68940) -> outputs/bench3_showo_20260522_210258/suite.json
+68941 ShowO bench3 merge-eval (aggregate + convert + OWLViT)    PENDING (afterany:68936:68937:68939:68940) -> outputs/bench3_showo_20260522_210258/suite.json
 68946 bench3 GPT-5.5 eval pipeline (DPG+DSG+GenAI, CPU-only)    PENDING (afterok:68941) -> outputs/bench3_eval/ + outputs/bench3_summary.json
 ```
 
@@ -573,6 +573,7 @@ ASCR/
 │   ├── submit_bench_bagel_shards.sh             ← submit BAGEL bench3 generation shards
 │   ├── submit_bench_showo_remaining.sh          ← submit remaining ShowO slices (5–7) + merge
 │   ├── submit_bench_bagel_remaining.sh          ← submit remaining BAGEL shards
+│   ├── submit_parallel_rerun.sh                 ← one-shot helper: submit 9-node 50-step rerun
 │   ├── build_bench_image_map.py                 ← build image_map.json for all 3 models
 │   ├── eval_csv_vqa_gpt.py                      ← GPT-5.5 VQA evaluator (DPG-Bench + DSG-1k)
 │   ├── eval_genai_gpt.py                        ← GPT-5.5 binary VQA evaluator (GenAI-Bench)
@@ -600,6 +601,8 @@ ASCR/
 │   ├── geneval_merge_eval.sbatch               ← merge shards + trigger OWLViT scoring
 │   ├── bench_bagel_gen_shard.sbatch             ← bench3 BAGEL generation shard
 │   │                                               (1-GPU gpu_shared, --offset/--limit)
+│   ├── bench3_eval_pipeline.sbatch              ← bench3 GPT-5.5 eval pipeline (CPU-only)
+│   │                                               DPG+DSG+GenAI × 3 models → bench3_summary.json
 │   └── stage2_train_selector_gpu.sbatch         ← Stage 2 placeholder
 │
 ├── tests/
@@ -902,7 +905,7 @@ environment. Three venvs are currently in use, each scoped to a model family:
 
 | Venv | Purpose | Activated by |
 |---|---|---|
-| `.venv` | Original ShowO + ASCR loop (torch 2.2.1; legacy local-VLM/Show-o MMU evaluator path) | legacy setup only; no production scripts activate this venv (`scripts/create_env.sh`, `scripts/download_showo.sh`) |
+| `.venv` | ShowO + ASCR loop (torch 2.2.1; legacy local-VLM/Show-o MMU evaluator path) + GPT eval scripts (openai 2.38.0) | legacy ShowO/ASCR setup: `scripts/create_env.sh`, `scripts/download_showo.sh`; production: `jobs/bench3_eval_pipeline.sbatch` |
 | `.venv-qwen36` | ★ Production: ShowO + ASCR loop with Qwen3.5-9B evaluator (torch 2.5.1+cu121, transformers shim under `.deps/transformers-qwen35-clean`) | `jobs/stage1_*_qwen35_9b_*.sbatch`, `jobs/stage1_t2i_*` |
 | `.venv-bagel` | BAGEL-7B-MoT generation only (torch 2.5.1+cu121, flash-attn 2.7.4.post1) | `scripts/run_bagel_text2image.py`, `jobs/stage1_*bagel*.sbatch` |
 
