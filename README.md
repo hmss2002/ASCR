@@ -72,6 +72,17 @@ Job inventory snapshot (2026-05-22):
 68820 Hard64 gen+judge (confidence_steps=50, max_iter=3)     COMPLETED  00:23:18 -> ASCR 54/64 (84.4 %), ShowO 50/64 (78.1 %)
 68832 GenEval OWLViT scoring (confidence_steps=50)     COMPLETED  -> ShowO50 66.62 %, ASCR50 67.25 %, +0.64 pp (fair)
 68835 Hard64 BAGEL 3-way pairwise (fair, confidence_steps=50)  COMPLETED  00:05:25 -> BAGEL vs ShowO 78.1% (100/128), BAGEL vs ASCR 61.1% (77/126), BAGEL clean 89.1% (57/64)
+68836 BAGEL bench3 shard (superseded, incomplete timeout)        COMPLETED  <- superseded by 68869–68877 reshard
+68863–68868 ShowO bench3 gen shards (superseded run)            COMPLETED  <- superseded by 68878–68886 + 68939–68940 reshard
+68869–68877 BAGEL bench3 gen shards (8×466–463 prompts)         COMPLETED  -> outputs/bench3_bagel_20260522_193546/ (partial; continued by 68927–68934)
+68878,68879,68881,68882 ShowO bench3 slices 0–1,3–4             COMPLETED  -> outputs/bench3_showo_20260522_210258/node_68878–82
+68927–68934 BAGEL bench3 continuation shards (skip-existing)    COMPLETED  -> 3725/3725 images done
+68936 ShowO bench3 slice_5 (2331–2796, 466 prompts)             COMPLETED  -> outputs/bench3_showo_20260522_210258/node_68936
+68937 ShowO bench3 slice_7 (3263–3725, 463 prompts)             COMPLETED  -> outputs/bench3_showo_20260522_210258/node_68937
+68939 ShowO bench3 slice_6 (2797–3262, 466 prompts)             COMPLETED  -> outputs/bench3_showo_20260522_210258/node_68939
+68940 ShowO bench3 slice_2 (933–1398, 466 prompts)              COMPLETED  -> outputs/bench3_showo_20260522_210258/node_68940
+68941 ShowO bench3 merge-eval (aggregate + convert + OWLViT)    PENDING (afterany:68936:68937:68940) -> outputs/bench3_showo_20260522_210258/suite.json
+68943 bench3 GPT-5.5 eval pipeline (DPG+DSG+GenAI, CPU-only)    PENDING (afterok:68941) -> outputs/bench3_eval/ + outputs/bench3_summary.json
 ```
 
 Cluster (HKU HPC): 19 nodes (SPGL-1-1–19), ~151 L40S GPUs total. QOS limits per user: `gpu` partition = 28 GPUs / 8 running / 8 submitted (MaxNodes=UNLIMITED); `gpu_shared` = 28 GPUs / 8 running / 10 submitted (MaxNodes=1 per job). Total cross-partition cap: 56 GPUs. Job 68835 ran on `gpu_shared` partition and completed in 00:05:25.
