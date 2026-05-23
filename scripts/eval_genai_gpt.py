@@ -41,11 +41,23 @@ BASE_BACKOFF = 5.0
 MAX_BACKOFF = 120.0
 
 
-def encode_image(path: str) -> Optional[str]:
+def encode_image(path: str) -> Optional[tuple[str, str]]:
+    """Return (base64_string, mime_type) for the image at path, or None if missing.
+    Non-JPEG/PNG formats (e.g. PPM) are converted to PNG via Pillow."""
     p = Path(path)
     if not p.exists():
         return None
-    return base64.b64encode(p.read_bytes()).decode("utf-8")
+    ext = p.suffix.lower()
+    if ext in (".jpg", ".jpeg"):
+        return base64.b64encode(p.read_bytes()).decode("utf-8"), "image/jpeg"
+    if ext == ".png":
+        return base64.b64encode(p.read_bytes()).decode("utf-8"), "image/png"
+    # Convert any other format (e.g. .ppm) to PNG in memory
+    import io
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.open(p).convert("RGB").save(buf, "PNG")
+    return base64.b64encode(buf.getvalue()).decode("utf-8"), "image/png"
 
 
 def ask_gpt_yes_no(client, item_id: str, prompt: str, image_b64: str, mime: str = "image/png") -> dict:
@@ -146,7 +158,7 @@ def main():
         if img_b64 is None:
             skipped += 1
             continue
-        mime = "image/jpeg" if img_path.lower().endswith((".jpg", ".jpeg")) else "image/png"
+        img_b64, mime = img_b64
         tasks.append((item_id, item["prompt"], img_b64, mime, item.get("basic_skills", []),
                       item.get("advanced_skills", [])))
 
