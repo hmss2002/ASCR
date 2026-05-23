@@ -32,7 +32,9 @@ import base64
 import csv
 import json
 import os
+import re
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Optional
@@ -40,6 +42,10 @@ from typing import Optional
 
 GPT_MODEL = "openai/gpt-5.5"
 API_BASE = "https://api.ofox.ai/v1"
+
+MAX_RETRIES = 8
+BASE_BACKOFF = 5.0   # seconds
+MAX_BACKOFF = 120.0  # seconds
 
 
 def encode_image(path: str) -> Optional[str]:
@@ -51,30 +57,59 @@ def encode_image(path: str) -> Optional[str]:
 
 
 def ask_gpt_yes_no(client, item_id: str, question: str, image_b64: str, mime: str = "image/png") -> dict:
-    """Send one VQA question to GPT-5.5, return {item_id, question, answer, raw}."""
+    """Send one VQA question to GPT-5.5, return {item_id, question, answer, raw}.
+    Retries on rate-limit (429) and transient errors with exponential backoff.
+    Raises immediately on 400 bad-request (unsupported image, etc.).
+    """
+    import openai
+
     prompt_text = (
         f"{question}\n"
         "Answer with a single word: yes or no."
     )
-    response = client.chat.completions.create(
-        model=GPT_MODEL,
-        messages=[{
-            "role": "user",
-            "content": [
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:{mime};base64,{image_b64}"},
-                },
-                {"type": "text", "text": prompt_text},
-            ],
-        }],
-        max_tokens=8,
-        temperature=0.0,
-    )
-    raw = response.choices[0].message.content.strip().lower()
-    # Normalize to yes/no
-    answer = "yes" if raw.startswith("yes") else "no"
-    return {"item_id": item_id, "question": question, "answer": answer, "raw": raw}
+    backoff = BASE_BACKOFF
+    for attempt in range(MAX_RETRIES):
+        try:
+            response = client.chat.completions.create(
+                model=GPT_MODEL,
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:{mime};base64,{image_b64}"},
+                        },
+                        {"type": "text", "text": prompt_text},
+                    ],
+                }],
+                max_tokens=8,
+                temperature=0.0,
+            )
+            raw = response.choices[0].message.content.strip().lower()
+            answer = "yes" if raw.startswith("yes") else "no"
+            return {"item_id": item_id, "question": question, "answer": answer, "raw": raw}
+        except openai.BadRequestError as e:
+            # "unsupported image" from ofox.ai can be a masked rate-limit; retry it
+            if "unsupported image" in str(e).lower():
+                if attempt == MAX_RETRIES - 1:
+                    raise
+                time.sleep(backoff)
+                backoff = min(backoff * 2, MAX_BACKOFF)
+            else:
+                raise  # genuine bad request (wrong format, etc.)
+        except openai.RateLimitError as e:
+            # parse suggested retry-after from message if present
+            m = re.search(r"Retry in (\d+)s", str(e))
+            wait = float(m.group(1)) + 2.0 if m else backoff
+            wait = min(wait, MAX_BACKOFF)
+            time.sleep(wait)
+            backoff = min(backoff * 2, MAX_BACKOFF)
+        except Exception:
+            if attempt == MAX_RETRIES - 1:
+                raise
+            time.sleep(backoff)
+            backoff = min(backoff * 2, MAX_BACKOFF)
+    raise RuntimeError(f"ask_gpt_yes_no: exhausted {MAX_RETRIES} retries for {item_id}")
 
 
 def apply_dependency_graph(questions: list[dict], answers: dict[str, str]) -> dict[str, str]:
