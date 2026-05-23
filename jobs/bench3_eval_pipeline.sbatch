@@ -60,7 +60,7 @@ for model in showo ascr bagel; do
     --image-map "$IMAGE_MAP" \
     --model-key "$model" \
     --output-dir "$EVAL_ROOT/dpg_${model}" \
-    --workers 8 &
+    --workers 15 &
 done
 wait
 echo "[bench3-eval] DPG-Bench done."
@@ -73,7 +73,7 @@ for model in showo ascr bagel; do
     --image-map "$IMAGE_MAP" \
     --model-key "$model" \
     --output-dir "$EVAL_ROOT/dsg_${model}" \
-    --workers 8 &
+    --workers 15 &
 done
 wait
 echo "[bench3-eval] DSG-1k done."
@@ -85,7 +85,7 @@ for model in showo ascr bagel; do
     --image-map "$IMAGE_MAP" \
     --model-key "$model" \
     --output-dir "$EVAL_ROOT/genai_${model}" \
-    --workers 8 &
+    --workers 15 &
 done
 wait
 echo "[bench3-eval] GenAI-Bench done."

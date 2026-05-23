@@ -27,6 +27,7 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -37,7 +38,7 @@ GPT_MODEL = "openai/gpt-5.5"
 API_BASE = "https://api.ofox.ai/v1"
 
 MAX_RETRIES = 8
-BASE_BACKOFF = 5.0
+BASE_BACKOFF = 1.0   # seconds (reduced from 5.0 for faster recovery)
 MAX_BACKOFF = 120.0
 
 
@@ -164,10 +165,28 @@ def main():
 
     if skipped:
         print(f"[GenAI-Bench/{args.model_key}] Skipped {skipped} items (missing images)")
+
+    # Load checkpoint to resume partial runs
+    out = Path(args.output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    checkpoint_path = out / "checkpoint.jsonl"
+    done_ids: set[str] = set()
+    if checkpoint_path.exists():
+        with checkpoint_path.open(encoding="utf-8") as f:
+            for line in f:
+                try:
+                    done_ids.add(json.loads(line)["item_id"])
+                except Exception:
+                    pass
+        if done_ids:
+            print(f"[GenAI-Bench/{args.model_key}] Resuming: {len(done_ids)} items already done")
+    tasks = [t for t in tasks if t[0] not in done_ids]
+
     print(f"[GenAI-Bench/{args.model_key}] Submitting {len(tasks)} queries ({args.workers} workers)...")
 
     answers = []
     done = 0
+    ckpt_lock = threading.Lock()
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
         def do_call(task):
             item_id, prompt, img_b64, mime, basic, adv = task
@@ -179,7 +198,11 @@ def main():
         futures = {pool.submit(do_call, t): t for t in tasks}
         for fut in as_completed(futures):
             try:
-                answers.append(fut.result())
+                r = fut.result()
+                answers.append(r)
+                with ckpt_lock:
+                    with checkpoint_path.open("a", encoding="utf-8") as f:
+                        f.write(json.dumps(r, ensure_ascii=False) + "\n")
                 done += 1
                 if done % 200 == 0:
                     print(f"  ... {done}/{len(tasks)} done")
@@ -187,6 +210,17 @@ def main():
                 print(f"  ERROR: {e}", file=sys.stderr)
 
     print(f"[GenAI-Bench/{args.model_key}] Got {len(answers)} answers")
+
+    # Merge previously-checkpointed answers for scoring
+    if done_ids and checkpoint_path.exists():
+        with checkpoint_path.open(encoding="utf-8") as f:
+            for line in f:
+                try:
+                    e = json.loads(line)
+                    if e["item_id"] in done_ids:
+                        answers.append(e)
+                except Exception:
+                    pass
 
     # Aggregate overall
     n_yes = sum(1 for a in answers if a["answer"] == "yes")

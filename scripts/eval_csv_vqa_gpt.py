@@ -34,6 +34,7 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -44,7 +45,7 @@ GPT_MODEL = "openai/gpt-5.5"
 API_BASE = "https://api.ofox.ai/v1"
 
 MAX_RETRIES = 8
-BASE_BACKOFF = 5.0   # seconds
+BASE_BACKOFF = 1.0   # seconds (reduced from 5.0 for faster recovery)
 MAX_BACKOFF = 120.0  # seconds
 
 
@@ -169,7 +170,22 @@ def evaluate_model(
 
     print(f"[{bench_prefix}/{model_key}] {len(item_order)} items, {len(rows)} questions")
 
-    # Build tasks: (full_id, row, image_b64)
+    # Load checkpoint to resume partial runs
+    checkpoint_path = output_dir / "checkpoint.jsonl"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    done_keys: set[tuple[str, str]] = set()
+    if checkpoint_path.exists():
+        with checkpoint_path.open(encoding="utf-8") as f:
+            for line in f:
+                try:
+                    e = json.loads(line)
+                    done_keys.add((e["item_id"], e["proposition_id"]))
+                except Exception:
+                    pass
+        if done_keys:
+            print(f"[{bench_prefix}/{model_key}] Resuming: {len(done_keys)} questions already done")
+
+    # Build tasks: (full_id, row, image_b64), skipping already-checkpointed
     tasks = []
     skipped = 0
     for full_id in item_order:
@@ -187,15 +203,17 @@ def evaluate_model(
             continue
         img_b64, mime = img_b64
         for row in items[full_id]:
-            tasks.append((full_id, row, img_b64, mime))
+            if (full_id, row["proposition_id"]) not in done_keys:
+                tasks.append((full_id, row, img_b64, mime))
 
     if skipped:
         print(f"[{bench_prefix}/{model_key}] Skipped {skipped} items (missing images)")
 
     print(f"[{bench_prefix}/{model_key}] Submitting {len(tasks)} GPT queries ({workers} workers)...")
 
-    # Execute in parallel
-    raw_answers: dict[str, dict[str, str]] = {}  # {full_id: {prop_id: answer}}
+    # Execute in parallel; write each answer to checkpoint immediately
+    raw_answers: dict[str, dict[str, str]] = {}
+    ckpt_lock = threading.Lock()
 
     def do_call(task):
         full_id, row, img_b64, mime = task
@@ -216,7 +234,11 @@ def evaluate_model(
                 if full_id not in raw_answers:
                     raw_answers[full_id] = {}
                 raw_answers[full_id][prop_id] = result["answer"]
-                answers_list.append({**result, "proposition_id": prop_id})
+                entry = {**result, "proposition_id": prop_id}
+                answers_list.append(entry)
+                with ckpt_lock:
+                    with checkpoint_path.open("a", encoding="utf-8") as f:
+                        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
                 done += 1
                 if done % 200 == 0:
                     print(f"  ... {done}/{len(tasks)} done")
@@ -224,6 +246,21 @@ def evaluate_model(
                 print(f"  ERROR: {e}", file=sys.stderr)
 
     print(f"[{bench_prefix}/{model_key}] Got {len(answers_list)} answers")
+
+    # Merge previously-checkpointed answers back into raw_answers + answers_list for scoring
+    if done_keys and checkpoint_path.exists():
+        with checkpoint_path.open(encoding="utf-8") as f:
+            for line in f:
+                try:
+                    e = json.loads(line)
+                    fid, pid = e["item_id"], e["proposition_id"]
+                    if fid not in raw_answers:
+                        raw_answers[fid] = {}
+                    if pid not in raw_answers[fid]:
+                        raw_answers[fid][pid] = e["answer"]
+                        answers_list.append(e)
+                except Exception:
+                    pass
 
     # Apply dependency graph and compute per-item scores
     scores_by_item = {}
