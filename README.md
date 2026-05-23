@@ -82,7 +82,7 @@ Job inventory snapshot (2026-05-22):
 68939 ShowO bench3 slice_6 (2797–3262, 466 prompts)             COMPLETED  -> outputs/bench3_showo_20260522_210258/node_68939
 68940 ShowO bench3 slice_2 (933–1398, 466 prompts)              COMPLETED  -> outputs/bench3_showo_20260522_210258/node_68940
 68941 ShowO bench3 merge-eval (aggregate + convert + OWLViT)    PENDING (afterany:68936:68937:68940) -> outputs/bench3_showo_20260522_210258/suite.json
-68943 bench3 GPT-5.5 eval pipeline (DPG+DSG+GenAI, CPU-only)    PENDING (afterok:68941) -> outputs/bench3_eval/ + outputs/bench3_summary.json
+68946 bench3 GPT-5.5 eval pipeline (DPG+DSG+GenAI, CPU-only)    PENDING (afterok:68941) -> outputs/bench3_eval/ + outputs/bench3_summary.json
 ```
 
 Cluster (HKU HPC): 19 nodes (SPGL-1-1–19), ~151 L40S GPUs total. QOS limits per user: `gpu` partition = 28 GPUs / 8 running / 8 submitted (MaxNodes=UNLIMITED); `gpu_shared` = 28 GPUs / 8 running / 10 submitted (MaxNodes=1 per job). Total cross-partition cap: 56 GPUs. Job 68835 ran on `gpu_shared` partition and completed in 00:05:25.

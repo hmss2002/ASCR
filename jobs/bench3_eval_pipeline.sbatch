@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 #SBATCH --job-name=bench3-eval
 #SBATCH --partition=gpu_shared
-#SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=32G
 #SBATCH --time=4:00:00
@@ -9,7 +8,7 @@
 #SBATCH --error=logs/%x-%j.err
 #
 # Run the full bench3 GPT-5.5 evaluation pipeline (DPG, DSG-1k, GenAI-Bench).
-# No GPU is used; the --gres=gpu:1 allocation is required by the partition only.
+# CPU-only: no GPU needed; gpu_shared accepts jobs without --gres.
 #
 # Required env vars:
 #   SHOWO_RUN_ROOT  - bench3 ShowO+ASCR generation run root (contains merged suite.json after 68941)
