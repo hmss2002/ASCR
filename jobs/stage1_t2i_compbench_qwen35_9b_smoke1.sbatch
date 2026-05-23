@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# [SUPERSEDED] Early single-GPU smoke test for Hard64 (job 68820 predecessor).
+# Production job: stage1_t2i_compbench_qwen35_9b_hard64_8gpu_reuse.sbatch
+# Retained for historical reference only. Do not submit.
 #SBATCH --job-name=ascr-t2icomp-q35-sm1
 #SBATCH --partition=gpu
 #SBATCH --gres=gpu:1

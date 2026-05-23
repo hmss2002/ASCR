@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# [SUPERSEDED] Qwen3.5-9B swap judge for Hard64 ASCR vs ShowO (job 68801).
+# Confirmed strong RIGHT-side position bias (>=89% right wins in both directions).
+# All pairwise results now use GPT-5.5 A/B format (judge_hard64_pairwise_gpt.py).
+# Retained for historical reference only. Do not submit.
 #SBATCH --job-name=hard64-showo-ascr-swap
 #SBATCH --partition=gpu
 #SBATCH --gres=gpu:8

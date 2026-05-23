@@ -8,6 +8,7 @@ setup(
     entry_points={
         "console_scripts": [
             "ascr-stage1=ascr.cli.run_stage1:main",
+            "ascr-compare-showo=ascr.cli.compare_showo_ascr:main",
             "ascr-train-selector=ascr.training.train_selector:main",
         ]
     },
