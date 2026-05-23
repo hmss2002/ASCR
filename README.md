@@ -77,12 +77,14 @@ Job inventory snapshot (2026-05-22):
 68869–68877 BAGEL bench3 gen shards (8×466–463 prompts)         COMPLETED  -> outputs/bench3_bagel_20260522_193546/ (partial; continued by 68927–68934)
 68878,68879,68881,68882 ShowO bench3 slices 0–1,3–4             COMPLETED  -> outputs/bench3_showo_20260522_210258/node_68878–82
 68927–68934 BAGEL bench3 continuation shards (skip-existing)    COMPLETED  -> 3725/3725 images done
-68936 ShowO bench3 slice_5 (2331–2796, 466 prompts)             RUNNING    -> outputs/bench3_showo_20260522_210258/node_68936
-68937 ShowO bench3 slice_7 (3263–3725, 463 prompts)             RUNNING    -> outputs/bench3_showo_20260522_210258/node_68937 (bottleneck)
+68936 ShowO bench3 slice_5 (2331–2796, 466 prompts)             COMPLETED  02:57:59 -> outputs/bench3_showo_20260522_210258/node_68936
+68937 ShowO bench3 slice_7 (3263–3725, 463 prompts)             COMPLETED  03:05:39 -> outputs/bench3_showo_20260522_210258/node_68937
 68939 ShowO bench3 slice_6 (2797–3262, 466 prompts)             COMPLETED  -> outputs/bench3_showo_20260522_210258/node_68939
 68940 ShowO bench3 slice_2 (933–1398, 466 prompts)              COMPLETED  -> outputs/bench3_showo_20260522_210258/node_68940
-68941 ShowO bench3 merge-eval (aggregate + convert + OWLViT)    PENDING (afterany:68936:68937:68939:68940) -> outputs/bench3_showo_20260522_210258/suite.json
-68946 bench3 GPT-5.5 eval pipeline (DPG+DSG+GenAI, CPU-only)    PENDING (afterok:68941) -> outputs/bench3_eval/ + outputs/bench3_summary.json
+68941 ShowO bench3 merge-eval (aggregate + convert + OWLViT)    COMPLETED  00:00:12 -> outputs/bench3_showo_20260522_210258/suite.json (41 MB merged)
+68947 geneval-score ShowO50 (auto-submitted by 68941)            FAILED     harmless — no GenEval prompts in bench3; empty geneval dirs skipped
+68948 geneval-score ASCR50  (auto-submitted by 68941)            FAILED     harmless — same reason
+68946 bench3 GPT-5.5 eval pipeline (DPG+DSG+GenAI, CPU-only)    FAILED     exit 2: OFOX_API_KEY not set → needs resubmit with key
 ```
 
 Cluster (HKU HPC): 19 nodes (SPGL-1-1–19), ~151 L40S GPUs total. QOS limits per user: `gpu` partition = 28 GPUs / 8 running / 8 submitted (MaxNodes=UNLIMITED); `gpu_shared` = 28 GPUs / 8 running / 10 submitted (MaxNodes=1 per job). Total cross-partition cap: 56 GPUs. Job 68835 ran on `gpu_shared` partition and completed in 00:05:25.
@@ -115,17 +117,17 @@ Cluster (HKU HPC): 19 nodes (SPGL-1-1–19), ~151 L40S GPUs total. QOS limits pe
 
 **Evaluation 2: GenEval (553 prompts)** — 6 subtasks (single-object, two-object, counting, colors, position, color\_attr), scored with OWLViT object detectors, **fully independent of Qwen**. This is the cleanest evaluation.
 
-> 🚧 **评测扩展进行中 / Evaluation Expansion In Progress**
+> 🔴 **评测待重跑 / Evaluation Re-run Needed**
 >
-> 为提供更全面、更广覆盖的评测证据，我们正在对以下三个 benchmark 进行评测（图片生成作业已提交，GPT-5.5 评测待图片生成完成后运行）：
+> 所有图片已生成完毕（3725 × 3 个模型）。68941 已完成 suite.json 合并（41 MB）。但 68946（GPT-5.5 评测 pipeline）因 `OFOX_API_KEY` 未设置而失败，需补充 API key 后重新提交。
 >
-> To provide broader and more reliable evidence, we are currently evaluating all three models on three additional benchmarks (image generation jobs submitted; GPT-5.5 scoring to follow):
+> All images generated (3725 × 3 models). 68941 merged suite.json (41 MB). However 68946 (GPT-5.5 eval pipeline) failed (exit 2: `OFOX_API_KEY` not set) and must be resubmitted with the key.
 >
 > | Benchmark | Prompts | 评测方式 / Method | 状态 / Status |
 > |---|---:|---|---|
-> | **DPG-Bench** | 1065 | GPT-5.5 VQA per-question + dependency graph | 🔄 图片生成中 / generating |
-> | **GenAI-Bench** | 1600 | GPT-5.5 binary VQA | 🔄 图片生成中 / generating |
-> | **DSG-1k** | 1060 | GPT-5.5 VQA per-question + dependency graph | 🔄 图片生成中 / generating |
+> | **DPG-Bench** | 1065 | GPT-5.5 VQA per-question + dependency graph | 🔄 图片已就绪，等待 GPT eval / images ready, eval pending |
+> | **GenAI-Bench** | 1600 | GPT-5.5 binary VQA | 🔄 图片已就绪，等待 GPT eval / images ready, eval pending |
+> | **DSG-1k** | 1060 | GPT-5.5 VQA per-question + dependency graph | 🔄 图片已就绪，等待 GPT eval / images ready, eval pending |
 >
 > 结果将在评测完成后更新至此。Results will be added here once evaluation completes.
 
