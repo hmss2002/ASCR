@@ -1526,6 +1526,149 @@ ASCR50 以 51.7%（15/29 决定性样本）略胜 BAGEL-7B-MoT。以下展示 **
 
 <img src="docs/examples/bagel_50_vs_ascr/bagel_win_08_the_green_plant_was_on_the_right_of_the_white_wall.jpg" width="700" alt="The green plant was on the right of the white wall. — pairwise (LEFT = ASCR50, RIGHT = BAGEL)">
 
+---
+
+### GPT-5.5 Judged Examples / GPT-5.5 裁判示例
+
+> 以下示例均由 **GPT-5.5**（ofox.ai 代理，完全独立的外部裁判）做出判断，覆盖 Hard64、GenEval 和 DPG-Bench 三个 benchmark。每组均选取 **ASCR 表现优于或追平 ShowO** 的代表性案例。
+>
+> The examples below are all judged by **GPT-5.5** (ofox.ai proxy, fully independent external judge), covering Hard64, GenEval, and DPG-Bench. Each group highlights cases where **ASCR outperforms ShowO**.
+
+---
+
+#### Hard64 — GPT-5.5 Pairwise Decisive Wins (ASCR beats ShowO, fwd + swap both agree)
+
+Format: **LEFT = ShowO-1.3B-50step (baseline)** | **RIGHT = ASCR50**. Both directions agree on ASCR win.
+
+---
+
+##### `a girl behind a cow`
+
+*GPT-5.5 (conf 0.98):* Image B clearly shows a girl positioned behind the cow, while Image A shows only the cow with no visible girl. ASCR correctly adds the missing subject.
+
+| ShowO (baseline) | ASCR50 |
+|:---:|:---:|
+| <img src="docs/examples/h64_girl_behind_cow_showo.png" width="340" alt="ShowO — a girl behind a cow"> | <img src="docs/examples/h64_girl_behind_cow_ascr.png" width="340" alt="ASCR — a girl behind a cow"> |
+
+---
+
+##### `a brown backpack and a blue cow`
+
+*GPT-5.5 (conf 0.98):* Image B includes both a brown backpack and a blue cow, while Image A only shows the brown backpack without the cow. ASCR recovers the missing object.
+
+| ShowO (baseline) | ASCR50 |
+|:---:|:---:|
+| <img src="docs/examples/h64_brown_backpack_blue_cow_showo.png" width="340" alt="ShowO — a brown backpack and a blue cow"> | <img src="docs/examples/h64_brown_backpack_blue_cow_ascr.png" width="340" alt="ASCR — a brown backpack and a blue cow"> |
+
+---
+
+##### `a green bench and a blue bowl`
+
+*GPT-5.5 (conf 0.93):* Image B shows a green bench with a single blue bowl, while Image A includes two blue bowls, violating the singular prompt. ASCR corrects the count error.
+
+| ShowO (baseline) | ASCR50 |
+|:---:|:---:|
+| <img src="docs/examples/h64_green_bench_blue_bowl_showo.png" width="340" alt="ShowO — a green bench and a blue bowl"> | <img src="docs/examples/h64_green_bench_blue_bowl_ascr.png" width="340" alt="ASCR — a green bench and a blue bowl"> |
+
+---
+
+#### GenEval — GPT-5.5 Strict Visual Judge (ASCR correct ✓, ShowO incorrect ✗)
+
+Format: **LEFT = ShowO-1.3B-50step** | **CENTRE = ASCR50** | **RIGHT = BAGEL-7B-MoT**.
+Judge: GPT-5.5 independent strict correctness evaluation per prompt.
+
+---
+
+##### `a photo of a red giraffe` *(colors)*
+
+| Model | GPT-5.5 verdict |
+|---|:---:|
+| ShowO-1.3B | ✗ Incorrect |
+| **ASCR50** | ✅ **Correct** |
+| BAGEL-7B-MoT | ✗ Incorrect |
+
+| ShowO (baseline) | ASCR50 | BAGEL-7B-MoT |
+|:---:|:---:|:---:|
+| <img src="docs/examples/ge_red_giraffe_showo.png" width="225" alt="ShowO — red giraffe"> | <img src="docs/examples/ge_red_giraffe_ascr.png" width="225" alt="ASCR — red giraffe"> | <img src="docs/examples/ge_red_giraffe_bagel.png" width="225" alt="BAGEL — red giraffe"> |
+
+*ASCR reason:* The image shows a giraffe with a clearly red/reddish coloration, matching the prompt. ShowO produces a tan/brown giraffe; BAGEL also fails the color requirement.
+
+---
+
+##### `a photo of a kite above a toothbrush` *(position)*
+
+| Model | GPT-5.5 verdict |
+|---|:---:|
+| ShowO-1.3B | ✗ Incorrect |
+| **ASCR50** | ✅ **Correct** |
+| BAGEL-7B-MoT | ✗ Incorrect |
+
+| ShowO (baseline) | ASCR50 | BAGEL-7B-MoT |
+|:---:|:---:|:---:|
+| <img src="docs/examples/ge_kite_above_toothbrush_showo.png" width="225" alt="ShowO — kite above toothbrush"> | <img src="docs/examples/ge_kite_above_toothbrush_ascr.png" width="225" alt="ASCR — kite above toothbrush"> | <img src="docs/examples/ge_kite_above_toothbrush_bagel.png" width="225" alt="BAGEL — kite above toothbrush"> |
+
+*ASCR reason:* The orange kite is clearly positioned above the toothbrush in the image, satisfying the spatial relationship.
+
+---
+
+##### `a photo of a hair drier left of a toilet` *(position)*
+
+| Model | GPT-5.5 verdict |
+|---|:---:|
+| ShowO-1.3B | ✗ Incorrect |
+| **ASCR50** | ✅ **Correct** |
+| BAGEL-7B-MoT | ✗ Incorrect |
+
+| ShowO (baseline) | ASCR50 | BAGEL-7B-MoT |
+|:---:|:---:|:---:|
+| <img src="docs/examples/ge_hairdrier_left_toilet_showo.png" width="225" alt="ShowO — hair drier left of toilet"> | <img src="docs/examples/ge_hairdrier_left_toilet_ascr.png" width="225" alt="ASCR — hair drier left of toilet"> | <img src="docs/examples/ge_hairdrier_left_toilet_bagel.png" width="225" alt="BAGEL — hair drier left of toilet"> |
+
+*ASCR reason:* The image shows a hair drier on the floor to the left of the toilet, matching the required spatial relationship. ShowO shows a toilet with no hair drier.
+
+---
+
+#### DPG-Bench — GPT-5.5 VQA Score (partial, completed items only)
+
+Format: **LEFT = ShowO** | **CENTRE = ASCR50** | **RIGHT = BAGEL-7B-MoT** (resized to 512px).  
+Score = fraction of GPT-5.5 yes/no questions answered "yes" for that item.
+
+---
+
+##### `A close-up image capturing the intricate details of a maple leaf…` *(entity)*
+
+> Scores: ShowO **38%** · **ASCR 75%** ↑ · BAGEL 75%
+
+| ShowO (baseline) | ASCR50 | BAGEL-7B-MoT |
+|:---:|:---:|:---:|
+| <img src="docs/examples/dpg_maple_leaf_showo.png" width="225" alt="ShowO — maple leaf"> | <img src="docs/examples/dpg_maple_leaf_ascr.png" width="225" alt="ASCR — maple leaf"> | <img src="docs/examples/dpg_maple_leaf_bagel.png" width="225" alt="BAGEL — maple leaf"> |
+
+ASCR closes the gap between ShowO and BAGEL on this complex botanical close-up prompt (+37 pp over ShowO).
+
+---
+
+##### `a futuristic spaceship with a design reminiscent of the iconic Sydney Opera House…` *(entity)*
+
+> Scores: ShowO **58%** · **ASCR 83%** ↑ · BAGEL 83%
+
+| ShowO (baseline) | ASCR50 | BAGEL-7B-MoT |
+|:---:|:---:|:---:|
+| <img src="docs/examples/dpg_spaceship_showo.png" width="225" alt="ShowO — spaceship"> | <img src="docs/examples/dpg_spaceship_ascr.png" width="225" alt="ASCR — spaceship"> | <img src="docs/examples/dpg_spaceship_bagel.png" width="225" alt="BAGEL — spaceship"> |
+
+ASCR matches BAGEL's score on this complex compositional prompt (+25 pp over ShowO).
+
+---
+
+##### `An artistic representation of the planet Earth, with a swirl of musical notes…` *(global)*
+
+> Scores: ShowO **50%** · **ASCR 80%** ↑ · BAGEL 70%
+
+| ShowO (baseline) | ASCR50 | BAGEL-7B-MoT |
+|:---:|:---:|:---:|
+| <img src="docs/examples/dpg_earth_showo.png" width="225" alt="ShowO — Earth with music notes"> | <img src="docs/examples/dpg_earth_ascr.png" width="225" alt="ASCR — Earth with music notes"> | <img src="docs/examples/dpg_earth_bagel.png" width="225" alt="BAGEL — Earth with music notes"> |
+
+ASCR **surpasses BAGEL** on this global-category prompt (+30 pp over ShowO, +10 pp over BAGEL).
+
+---
 
 <details>
 <summary><strong>Full-Gallery Pairwise Examples</strong> — all 64 hard64 prompts × 3 comparisons (click to expand)</summary>
