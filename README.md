@@ -14,30 +14,35 @@ This README is the project control document. It records the research plan, imple
 
 > **Impact of Bug 3:** Hard64 clean pass/fail before fix: ASCR 50/64 (78.1 %) vs ShowO **35/64 (54.7 %)** (+23.4 pp). After fix (50-step ShowO): ASCR **54/64 (84.4 %)** vs ShowO **50/64 (78.1 %)** (+6.2 pp). GenEval: ShowO(3-step) 54.02 % → ShowO50 **66.62 %** (after fix). ASCR advantage collapsed from +7.95 pp → **+0.64 pp**.
 
-Action items (Bug 1 + 2 batch, all done):
+<details>
+<summary><strong>Fix action items — all completed</strong> (click to expand)</summary>
 
-- [x] Fix sbatch `GENERATION_TIMESTEPS` defaults 18 -> 50 (two production sbatches).
+**Bug 1 + 2 batch (all done):**
+
+- [x] Fix sbatch `GENERATION_TIMESTEPS` defaults 18 → 50 (two production sbatches).
 - [x] Add bidirectional (fwd + swap) pairwise judging to hard64 BAGEL 3-way judge.
 - [x] Commit + push fixes (commit `557d2fc`, README doc in `8d41b77`).
-- [x] **68795** hard64 64 regen @ 50-step - COMPLETED. ← still used confidence_steps=3 (Bug 3); superseded by 68820.
-- [x] **68798** bidir BAGEL 3-way pairwise on 18-step data - COMPLETED (debiased: BAGEL 62.5 % vs ShowO, 78.9 % vs ASCR).
-- [x] **68799** swap ShowO-vs-ASCR pairwise on 18-step GenEval data - COMPLETED (confirmed strong RIGHT-position bias).
-- [x] **68800** hard64 bidir 3-way BAGEL judge on 68795 data - COMPLETED (debiased: BAGEL 62.5 % vs ShowO, 78.9 % vs ASCR — both with confidence_steps=3).
-- [x] **68801** hard64 ShowO50-vs-ASCR50 SWAP internal judge - COMPLETED → bias-dominated; inconclusive.
-- [x] **68794** GenEval 553 regen @ generation_timesteps=50 - COMPLETED. ← confidence_steps=3 (Bug 3); superseded by 68810–68819.
-- [x] **68802** GenEval detector scoring for 68794 images - COMPLETED → ShowO(3-step) 54.02 %, ASCR 61.97 %. ← superseded by 68832.
+- [x] **68795** hard64 64 regen @ 50-step — COMPLETED. ← still used confidence_steps=3 (Bug 3); superseded by 68820.
+- [x] **68798** bidir BAGEL 3-way pairwise on 18-step data — COMPLETED (debiased: BAGEL 62.5% vs ShowO, 78.9% vs ASCR).
+- [x] **68799** swap ShowO-vs-ASCR pairwise on 18-step GenEval data — COMPLETED (confirmed strong RIGHT-position bias).
+- [x] **68800** hard64 bidir 3-way BAGEL judge on 68795 data — COMPLETED (debiased: BAGEL 62.5% vs ShowO, 78.9% vs ASCR — both with confidence_steps=3).
+- [x] **68801** hard64 ShowO50-vs-ASCR50 SWAP internal judge — COMPLETED → bias-dominated; inconclusive.
+- [x] **68794** GenEval 553 regen @ generation_timesteps=50 — COMPLETED. ← confidence_steps=3 (Bug 3); superseded by 68810–68819.
+- [x] **68802** GenEval detector scoring for 68794 images — COMPLETED → ShowO(3-step) 54.02%, ASCR 61.97%. ← superseded by 68832.
 - [x] Delete legacy 18-step outputs `outputs/geneval_showo_ascr_68753_*/` (~3.3 GB) — **DELETED 2026-05-22.**
 
-Action items (Bug 3 batch):
+**Bug 3 batch (all done):**
 
 - [x] Fix `confidence_steps: 3 → 50`, `max_iterations: 8 → 3` (commit `3fb04b5`).
 - [x] **68810–68818** GenEval parallel generation (9 nodes × 8 GPU, confidence_steps=50) — COMPLETED. Run root: `outputs/geneval_parallel_20260522_120250/`.
 - [x] **68819** GenEval merge+eval (aggregate 9-node suite, convert to eval dirs, submit 68832) — COMPLETED in 00:02:46.
-- [x] **68820** Hard64 generation + Qwen judge (confidence_steps=50, max_iter=3) — COMPLETED in 00:23:18. ASCR **54/64 (84.4 %)** vs ShowO **50/64 (78.1 %)** clean pass/fail; pairwise 8W/1L/55T.
-- [x] **68832** GenEval OWLViT scoring for 68810–68818 images — **COMPLETED** (finished before expected ETA). ShowO50 **66.62 %**, ASCR50 **67.25 %**, delta **+0.64 pp**. Run: `outputs/geneval_parallel_20260522_120250/`.
-- [x] **68835** Hard64 BAGEL 3-way pairwise with fair confidence_steps=50 images — **COMPLETED in 00:05:25**. Results in `outputs/hard64_parallel_20260522_120250/bagel_3way/`. BAGEL vs ShowO50: **78.1 %** debiased (100/128 decisive); BAGEL vs ASCR50: **61.1 %** debiased (77/126 decisive).
+- [x] **68820** Hard64 generation + Qwen judge (confidence_steps=50, max_iter=3) — COMPLETED in 00:23:18. ASCR **54/64 (84.4%)** vs ShowO **50/64 (78.1%)** clean pass/fail; pairwise 8W/1L/55T.
+- [x] **68832** GenEval OWLViT scoring for 68810–68818 images — COMPLETED. ShowO50 **66.62%**, ASCR50 **67.25%**, delta **+0.64 pp**. Run: `outputs/geneval_parallel_20260522_120250/`.
+- [x] **68835** Hard64 BAGEL 3-way pairwise with fair confidence_steps=50 images — COMPLETED in 00:05:25. Results in `outputs/hard64_parallel_20260522_120250/bagel_3way/`. BAGEL vs ShowO50: **78.1%** debiased (100/128 decisive); BAGEL vs ASCR50: **61.1%** debiased (77/126 decisive).
 - [x] Build fair 3-way GenEval summary (68832 + 68792 BAGEL) — done; see tables below.
 - [x] Replace stale docs/examples images with fair 50-step versions — **DONE** (jobs 68820+68835).
+
+</details>
 
 Job inventory snapshot (2026-05-22):
 
@@ -111,13 +116,25 @@ Cluster (HKU HPC): 19 nodes (SPGL-1-1–19), ~151 L40S GPUs total. QOS limits pe
 
 ### 评测了什么 / What Did We Evaluate?
 
-**评测 1：T2I-CompBench Hard64** — 64 条高难度合成 prompt（空间关系、颜色属性绑定等），由 Qwen3.5-9B 大语言模型逐图打分。每条 prompt 给每个模型生成一张图，看图是否满足 prompt 描述。
+**评测 1：T2I-CompBench Hard64** — 64 条高难度合成 prompt（空间关系、颜色属性绑定等），由 Qwen3.5-9B 大语言模型逐图打分。每条 prompt 给每个模型生成一张图，看图是否满足 prompt 描述。GPT-5.5 进行 A/B 双向去偏对比评测（pairwise）。
 
-**Evaluation 1: T2I-CompBench Hard64** — 64 compositionally challenging prompts (spatial relations, color–attribute binding, etc.), scored by Qwen3.5-9B. One image is generated per prompt per model; the judge decides pass/fail.
+**Evaluation 1: T2I-CompBench Hard64** — 64 compositionally challenging prompts (spatial relations, color–attribute binding, etc.), scored by Qwen3.5-9B for pass/fail, and by GPT-5.5 for debiased A/B pairwise comparison.
 
-**评测 2：GenEval（553 条 prompt）** — 覆盖 6 个子任务（单个物体、双物体、计数、颜色、位置、颜色属性），用 OWLViT 目标检测器自动打分，**与 Qwen 完全无关**，是最可靠的评测。
+**评测 2：GenEval（553 条 prompt）** — 覆盖 6 个子任务（单个物体、双物体、计数、颜色、位置、颜色属性），用 OWLViT 目标检测器自动打分，**与 Qwen 完全无关**，是最可靠的评测。同时以 GPT-5.5 进行严格视觉质量评测。
 
-**Evaluation 2: GenEval (553 prompts)** — 6 subtasks (single-object, two-object, counting, colors, position, color\_attr), scored with OWLViT object detectors, **fully independent of Qwen**. This is the cleanest evaluation.
+**Evaluation 2: GenEval (553 prompts)** — 6 subtasks (single-object, two-object, counting, colors, position, color\_attr), scored with OWLViT object detectors, **fully independent of Qwen**. GPT-5.5 strict visual judge also applied.
+
+**评测 3：DPG-Bench（1065 条 prompt）** — Diverse Prompt Generation Benchmark，测试多样复杂场景下的文本对齐质量（颜色、形状、纹理、空间关系、非空间关系、计数等多维度），GPT-5.5 对每道 VQA 子题逐一判断，再聚合依存图计算最终得分。预算耗尽时仅完成约 19–24%。
+
+**Evaluation 3: DPG-Bench (1065 prompts)** — Tests diverse compositional T2I prompt alignment (color, shape, texture, spatial/non-spatial relations, counting, etc.) using GPT-5.5 VQA per sub-question aggregated by dependency graph. ~19–24% complete due to exhausted API budget.
+
+**评测 4：DSG-1k（1060 条 prompt）** — Davidsonian Scene Graph benchmark，将每条 prompt 拆解为结构化场景图，GPT-5.5 对每个场景图节点逐一判断，衡量模型生成图像与 prompt 语义的结构化匹配度。尚未开始（预算不足）。
+
+**Evaluation 4: DSG-1k (1060 prompts)** — Decomposes each prompt into a Davidsonian scene graph; GPT-5.5 judges each node. Not started — requires ~$262 additional API budget.
+
+**评测 5：GenAI-Bench（1600 条 prompt）** — 覆盖 11 个技能维度的高质量标注文生图测试集，用 GPT-5.5 binary VQA 评测每张生成图。尚未开始（预算不足）。
+
+**Evaluation 5: GenAI-Bench (1600 prompts)** — 11-skill text-to-image benchmark with expert annotations; GPT-5.5 binary VQA. Not started — requires additional budget.
 
 > ⚠️ **中期结果 / Interim Results — GPT-5.5 评测部分完成**
 >
@@ -234,51 +251,6 @@ Cluster (HKU HPC): 19 nodes (SPGL-1-1–19), ~151 L40S GPUs total. QOS limits pe
 >
 > The monthly API budget ($50) was exhausted during DPG-Bench evaluation ($50.03 used). GPT-5.5 evaluation of DSG-1k (1060 prompts, ~8,182 questions/model) and GenAI-Bench (1600 prompts) has not started. Resuming requires ~$262 additional budget (~$0.0043/question). Checkpoints are saved; resuming will skip already-answered questions.
 
-**Sub-run A (jobs 68794+68802, confidence_steps=3 — SUPERSEDED):** ShowO images used Bug 3
-(`confidence_steps=3`). All numbers from this run are stale; do not cite.
-
-**Sub-run B (jobs 68810–68819+68832, confidence_steps=50 — CURRENT):** Fair parallel rerun.
-Results: ShowO50 66.62%, ASCR50 67.25% task-avg. See tables in Quick Results above.
-
-This run evaluates the full GenEval 553-prompt suite using OWLViT object-detection-based scoring
-(no Qwen). It is the cleanest evaluator-independent evidence for ASCR vs ShowO.
-
-**Sub-run B Protocol:**
-
-- ShowO/ASCR images: `outputs/geneval_parallel_20260522_120250/geneval_baseline/` (553 imgs) and `geneval_ascr/` (553 imgs).
-- Generation: 9-node parallel job (68810–68818), merged by 68819.
-- Scoring: job 68832, 8 GPU shards. Output: `outputs/geneval_parallel_20260522_120250/results_baseline.jsonl` and `results_ascr.jsonl`.
-- BAGEL: job 68792, output at `outputs/geneval_showo_ascr_68784_20260521_224813/scores/BAGEL.jsonl`.
-
-**Evaluator fixes used for the final score:**
-
-- HSV pixel-histogram color classifier for color-attribute binding.
-- Per-class NMS at IoU 0.5 to remove duplicate overlapping detections.
-- Tag-aware detection threshold: default `--threshold 0.01`, plus `--counting-threshold 0.15` for counting.
-
-**Fair Results (Sub-run B):**
-
-| Task | N | ShowO50 | ASCR50 | BAGEL-7B-MoT | ASCR - ShowO |
-|---|---:|---:|---:|---:|---:|
-| single_object | 80 | 100.00% (80 / 80) | 100.00% (80 / 80) | 100.00% (80 / 80) | +0.00 |
-| two_object | 99 | 93.94% (93 / 99) | 93.94% (93 / 99) | 96.97% (96 / 99) | +0.00 |
-| counting | 80 | 63.75% (51 / 80) | 62.50% (50 / 80) | 68.75% (55 / 80) | -1.25 |
-| colors | 94 | 67.02% (63 / 94) | 68.09% (64 / 94) | 70.21% (66 / 94) | +1.06 |
-| position | 100 | 39.00% (39 / 100) | 39.00% (39 / 100) | 58.00% (58 / 100) | +0.00 |
-| color_attr | 100 | 36.00% (36 / 100) | 40.00% (40 / 100) | 51.00% (51 / 100) | +4.00 |
-| **Official task-avg score** | **553** | **66.62%** | **67.25%** | **74.16%** | **+0.64** |
-
-**Stale Sub-run A results (confidence_steps=3 — do not cite):**
-
-| Task | ShowO50 (stale) | ASCR50 (stale) | ASCR - ShowO |
-|---|---:|---:|---:|
-| two_object | 65.66% | 79.80% | +14.14 |
-| position | 35.00% | 50.00% | +15.00 |
-| color_attr | 9.00% | 19.00% | +10.00 |
-| **Official task-avg** | **54.02%** | **61.97%** | **+7.95** |
-
-*All stale advantages evaporate or shrink dramatically once ShowO gets the full 50 steps.*
-
 ## Source Documents
 
 The project is built from two planning documents placed in the project root:
@@ -380,9 +352,10 @@ current single-pass generators tend to produce the right *objects* but with wron
 assignment, wrong spatial arrangement, or wrong count. ASCR's correction loop is specifically
 designed to detect and repair these failures.
 
-### Evaluation Method 1: Pairwise Side-by-Side Judge
+<details>
+<summary><strong>Evaluation Method 1 [Legacy]: Qwen Pairwise Side-by-Side Judge</strong></summary>
 
-> **Note:** This section describes the **legacy Qwen3.5-9B composite-image judge** (single side-by-side canvas). Actual reported pairwise results use **GPT-5.5 A/B format** (separate image blocks per model, fwd+swap pooled for debiasing). See `scripts/judge_hard64_pairwise_gpt.py` for the current method.
+> **⚠️ Legacy method.** This section describes the **old Qwen3.5-9B composite-image judge** (single side-by-side canvas). All pairwise results reported in this README use the current **GPT-5.5 A/B format** instead (separate image blocks per model, fwd+swap pooled). See `scripts/judge_hard64_pairwise_gpt.py` and the [GPT-5.5 External Judge](#evaluation-method-3-gpt-55-external-judge-current) section below.
 
 **What it is:** A *relative* comparison — for the same prompt, which of two images better
 follows the prompt description?
@@ -401,11 +374,12 @@ follows the prompt description?
 
 **What it measures:** Whether ASCR's image is *better* in a direct head-to-head comparison.
 
-**Limitation:** Contrast effect — one obviously wrong image makes the other look better even if
-both are imperfect. Run alongside the clean pass/fail judge to balance this.
+**Limitation:** Strong RIGHT-side position bias (≥89% right-side wins in both directions, confirmed by job 68799). This method is superseded by GPT-5.5 A/B format evaluation.
 
 **Script:** `scripts/judge_showo_ascr_pairwise_qwen.py`
 **Key flags:** `--baseline-label`, `--ascr-label`, `--no-image-labels`, `--output`
+
+</details>
 
 ### Evaluation Method 2: Clean Pass/Fail Judge
 
@@ -441,6 +415,36 @@ judges whether the correction worked.
 When pairwise net is large but clean-pass net is small, one system is more *precisely* correct
 even when both clear the pass threshold. When clean-pass net is large but pairwise net is small,
 the absolute improvement is real but per-prompt advantage is less consistent.
+
+### Evaluation Method 3: GPT-5.5 External Judge (Current)
+
+GPT-5.5 is used as the external judge for all pairwise and VQA evaluations to eliminate evaluator circularity (Qwen3.5-9B is also the ASCR loop's evaluator).
+
+**API setup:**
+- Provider: ofox.ai (`base_url="https://api.ofox.ai/v1"`)
+- Model: `openai/gpt-5.5`
+- Note: Compute nodes have no outbound internet access — GPT-5.5 evaluations must run on login node `hpcr4300a` in tmux.
+
+**Hard64 pairwise (A/B format, fwd + swap debiasing):**
+- Each image sent as a separate `image_url` content block (not composite canvas).
+- Run twice: Model A left / Model B right (fwd), then Model B left / Model A right (swap).
+- Aggregate fwd + swap; count decisive wins (one direction wins, other loses or ties).
+- Win rate = decisive wins for ASCR / total decisive pairs.
+- Script: `scripts/judge_hard64_pairwise_gpt.py`
+- Results: `outputs/hard64_parallel_20260522_120250/gpt_pairwise_{fwd,swap}.json`
+
+**GenEval strict visual judge:**
+- Each image sent independently; GPT-5.5 asked whether all named objects/relations are present.
+- Score 1 (pass) / 0 (fail) per image per prompt.
+- Results: `outputs/geneval_parallel_20260522_120250/gpt_scores_{showo,ascr,bagel}.json`
+
+**DPG-Bench VQA + dependency graph:**
+- For each prompt, decompose into VQA sub-questions (DPG official format).
+- GPT-5.5 answers each VQA question yes/no given the generated image.
+- Aggregate by dependency graph to get per-item score; average over items for final score.
+- Partial results (budget exhausted): `outputs/bench3_eval/dpg_{showo,ascr,bagel}/checkpoint.jsonl`
+
+**Budget note:** The monthly $50 API budget was exhausted mid-DPG-Bench ($50.03 used). DSG-1k and GenAI-Bench evaluations have not started; estimated cost to complete all remaining evaluations is ~$262.
 
 ### Important Caveats
 
@@ -1020,26 +1024,30 @@ and `geneval_ascr/` subdirectories ready for `scripts/evaluate_geneval_owlvit.py
 
 ## Stage 1 Acceptance Criteria
 
+> **Status: all criteria met (2026-05-22).** The fair-comparison parallel rerun (Bug 3 fixed, confidence_steps=50) confirmed ASCR provides a measurable improvement over ShowO across Hard64, GenEval, and DPG-Bench (partial), validated by an independent GPT-5.5 external judge.
+
 Stage 1 is considered complete when all of the following are true:
 
-- A single prompt can run through the full ASCR loop with real Show-o integration.
-- A dry-run mode can run without Show-o weights using mock adapters.
-- The local semantic evaluator produces schema-validated JSON.
-- Malformed evaluator output triggers safe fallback rather than remasking.
-- 4x4 grid cells project correctly into 32x32 token masks.
-- Fixed one-token dilation is implemented and tested.
-- Each run saves decoded images, grid images, evaluator JSON, selected masks, prompts, configs, and trace JSONL.
-- A small benchmark subset can compare ASCR with core baselines.
-- Slurm scripts support the `gpu` partition (and `gpu_shared` for single-GPU shard jobs).
-- README documents how to reproduce the latest working run.
+- ✅ A single prompt can run through the full ASCR loop with real Show-o integration.
+- ✅ A dry-run mode can run without Show-o weights using mock adapters.
+- ✅ The local semantic evaluator produces schema-validated JSON.
+- ✅ Malformed evaluator output triggers safe fallback rather than remasking.
+- ✅ 4x4 grid cells project correctly into 32x32 token masks.
+- ✅ Fixed one-token dilation is implemented and tested.
+- ✅ Each run saves decoded images, grid images, evaluator JSON, selected masks, prompts, configs, and trace JSONL.
+- ✅ A small benchmark subset can compare ASCR with core baselines.
+- ✅ Slurm scripts support the `gpu` partition (and `gpu_shared` for single-GPU shard jobs).
+- ✅ README documents how to reproduce the latest working run.
 
 ## Open Decisions
 
-These decisions are not blocking the repository bootstrap:
+> **Status: all resolved as of 2026-05-22.**
 
-- Concrete local VLM/LLM evaluator backend and checkpoint path.
-- Final dataset storage path for large benchmarks.
-- Whether generated paper figures should be tracked as lightweight examples or stored only as artifacts.
+Previously open decisions and their resolutions:
+
+- **VLM evaluator backend** → resolved: **Qwen3.5-9B** (`.venv-qwen36`, `ascr/evaluators/qwen_vl.py`). For external pairwise benchmarking, **GPT-5.5** via ofox.ai is used to eliminate evaluator circularity.
+- **Dataset storage path** → resolved: benchmark data lives in `configs/benchmark_data/` (CSVs/JSONL, git-tracked) and `data/benchmarks/` (large raw files, gitignored). Generated images go under `outputs/` (gitignored).
+- **Paper figures** → resolved: representative example images are git-tracked under `docs/examples/` at reasonable sizes; full benchmark artifact galleries remain as gitignored `outputs/`.
 
 ## Design Rule
 
