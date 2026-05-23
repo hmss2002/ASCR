@@ -85,7 +85,8 @@ Job inventory snapshot (2026-05-22):
 68947 geneval-score ShowO50 (auto-submitted by 68941)            FAILED     harmless — no GenEval prompts in bench3; empty geneval dirs skipped
 68948 geneval-score ASCR50  (auto-submitted by 68941)            FAILED     harmless — same reason
 68946 bench3 GPT-5.5 eval pipeline (DPG+DSG+GenAI, CPU-only)    FAILED     exit 2: OFOX_API_KEY not set → superseded by 68949
-68949 bench3 GPT-5.5 eval pipeline (DPG+DSG+GenAI, CPU-only)    RUNNING    -> outputs/bench3_eval/ + outputs/bench3_summary.json
+68949 bench3 GPT-5.5 eval pipeline (DPG+DSG+GenAI, CPU-only)    FAILED     OOM + compute nodes have no outbound internet; all GPT queries returned "Connection error"; all results 0.00%
+manual-loginnode  bench3 GPT-5.5 eval on login node hpcr4300a    STOPPED    DPG partial (showo 256/1065, ascr 243/1065, bagel 197/1065 items); DSG+GenAI not started. Halted by API monthly spending limit ($50.03/$50.00). Checkpoint saved → outputs/bench3_eval/dpg_*/checkpoint.jsonl
 ```
 
 Cluster (HKU HPC): 19 nodes (SPGL-1-1–19), ~151 L40S GPUs total. QOS limits per user: `gpu` partition = 28 GPUs / 8 running / 8 submitted (MaxNodes=UNLIMITED); `gpu_shared` = 28 GPUs / 8 running / 10 submitted (MaxNodes=1 per job). Total cross-partition cap: 56 GPUs. Job 68835 ran on `gpu_shared` partition and completed in 00:05:25.
@@ -118,19 +119,19 @@ Cluster (HKU HPC): 19 nodes (SPGL-1-1–19), ~151 L40S GPUs total. QOS limits pe
 
 **Evaluation 2: GenEval (553 prompts)** — 6 subtasks (single-object, two-object, counting, colors, position, color\_attr), scored with OWLViT object detectors, **fully independent of Qwen**. This is the cleanest evaluation.
 
-> 🔄 **评测运行中 / Evaluation Running**
+> ⚠️ **中期结果 / Interim Results — GPT-5.5 评测部分完成**
 >
-> 所有图片已生成完毕（3725 × 3 个模型）。GPT-5.5 评测任务 68949 正在运行（SPGL-1-9，约 2–4 小时）。
+> 以下为已完成的 GPT-5.5 评测。**DPG-Bench 仅完成约 19–24%**（月度 API 预算 $50 耗尽）；DSG-1k 与 GenAI-Bench 尚未开始。
 >
-> All images generated (3725 × 3 models). GPT-5.5 eval job 68949 is RUNNING on SPGL-1-9 (~2–4 h).
+> The following GPT-5.5 evaluations are complete. **DPG-Bench is ~19–24% done** (monthly API budget of $50 was exhausted); DSG-1k and GenAI-Bench have not started. Resuming requires ~$262 additional API budget.
 >
 > | Benchmark | Prompts | 评测方式 / Method | 状态 / Status |
 > |---|---:|---|---|
-> | **DPG-Bench** | 1065 | GPT-5.5 VQA per-question + dependency graph | 🔄 图片已就绪，等待 GPT eval / images ready, eval pending |
-> | **GenAI-Bench** | 1600 | GPT-5.5 binary VQA | 🔄 图片已就绪，等待 GPT eval / images ready, eval pending |
-> | **DSG-1k** | 1060 | GPT-5.5 VQA per-question + dependency graph | 🔄 图片已就绪，等待 GPT eval / images ready, eval pending |
->
-> 结果将在评测完成后更新至此。Results will be added here once evaluation completes.
+> | **Hard64** | 64 | GPT-5.5 pairwise A/B (3 pairs, debiased) | ✅ 完成 / Complete |
+> | **GenEval** | 553 | GPT-5.5 strict visual judge | ✅ 完成 / Complete (3 models) |
+> | **DPG-Bench** | 1065 | GPT-5.5 VQA per-question + dep graph | ⚠️ 部分完成 / Partial (showo 256, ascr 243, bagel 197 items) |
+> | **DSG-1k** | 1060 | GPT-5.5 VQA per-question + dep graph | ❌ 未开始 / Not started |
+> | **GenAI-Bench** | 1600 | GPT-5.5 binary VQA | ❌ 未开始 / Not started |
 
 ---
 
@@ -207,6 +208,31 @@ Cluster (HKU HPC): 19 nodes (SPGL-1-1–19), ~151 L40S GPUs total. QOS limits pe
 > GPT-5.5 比 OWLViT 更严格（整体约 27% vs 67%），但排名一致（BAGEL > ASCR > ShowO），ASCR 改进方向与 OWLViT 一致。BAGEL 在 two-object、position、color_attr 领先；ShowO/ASCR 在 single_object 和 counting 优于 BAGEL（GPT-5.5 严格标准下）。
 >
 > GPT-5.5 is stricter than OWLViT (~27% vs ~67% overall), but rankings agree (BAGEL > ASCR > ShowO). Both evaluators confirm ASCR improves over ShowO. BAGEL leads on composition tasks; ShowO/ASCR score higher than BAGEL on single_object and counting under GPT-5.5's strict criteria.
+
+---
+
+**DPG-Bench（部分结果 / Partial Results） — GPT-5.5 VQA + dependency graph:**
+
+> ⚠️ **部分数据**：月度 API 预算（$50）于评测中途耗尽，以下仅统计**已全部回答完毕**的 item（约 19–24% 的完整评测集）。各分类的 item 数量（n）与完整评测不同，结果为指示性（indicative），而非最终分数。
+>
+> **Partial data**: The monthly API budget ($50) was exhausted mid-run. Only items where **all** propositions were answered are included below (~19–24% of the full 1065-item set). Results are indicative, not final.
+
+| 分类 / Category | n (items) | ShowO50 | ASCR50 | BAGEL-7B-MoT | ASCR−ShowO |
+|---|---:|---:|---:|---:|---:|
+| entity | 197 | 33.02% | 33.33% | 40.24% | **+0.31** |
+| global | 57 | 36.27% | 38.58% | 40.43% | **+2.31** |
+| attribute | 2 | 56.67% | 46.67% | 50.00% | −10.00 |
+| **Overall (partial)** | **256** | **33.94%** | **34.66%** | **40.37%** | **+0.72** |
+
+> 注：DPG-Bench 完整评测需 ~14,382 题/模型；已完成约 4,000 题/模型（~28%）。相对排名 BAGEL > ASCR ≥ ShowO 与其他 benchmark 一致。`attribute` 分类仅 2 个样本，不具统计意义。
+>
+> Note: Full DPG-Bench requires ~14,382 questions/model; ~4,000 answered per model (~28%). Relative ranking BAGEL > ASCR ≥ ShowO is consistent with other benchmarks. `attribute` (n=2) is not statistically meaningful.
+
+**DSG-1k 和 GenAI-Bench / DSG-1k and GenAI-Bench — 未完成 / Not started:**
+
+> 月度 API 预算（$50）在 DPG-Bench 评测过程中耗尽（已用 $50.03），DSG-1k（1060 prompts，~8,182 题/模型）和 GenAI-Bench（1600 prompts）的 GPT-5.5 评测尚未开始。恢复评测约需额外 $262 预算（按 ~$0.0043/题估算）。所有已答题目的 checkpoint 已保存，充值后重启不丢进度。
+>
+> The monthly API budget ($50) was exhausted during DPG-Bench evaluation ($50.03 used). GPT-5.5 evaluation of DSG-1k (1060 prompts, ~8,182 questions/model) and GenAI-Bench (1600 prompts) has not started. Resuming requires ~$262 additional budget (~$0.0043/question). Checkpoints are saved; resuming will skip already-answered questions.
 
 **Sub-run A (jobs 68794+68802, confidence_steps=3 — SUPERSEDED):** ShowO images used Bug 3
 (`confidence_steps=3`). All numbers from this run are stale; do not cite.
