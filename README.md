@@ -84,7 +84,8 @@ Job inventory snapshot (2026-05-22):
 68941 ShowO bench3 merge-eval (aggregate + convert + OWLViT)    COMPLETED  00:00:12 -> outputs/bench3_showo_20260522_210258/suite.json (41 MB merged)
 68947 geneval-score ShowO50 (auto-submitted by 68941)            FAILED     harmless — no GenEval prompts in bench3; empty geneval dirs skipped
 68948 geneval-score ASCR50  (auto-submitted by 68941)            FAILED     harmless — same reason
-68946 bench3 GPT-5.5 eval pipeline (DPG+DSG+GenAI, CPU-only)    FAILED     exit 2: OFOX_API_KEY not set → needs resubmit with key
+68946 bench3 GPT-5.5 eval pipeline (DPG+DSG+GenAI, CPU-only)    FAILED     exit 2: OFOX_API_KEY not set → superseded by 68949
+68949 bench3 GPT-5.5 eval pipeline (DPG+DSG+GenAI, CPU-only)    RUNNING    -> outputs/bench3_eval/ + outputs/bench3_summary.json
 ```
 
 Cluster (HKU HPC): 19 nodes (SPGL-1-1–19), ~151 L40S GPUs total. QOS limits per user: `gpu` partition = 28 GPUs / 8 running / 8 submitted (MaxNodes=UNLIMITED); `gpu_shared` = 28 GPUs / 8 running / 10 submitted (MaxNodes=1 per job). Total cross-partition cap: 56 GPUs. Job 68835 ran on `gpu_shared` partition and completed in 00:05:25.
@@ -117,11 +118,11 @@ Cluster (HKU HPC): 19 nodes (SPGL-1-1–19), ~151 L40S GPUs total. QOS limits pe
 
 **Evaluation 2: GenEval (553 prompts)** — 6 subtasks (single-object, two-object, counting, colors, position, color\_attr), scored with OWLViT object detectors, **fully independent of Qwen**. This is the cleanest evaluation.
 
-> 🔴 **评测待重跑 / Evaluation Re-run Needed**
+> 🔄 **评测运行中 / Evaluation Running**
 >
-> 所有图片已生成完毕（3725 × 3 个模型）。68941 已完成 suite.json 合并（41 MB）。但 68946（GPT-5.5 评测 pipeline）因 `OFOX_API_KEY` 未设置而失败，需补充 API key 后重新提交。
+> 所有图片已生成完毕（3725 × 3 个模型）。GPT-5.5 评测任务 68949 正在运行（SPGL-1-9，约 2–4 小时）。
 >
-> All images generated (3725 × 3 models). 68941 merged suite.json (41 MB). However 68946 (GPT-5.5 eval pipeline) failed (exit 2: `OFOX_API_KEY` not set) and must be resubmitted with the key.
+> All images generated (3725 × 3 models). GPT-5.5 eval job 68949 is RUNNING on SPGL-1-9 (~2–4 h).
 >
 > | Benchmark | Prompts | 评测方式 / Method | 状态 / Status |
 > |---|---:|---|---|
@@ -907,8 +908,8 @@ environment. Three venvs are currently in use, each scoped to a model family:
 
 | Venv | Purpose | Activated by |
 |---|---|---|
-| `.venv` | ShowO + ASCR loop (torch 2.2.1; legacy local-VLM/Show-o MMU evaluator path) + GPT eval scripts (openai 2.38.0) | legacy ShowO/ASCR setup: `scripts/create_env.sh`, `scripts/download_showo.sh`; production: `jobs/bench3_eval_pipeline.sbatch` |
-| `.venv-qwen36` | ★ Production: ShowO + ASCR loop with Qwen3.5-9B evaluator (torch 2.5.1+cu121, transformers shim under `.deps/transformers-qwen35-clean`) | `jobs/stage1_*_qwen35_9b_*.sbatch`, `jobs/stage1_t2i_*` |
+| `.venv` | ShowO + ASCR loop (torch 2.2.1; legacy local-VLM/Show-o MMU evaluator path) | legacy ShowO/ASCR setup: `scripts/create_env.sh`, `scripts/download_showo.sh` |
+| `.venv-qwen36` | ★ Production: ShowO + ASCR loop with Qwen3.5-9B evaluator (torch 2.5.1+cu121, transformers shim under `.deps/transformers-qwen35-clean`) + GPT eval scripts (openai 2.38.0) | `jobs/stage1_*_qwen35_9b_*.sbatch`, `jobs/stage1_t2i_*`, `jobs/bench3_eval_pipeline.sbatch` |
 | `.venv-bagel` | BAGEL-7B-MoT generation only (torch 2.5.1+cu121, flash-attn 2.7.4.post1) | `scripts/run_bagel_text2image.py`, `jobs/stage1_*bagel*.sbatch` |
 
 All three live under `/grp01/cds_bdai/JianyuZhang/ASCR/`, are gitignored, and must be created

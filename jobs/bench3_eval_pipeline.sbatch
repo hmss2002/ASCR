@@ -26,7 +26,7 @@ if [[ -z "${OFOX_API_KEY:-}" ]]; then
   echo "ERROR: OFOX_API_KEY is not set" >&2; exit 2
 fi
 
-VENV="${VENV:-.venv}"
+VENV="${VENV:-.venv-qwen36}"
 source "$VENV/bin/activate"
 PYTHON="$VENV/bin/python"
 
