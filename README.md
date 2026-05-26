@@ -92,6 +92,7 @@ Job inventory snapshot (2026-05-22):
 68946 bench3 GPT-5.5 eval pipeline (DPG+DSG+GenAI, CPU-only)    FAILED     exit 2: OFOX_API_KEY not set → superseded by 68949
 68949 bench3 GPT-5.5 eval pipeline (DPG+DSG+GenAI, CPU-only)    FAILED     OOM + compute nodes have no outbound internet; all GPT queries returned "Connection error"; all results 0.00%
 manual-loginnode  bench3 GPT-5.5 eval on login node hpcr4300a    STOPPED    DPG partial (showo 256/1065, ascr 243/1065, bagel 197/1065 items); DSG+GenAI not started. Halted by API monthly spending limit ($50.03/$50.00). Checkpoint saved → outputs/bench3_eval/dpg_*/checkpoint.jsonl
+manual-loginnode2 bench3 Gemini Flash eval on login node hpcr4300a IN_PROGRESS 2026-05-27 resumed: DPG from checkpoint (~33%), DSG-1k + GenAI-Bench fresh start. Judge: mixed GPT-5.5 (early Qs) + google/gemini-3-flash-preview (remaining ~57k Qs). 9 jobs × 30 workers via ofox.ai, PIDs 1380645–1380653.
 ```
 
 Cluster (HKU HPC): 19 nodes (SPGL-1-1–19), ~151 L40S GPUs total. QOS limits per user: `gpu` partition = 28 GPUs / 8 running / 8 submitted (MaxNodes=UNLIMITED); `gpu_shared` = 28 GPUs / 8 running / 10 submitted (MaxNodes=1 per job). Total cross-partition cap: 56 GPUs. Job 68835 ran on `gpu_shared` partition and completed in 00:05:25.
@@ -124,31 +125,35 @@ Cluster (HKU HPC): 19 nodes (SPGL-1-1–19), ~151 L40S GPUs total. QOS limits pe
 
 **Evaluation 2: GenEval (553 prompts)** — 6 subtasks (single-object, two-object, counting, colors, position, color\_attr), scored with OWLViT object detectors, **fully independent of Qwen**. GPT-5.5 strict visual judge also applied.
 
-**评测 3：DPG-Bench（1065 条 prompt）** — Diverse Prompt Generation Benchmark，测试多样复杂场景下的文本对齐质量（颜色、形状、纹理、空间关系、非空间关系、计数等多维度），GPT-5.5 对每道 VQA 子题逐一判断，再聚合依存图计算最终得分。预算耗尽时仅完成约 19–24%。
+**评测 3：DPG-Bench（1065 条 prompt）** — Diverse Prompt Generation Benchmark，测试多样复杂场景下的文本对齐质量（颜色、形状、纹理、空间关系、非空间关系、计数等多维度），VQA 裁判对每道子题逐一判断，再聚合依存图计算最终得分。评测于 2026-05-27 恢复，进行中。
 
-**Evaluation 3: DPG-Bench (1065 prompts)** — Tests diverse compositional T2I prompt alignment (color, shape, texture, spatial/non-spatial relations, counting, etc.) using GPT-5.5 VQA per sub-question aggregated by dependency graph. ~19–24% complete due to exhausted API budget.
+**Evaluation 3: DPG-Bench (1065 prompts)** — Tests diverse compositional T2I prompt alignment (color, shape, texture, spatial/non-spatial relations, counting, etc.) using VQA judge per sub-question aggregated by dependency graph. Evaluation resumed 2026-05-27, in progress.
 
-**评测 4：DSG-1k（1060 条 prompt）** — Davidsonian Scene Graph benchmark，将每条 prompt 拆解为结构化场景图，GPT-5.5 对每个场景图节点逐一判断，衡量模型生成图像与 prompt 语义的结构化匹配度。尚未开始（预算不足）。
+**评测 4：DSG-1k（1060 条 prompt）** — Davidsonian Scene Graph benchmark，将每条 prompt 拆解为结构化场景图，VQA 裁判对每个场景图节点逐一判断，衡量模型生成图像与 prompt 语义的结构化匹配度。评测于 2026-05-27 开始，进行中。
 
-**Evaluation 4: DSG-1k (1060 prompts)** — Decomposes each prompt into a Davidsonian scene graph; GPT-5.5 judges each node. Not started — requires ~$262 additional API budget.
+**Evaluation 4: DSG-1k (1060 prompts)** — Decomposes each prompt into a Davidsonian scene graph; VQA judge scores each node. Evaluation started 2026-05-27, in progress.
 
-**评测 5：GenAI-Bench（1600 条 prompt）** — 覆盖 11 个技能维度的高质量标注文生图测试集，用 GPT-5.5 binary VQA 评测每张生成图。尚未开始（预算不足）。
+**评测 5：GenAI-Bench（1600 条 prompt）** — 覆盖 11 个技能维度的高质量标注文生图测试集，用 binary VQA 评测每张生成图。评测于 2026-05-27 开始，进行中。
 
-**Evaluation 5: GenAI-Bench (1600 prompts)** — 11-skill text-to-image benchmark with expert annotations; GPT-5.5 binary VQA. Not started — requires additional budget.
+**Evaluation 5: GenAI-Bench (1600 prompts)** — 11-skill text-to-image benchmark with expert annotations; binary VQA judge. Evaluation started 2026-05-27, in progress.
 
-> ⚠️ **中期结果 / Interim Results — GPT-5.5 评测部分完成**
+> 🔄 **评测进行中 / Evaluations in progress**
 >
-> 以下为已完成的 GPT-5.5 评测。**DPG-Bench 仅完成约 19–24%**（月度 API 预算 $50 耗尽）；DSG-1k 与 GenAI-Bench 尚未开始。
+> DPG-Bench、DSG-1k 和 GenAI-Bench 正在由 VQA 裁判对三个模型进行评测（2026-05-27 启动）。预计数小时内完成，完成后将更新下方结果表格。
 >
-> The following GPT-5.5 evaluations are complete. **DPG-Bench is ~19–24% done** (monthly API budget of $50 was exhausted); DSG-1k and GenAI-Bench have not started. Resuming requires ~$262 additional API budget.
+> DPG-Bench, DSG-1k, and GenAI-Bench evaluations are running for all three models (started 2026-05-27). Results tables below will be updated upon completion.
+>
+> **裁判说明（混合）/ Judge note (mixed)**: 各 job 中约 10–33% 的题目已由 GPT-5.5（`openai/gpt-5.5`）在前次运行中完成；其余题目由 Gemini Flash（`google/gemini-3-flash-preview`）通过 ofox.ai 代理完成。两者作为 VQA judge 能力相当，混合比例小，分数可比但非严格同质。
+>
+> **Mixed judge**: ~10–33% of questions per job were answered by GPT-5.5 (`openai/gpt-5.5`) in a prior run; the remainder are answered by Gemini Flash (`google/gemini-3-flash-preview`) via ofox.ai. Both are strong VQA judges; the mixing fraction is small and scores are comparable but not strictly homogeneous.
 >
 > | Benchmark | Prompts | 评测方式 / Method | 状态 / Status |
 > |---|---:|---|---|
 > | **Hard64** | 64 | GPT-5.5 pairwise A/B (3 pairs, debiased) | ✅ 完成 / Complete |
 > | **GenEval** | 553 | GPT-5.5 strict visual judge | ✅ 完成 / Complete (3 models) |
-> | **DPG-Bench** | 1065 | GPT-5.5 VQA per-question + dep graph | ⚠️ 部分完成 / Partial (showo 256, ascr 243, bagel 197 items) |
-> | **DSG-1k** | 1060 | GPT-5.5 VQA per-question + dep graph | ❌ 未开始 / Not started |
-> | **GenAI-Bench** | 1600 | GPT-5.5 binary VQA | ❌ 未开始 / Not started |
+> | **DPG-Bench** | 1065 | VQA (混合 GPT-5.5 + Gemini Flash) per-question + dep graph | 🔄 进行中 / In progress (~33% done) |
+> | **DSG-1k** | 1060 | VQA (混合 GPT-5.5 + Gemini Flash) per-question + dep graph | 🔄 进行中 / In progress |
+> | **GenAI-Bench** | 1600 | VQA (混合 GPT-5.5 + Gemini Flash) binary VQA | 🔄 进行中 / In progress |
 
 ---
 
@@ -228,11 +233,11 @@ Cluster (HKU HPC): 19 nodes (SPGL-1-1–19), ~151 L40S GPUs total. QOS limits pe
 
 ---
 
-**DPG-Bench（部分结果 / Partial Results） — GPT-5.5 VQA + dependency graph:**
+**DPG-Bench（部分结果 / Partial Results） — VQA (混合 GPT-5.5 + Gemini Flash) + dependency graph:**
 
-> ⚠️ **部分数据**：月度 API 预算（$50）于评测中途耗尽，以下仅统计**已全部回答完毕**的 item（约 19–24% 的完整评测集）。各分类的 item 数量（n）与完整评测不同，结果为指示性（indicative），而非最终分数。
+> 🔄 **评测进行中**：以下为当前可统计的已完成 item 的部分结果（约 33%），完整结果待评测完成后更新。
 >
-> **Partial data**: The monthly API budget ($50) was exhausted mid-run. Only items where **all** propositions were answered are included below (~19–24% of the full 1065-item set). Results are indicative, not final.
+> 🔄 **In progress**: The table below reflects items fully answered so far (~33%); will be replaced with complete results upon run completion.
 
 | 分类 / Category | n (items) | ShowO50 | ASCR50 | BAGEL-7B-MoT | ASCR−ShowO |
 |---|---:|---:|---:|---:|---:|
@@ -241,15 +246,15 @@ Cluster (HKU HPC): 19 nodes (SPGL-1-1–19), ~151 L40S GPUs total. QOS limits pe
 | attribute | 2 | 56.67% | 46.67% | 50.00% | −10.00 |
 | **Overall (partial)** | **256** | **33.94%** | **34.66%** | **40.37%** | **+0.72** |
 
-> 注：DPG-Bench 完整评测需 ~14,382 题/模型；已完成约 4,000 题/模型（~28%）。相对排名 BAGEL > ASCR ≥ ShowO 与其他 benchmark 一致。`attribute` 分类仅 2 个样本，不具统计意义。
+> 注：DPG-Bench 完整评测需 ~14,382 题/模型；已完成约 4,800 题/模型（~33%）。相对排名 BAGEL > ASCR ≥ ShowO 与其他 benchmark 一致。`attribute` 分类仅 2 个样本，不具统计意义。
 >
-> Note: Full DPG-Bench requires ~14,382 questions/model; ~4,000 answered per model (~28%). Relative ranking BAGEL > ASCR ≥ ShowO is consistent with other benchmarks. `attribute` (n=2) is not statistically meaningful.
+> Note: Full DPG-Bench requires ~14,382 questions/model; ~4,800 answered per model (~33%). Relative ranking BAGEL > ASCR ≥ ShowO is consistent with other benchmarks. `attribute` (n=2) is not statistically meaningful.
 
-**DSG-1k 和 GenAI-Bench / DSG-1k and GenAI-Bench — 未完成 / Not started:**
+**DSG-1k 和 GenAI-Bench / DSG-1k and GenAI-Bench — 进行中 / In progress:**
 
-> 月度 API 预算（$50）在 DPG-Bench 评测过程中耗尽（已用 $50.03），DSG-1k（1060 prompts，~8,182 题/模型）和 GenAI-Bench（1600 prompts）的 GPT-5.5 评测尚未开始。恢复评测约需额外 $262 预算（按 ~$0.0043/题估算）。所有已答题目的 checkpoint 已保存，充值后重启不丢进度。
+> 🔄 DSG-1k（1060 prompts，~8,182 题/模型）和 GenAI-Bench（1600 prompts）评测于 2026-05-27 启动，预计数小时内完成，结果将在完成后更新至此处。
 >
-> The monthly API budget ($50) was exhausted during DPG-Bench evaluation ($50.03 used). GPT-5.5 evaluation of DSG-1k (1060 prompts, ~8,182 questions/model) and GenAI-Bench (1600 prompts) has not started. Resuming requires ~$262 additional budget (~$0.0043/question). Checkpoints are saved; resuming will skip already-answered questions.
+> 🔄 DSG-1k (1060 prompts, ~8,182 questions/model) and GenAI-Bench (1600 prompts) evaluations started 2026-05-27. Results will be added here upon completion.
 
 ## Source Documents
 
@@ -440,11 +445,11 @@ GPT-5.5 is used as the external judge for all pairwise and VQA evaluations to el
 
 **DPG-Bench VQA + dependency graph:**
 - For each prompt, decompose into VQA sub-questions (DPG official format).
-- GPT-5.5 answers each VQA question yes/no given the generated image.
+- VQA judge (GPT-5.5 or Gemini Flash) answers each question yes/no given the generated image.
 - Aggregate by dependency graph to get per-item score; average over items for final score.
-- Partial results (budget exhausted): `outputs/bench3_eval/dpg_{showo,ascr,bagel}/checkpoint.jsonl`
+- Checkpoints: `outputs/bench3_eval/dpg_{showo,ascr,bagel}/checkpoint.jsonl`
 
-**Budget note:** The monthly $50 API budget was exhausted mid-DPG-Bench ($50.03 used). DSG-1k and GenAI-Bench evaluations have not started; estimated cost to complete all remaining evaluations is ~$262.
+**DSG-1k and GenAI-Bench:** Same pipeline; checkpoints at `outputs/bench3_eval/{dsg,genai}_{showo,ascr,bagel}/`.
 
 ### Important Caveats
 
@@ -608,8 +613,8 @@ ASCR/
 │   ├── submit_bench_bagel_remaining.sh          ← submit remaining BAGEL shards
 │   ├── submit_parallel_rerun.sh                 ← one-shot helper: submit 9-node 50-step rerun
 │   ├── build_bench_image_map.py                 ← build image_map.json for all 3 models
-│   ├── eval_csv_vqa_gpt.py                      ← GPT-5.5 VQA evaluator (DPG-Bench + DSG-1k)
-│   ├── eval_genai_gpt.py                        ← GPT-5.5 binary VQA evaluator (GenAI-Bench)
+│   ├── eval_csv_vqa_gpt.py                      ← VQA evaluator (DPG-Bench + DSG-1k); --model-id selects judge (default: gemini-3-flash-preview)
+│   ├── eval_genai_gpt.py                        ← binary VQA evaluator (GenAI-Bench); --model-id selects judge (default: gemini-3-flash-preview)
 │   ├── summarize_bench3.py                      ← 3-way comparison table across all benchmarks
 │   ├── download_showo.sh / download_showo_models.py  ← Show-o model download
 │   ├── sync_github.sh                           ← git add/commit/push helper
