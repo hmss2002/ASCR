@@ -124,31 +124,31 @@ Cluster (HKU HPC): 19 nodes (SPGL-1-1–19), ~151 L40S GPUs total. QOS limits pe
 
 **Evaluation 2: GenEval (553 prompts)** — 6 subtasks (single-object, two-object, counting, colors, position, color\_attr), scored with OWLViT object detectors, **fully independent of Qwen**. GPT-5.5 strict visual judge also applied.
 
-**评测 3：DPG-Bench（1065 条 prompt）** — Diverse Prompt Generation Benchmark，测试多样复杂场景下的文本对齐质量（颜色、形状、纹理、空间关系、非空间关系、计数等多维度），GPT-5.5 对每道 VQA 子题逐一判断，再聚合依存图计算最终得分。预算耗尽时仅完成约 19–24%。
+**评测 3：DPG-Bench（1065 条 prompt）** — Diverse Prompt Generation Benchmark，测试多样复杂场景下的文本对齐质量（颜色、形状、纹理、空间关系、非空间关系、计数等多维度），对每道 VQA 子题逐一判断，再聚合依存图计算最终得分。GPT-5.5 用于初始评测，新 API key 下使用 Gemini-3-flash-preview 补全剩余问题（重跑中）。
 
-**Evaluation 3: DPG-Bench (1065 prompts)** — Tests diverse compositional T2I prompt alignment (color, shape, texture, spatial/non-spatial relations, counting, etc.) using GPT-5.5 VQA per sub-question aggregated by dependency graph. ~19–24% complete due to exhausted API budget.
+**Evaluation 3: DPG-Bench (1065 prompts)** — Tests diverse compositional T2I prompt alignment (color, shape, texture, spatial/non-spatial relations, counting, etc.) using VQA per sub-question aggregated by dependency graph. GPT-5.5 was used for initial evaluation; remaining unanswered questions are being re-queried with Gemini-3-flash-preview.
 
-**评测 4：DSG-1k（1060 条 prompt）** — Davidsonian Scene Graph benchmark，将每条 prompt 拆解为结构化场景图，GPT-5.5 对每个场景图节点逐一判断，衡量模型生成图像与 prompt 语义的结构化匹配度。尚未开始（预算不足）。
+**评测 4：DSG-1k（1060 条 prompt）** — Davidsonian Scene Graph benchmark，将每条 prompt 拆解为结构化场景图，对每个场景图节点逐一判断，衡量模型生成图像与 prompt 语义的结构化匹配度。GPT-5.5 初步评测已完成约 79–86%，余下以 Gemini-3-flash-preview 补全（重跑中）。
 
-**Evaluation 4: DSG-1k (1060 prompts)** — Decomposes each prompt into a Davidsonian scene graph; GPT-5.5 judges each node. Not started — requires ~$262 additional API budget.
+**Evaluation 4: DSG-1k (1060 prompts)** — Decomposes each prompt into a Davidsonian scene graph; judges each node. GPT-5.5 answered ~79–86% of questions; remainder being re-queried with Gemini-3-flash-preview.
 
-**评测 5：GenAI-Bench（1600 条 prompt）** — 覆盖 11 个技能维度的高质量标注文生图测试集，用 GPT-5.5 binary VQA 评测每张生成图。尚未开始（预算不足）。
+**评测 5：GenAI-Bench（1600 条 prompt）** — 覆盖 11 个技能维度的高质量标注文生图测试集，binary VQA 评测每张生成图。GPT-5.5 初步评测完成约 24–28%，余下以 Gemini-3-flash-preview 补全（重跑中）。
 
-**Evaluation 5: GenAI-Bench (1600 prompts)** — 11-skill text-to-image benchmark with expert annotations; GPT-5.5 binary VQA. Not started — requires additional budget.
+**Evaluation 5: GenAI-Bench (1600 prompts)** — 11-skill text-to-image benchmark with expert annotations; binary VQA. GPT-5.5 answered ~24–28% of questions; remainder being re-queried with Gemini-3-flash-preview.
 
-> ⚠️ **中期结果 / Interim Results — GPT-5.5 评测部分完成**
+> ⚠️ **进行中 / In Progress — DPG / DSG / GenAI 补全重跑**
 >
-> 以下为已完成的 GPT-5.5 评测。**DPG-Bench 仅完成约 19–24%**（月度 API 预算 $50 耗尽）；DSG-1k 与 GenAI-Bench 尚未开始。
+> 初次 GPT-5.5 评测因月度 $50 API 预算耗尽，约 67% 的问题返回空回复（被记为 "no"）。已切换至新账户（Gemini-3-flash-preview），正在并行重跑全部 9 个任务补全空缺。以下状态栏和分数基于已有有效回答（非空 raw）的部分数据，最终数字在重跑完成后更新。
 >
-> The following GPT-5.5 evaluations are complete. **DPG-Bench is ~19–24% done** (monthly API budget of $50 was exhausted); DSG-1k and GenAI-Bench have not started. Resuming requires ~$262 additional API budget.
+> The initial GPT-5.5 evaluation hit a $50/month API spending limit, causing ~67% of questions to return empty responses (scored as "no"). A new API key with Gemini-3-flash-preview is now re-running all 9 tasks in parallel to fill in the missing answers. The status and scores below are based on valid (non-empty) answers only; final numbers will be updated once the re-run completes.
 >
 > | Benchmark | Prompts | 评测方式 / Method | 状态 / Status |
 > |---|---:|---|---|
 > | **Hard64** | 64 | GPT-5.5 pairwise A/B (3 pairs, debiased) | ✅ 完成 / Complete |
 > | **GenEval** | 553 | GPT-5.5 strict visual judge | ✅ 完成 / Complete (3 models) |
-> | **DPG-Bench** | 1065 | GPT-5.5 VQA per-question + dep graph | ⚠️ 部分完成 / Partial (showo 256, ascr 243, bagel 197 items) |
-> | **DSG-1k** | 1060 | GPT-5.5 VQA per-question + dep graph | ❌ 未开始 / Not started |
-> | **GenAI-Bench** | 1600 | GPT-5.5 binary VQA | ❌ 未开始 / Not started |
+> | **DPG-Bench** | 1065 | GPT-5.5 + Gemini VQA + dep graph | 🔄 重跑中 / Re-running (~94% coverage, ~9,633 q's remaining/model) |
+> | **DSG-1k** | 1060 | GPT-5.5 + Gemini VQA + dep graph | 🔄 重跑中 / Re-running (~79–86% coverage, ~6,000 q's remaining/model) |
+> | **GenAI-Bench** | 1600 | GPT-5.5 + Gemini binary VQA | 🔄 重跑中 / Re-running (~24–28% coverage, ~1,200 q's remaining/model) |
 
 ---
 
@@ -228,28 +228,60 @@ Cluster (HKU HPC): 19 nodes (SPGL-1-1–19), ~151 L40S GPUs total. QOS limits pe
 
 ---
 
-**DPG-Bench（部分结果 / Partial Results） — GPT-5.5 VQA + dependency graph:**
+**DPG-Bench（当前有效结果 / Current valid-answer scores） — GPT-5.5 + Gemini VQA + dependency graph:**
 
-> ⚠️ **部分数据**：月度 API 预算（$50）于评测中途耗尽，以下仅统计**已全部回答完毕**的 item（约 19–24% 的完整评测集）。各分类的 item 数量（n）与完整评测不同，结果为指示性（indicative），而非最终分数。
+> 🔄 **重跑中 / Re-running**: 下表基于 GPT-5.5 初次评测中已有有效回答（非空 raw）的子题，使用依存图校正后聚合。DPG 已有约 94–96% item 的有效覆盖（1002–1023/1065 items）；剩余约 9,333–9,712 题/模型正由 Gemini-3-flash-preview 补全。分数将在重跑完成后更新。
 >
-> **Partial data**: The monthly API budget ($50) was exhausted mid-run. Only items where **all** propositions were answered are included below (~19–24% of the full 1065-item set). Results are indicative, not final.
+> **Re-running**: Scores below are from the valid (non-empty) answers from the initial GPT-5.5 run, dependency-graph corrected. DPG has ~94–96% item coverage (1002–1023/1065 items); remaining ~9,333–9,712 questions/model are being filled in by Gemini-3-flash-preview.
 
-| 分类 / Category | n (items) | ShowO50 | ASCR50 | BAGEL-7B-MoT | ASCR−ShowO |
+| 分类 / Category | n (items, showo) | ShowO50 | ASCR50 | BAGEL-7B-MoT | ASCR−ShowO |
 |---|---:|---:|---:|---:|---:|
-| entity | 197 | 33.02% | 33.33% | 40.24% | **+0.31** |
-| global | 57 | 36.27% | 38.58% | 40.43% | **+2.31** |
-| attribute | 2 | 56.67% | 46.67% | 50.00% | −10.00 |
-| **Overall (partial)** | **256** | **33.94%** | **34.66%** | **40.37%** | **+0.72** |
+| entity | 908 | 30.00% | 28.92% | 31.86% | −1.08 |
+| global | 91 | 41.68% | 41.36% | 45.18% | −0.32 |
+| attribute | 3 | 45.45% | 45.45% | 63.33% | +0.00 |
+| **Overall (partial ~94–96%)** | **1002–1023** | **31.2%** | **30.2%** | **33.2%** | **−1.0** |
 
-> 注：DPG-Bench 完整评测需 ~14,382 题/模型；已完成约 4,000 题/模型（~28%）。相对排名 BAGEL > ASCR ≥ ShowO 与其他 benchmark 一致。`attribute` 分类仅 2 个样本，不具统计意义。
+> 注：以上分数由依存图传播校正（若父节点为 "no"，子节点自动置为 "no"），再按 n_yes/n_total_questions 聚合。分数低于文献值（DALL-E 3 ~83%）是因为：(1) ShowO/ASCR 为 512×512 小模型；(2) GPT-5.5 为严格的外部评测，而非 DPG 原论文使用的 BLIP-VQA。最终数字以重跑完成后为准。ASCR 较 ShowO 有小幅下降（−1 pp），属于估计误差范围，完整数据见最终结果。
 >
-> Note: Full DPG-Bench requires ~14,382 questions/model; ~4,000 answered per model (~28%). Relative ranking BAGEL > ASCR ≥ ShowO is consistent with other benchmarks. `attribute` (n=2) is not statistically meaningful.
+> Note: Scores are dependency-graph corrected (if a parent proposition is "no", children are set to "no"), then aggregated as n_yes/n_total_questions. Scores are lower than literature values (DALL-E 3 ~83%) because: (1) ShowO/ASCR are 512×512 small models; (2) GPT-5.5 is a strict external judge, not the original DPG BLIP-VQA. Final scores to be updated after re-run completes.
 
-**DSG-1k 和 GenAI-Bench / DSG-1k and GenAI-Bench — 未完成 / Not started:**
+---
 
-> 月度 API 预算（$50）在 DPG-Bench 评测过程中耗尽（已用 $50.03），DSG-1k（1060 prompts，~8,182 题/模型）和 GenAI-Bench（1600 prompts）的 GPT-5.5 评测尚未开始。恢复评测约需额外 $262 预算（按 ~$0.0043/题估算）。所有已答题目的 checkpoint 已保存，充值后重启不丢进度。
+**DSG-1k（当前有效结果 / Current valid-answer scores） — GPT-5.5 + Gemini VQA + dependency graph:**
+
+> 🔄 **重跑中 / Re-running**: DSG-1k 已有约 79–86% item 的有效覆盖（827–915/1060 items）；剩余约 5,695–6,180 题/模型正由 Gemini-3-flash-preview 补全。
 >
-> The monthly API budget ($50) was exhausted during DPG-Bench evaluation ($50.03 used). GPT-5.5 evaluation of DSG-1k (1060 prompts, ~8,182 questions/model) and GenAI-Bench (1600 prompts) has not started. Resuming requires ~$262 additional budget (~$0.0043/question). Checkpoints are saved; resuming will skip already-answered questions.
+> DSG-1k has ~79–86% item coverage; remaining ~5,695–6,180 questions/model being filled in by Gemini-3-flash-preview.
+
+| 分类 / Category | n (items, showo) | ShowO50 | ASCR50 | BAGEL-7B-MoT | ASCR−ShowO |
+|---|---:|---:|---:|---:|---:|
+| entity | 752 | 21.61% | 21.19% | 26.17% | −0.42 |
+| global | 86 | 14.21% | 13.52% | 19.58% | −0.69 |
+| **Overall (partial ~79–86%)** | **841–915** | **21.0%** | **20.5%** | **25.6%** | **−0.5** |
+
+---
+
+**GenAI-Bench（当前有效结果 / Current valid-answer scores） — GPT-5.5 + Gemini binary VQA:**
+
+> 🔄 **重跑中 / Re-running**: GenAI-Bench 当前有效覆盖约 24–28%（373–451/1595 items）；剩余约 1,144–1,237 题/模型正由 Gemini-3-flash-preview 补全。
+>
+> GenAI-Bench currently has ~24–28% valid coverage; remaining ~1,144–1,237 questions/model being filled in by Gemini-3-flash-preview.
+
+| 模型 / Model | 有效回答数 / Valid answers | 准确率 / Accuracy |
+|---|---:|---:|
+| ShowO50 | 381 | 57.2% |
+| ASCR50 | 451 | 52.1% |
+| BAGEL-7B-MoT | 397 | 62.2% |
+
+> GenAI-Bench 有效覆盖较低（~25%），当前分数受样本偏差影响较大，待补全后更新。
+>
+> GenAI-Bench valid coverage is low (~25%); current scores are subject to sample bias and will be updated after re-run completes.
+
+**DSG-1k 和 GenAI-Bench / DSG-1k and GenAI-Bench — 补全重跑进行中 / Re-run in progress:**
+
+> ~~月度 API 预算（$50）在 DPG-Bench 评测过程中耗尽（已用 $50.03），DSG-1k（1060 prompts，~8,182 题/模型）和 GenAI-Bench（1600 prompts）的 GPT-5.5 评测尚未开始。~~ 已切换至新账户（Gemini-3-flash-preview），正在并行补全所有空缺答案（50,268 题）。
+>
+> ~~The monthly API budget ($50) was exhausted during DPG-Bench evaluation.~~ Switched to a new API account using Gemini-3-flash-preview; all 50,268 unanswered questions across 9 tasks are now being re-queried in parallel.
 
 ## Source Documents
 

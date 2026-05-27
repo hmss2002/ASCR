@@ -32,6 +32,7 @@ import base64
 import csv
 import json
 import os
+import random
 import re
 import sys
 import threading
@@ -41,7 +42,7 @@ from pathlib import Path
 from typing import Optional
 
 
-GPT_MODEL = "openai/gpt-5.5"
+DEFAULT_MODEL = "openai/gpt-5.5"
 API_BASE = "https://api.ofox.ai/v1"
 
 MAX_RETRIES = 8
@@ -68,8 +69,9 @@ def encode_image(path: str) -> Optional[tuple[str, str]]:
     return base64.b64encode(buf.getvalue()).decode("utf-8"), "image/png"
 
 
-def ask_gpt_yes_no(client, item_id: str, question: str, image_b64: str, mime: str = "image/png") -> dict:
-    """Send one VQA question to GPT-5.5, return {item_id, question, answer, raw}.
+def ask_gpt_yes_no(client, item_id: str, question: str, image_b64: str, mime: str = "image/png",
+                   model: str = DEFAULT_MODEL) -> dict:
+    """Send one VQA question to the judge model, return {item_id, question, answer, raw}.
     Retries on rate-limit (429) and transient errors with exponential backoff.
     Raises immediately on 400 bad-request (unsupported image, etc.).
     """
@@ -83,7 +85,7 @@ def ask_gpt_yes_no(client, item_id: str, question: str, image_b64: str, mime: st
     for attempt in range(MAX_RETRIES):
         try:
             response = client.chat.completions.create(
-                model=GPT_MODEL,
+                model=model,
                 messages=[{
                     "role": "user",
                     "content": [
@@ -112,14 +114,15 @@ def ask_gpt_yes_no(client, item_id: str, question: str, image_b64: str, mime: st
         except openai.RateLimitError as e:
             # parse suggested retry-after from message if present
             m = re.search(r"Retry in (\d+)s", str(e))
-            wait = float(m.group(1)) + 2.0 if m else backoff
+            wait = float(m.group(1)) + random.uniform(1.0, 20.0) if m else backoff
             wait = min(wait, MAX_BACKOFF)
             time.sleep(wait)
             backoff = min(backoff * 2, MAX_BACKOFF)
-        except Exception:
+        except Exception as exc:
             if attempt == MAX_RETRIES - 1:
                 raise
-            time.sleep(backoff)
+            print(f"  WARN [{item_id} attempt {attempt+1}]: {type(exc).__name__}: {str(exc)[:120]}")
+            time.sleep(backoff + random.uniform(0, 5.0))
             backoff = min(backoff * 2, MAX_BACKOFF)
     raise RuntimeError(f"ask_gpt_yes_no: exhausted {MAX_RETRIES} retries for {item_id}")
 
@@ -150,10 +153,12 @@ def evaluate_model(
     workers: int,
     api_key: str,
     bench_prefix: str,
+    judge_model: str = DEFAULT_MODEL,
 ):
     """Full evaluation pipeline for one model on one CSV benchmark."""
     from openai import OpenAI
     client = OpenAI(api_key=api_key, base_url=API_BASE)
+    print(f"[{bench_prefix}/{model_key}] Judge model: {judge_model}")
 
     rows = list(csv.DictReader(csv_path.open(encoding="utf-8")))
 
@@ -209,7 +214,7 @@ def evaluate_model(
     if skipped:
         print(f"[{bench_prefix}/{model_key}] Skipped {skipped} items (missing images)")
 
-    print(f"[{bench_prefix}/{model_key}] Submitting {len(tasks)} GPT queries ({workers} workers)...")
+    print(f"[{bench_prefix}/{model_key}] Submitting {len(tasks)} queries ({workers} workers)...")
 
     # Execute in parallel; write each answer to checkpoint immediately
     raw_answers: dict[str, dict[str, str]] = {}
@@ -221,6 +226,7 @@ def evaluate_model(
             client, full_id,
             row["question_natural_language"],
             img_b64, mime,
+            model=judge_model,
         ), row["proposition_id"]
 
     answers_list = []
@@ -318,7 +324,7 @@ def evaluate_model(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Evaluate DPG-Bench or DSG-1k with GPT-5.5 VQA.")
+    parser = argparse.ArgumentParser(description="Evaluate DPG-Bench or DSG-1k with VQA judge.")
     parser.add_argument("--csv", required=True, help="DPG-Bench or DSG-1k CSV path")
     parser.add_argument("--image-map", required=True, help="image_map.json from build_bench_image_map.py")
     parser.add_argument("--model-key", required=True, choices=["showo", "ascr", "bagel"],
@@ -327,6 +333,8 @@ def main():
     parser.add_argument("--workers", type=int, default=30, help="Parallel API workers")
     parser.add_argument("--bench-prefix", default=None,
                         help="item_id prefix ('dpg' or 'dsg'); auto-detected from CSV filename if not set")
+    parser.add_argument("--model", default=DEFAULT_MODEL,
+                        help=f"Judge model to use via ofox.ai (default: {DEFAULT_MODEL})")
     args = parser.parse_args()
 
     api_key = os.environ.get("OFOX_API_KEY", "")
@@ -356,6 +364,7 @@ def main():
         workers=args.workers,
         api_key=api_key,
         bench_prefix=bench_prefix,
+        judge_model=args.model,
     )
 
 
