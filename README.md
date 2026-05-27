@@ -267,6 +267,24 @@ Cluster (HKU HPC): 19 nodes (SPGL-1-1–19), ~151 L40S GPUs total. QOS limits pe
 | ASCR50 | 52.41% |
 | BAGEL-7B-MoT | **59.44%** |
 
+---
+
+### 五大评测汇总 / All-Benchmark Summary
+
+| Benchmark | Prompts | ShowO50 | ASCR50 | BAGEL-7B-MoT | ASCR−ShowO |
+|---|---:|---:|---:|---:|---:|
+| Hard64 clean pass/fail | 64 | 78.1% | **84.4%** | 89.1% | **+6.3 pp** |
+| GenEval task-avg (OWLViT) | 553 | 66.62% | **67.25%** | 74.16% | **+0.64 pp** |
+| DPG-Bench overall | 1064 | 69.12% | 68.95% | **71.88%** | −0.17 pp |
+| DSG-1k overall | 1060 | 51.60% | **52.65%** | 56.16% | **+1.05 pp** |
+| GenAI-Bench overall | 1595 | 50.85% | **52.41%** | 59.44% | **+1.56 pp** |
+
+> **规律 / Pattern**: ASCR50 在 Hard64（+6.3 pp）上改进最显著，在 5 个 benchmark 中有 4 个均优于 ShowO；BAGEL（7B，5×参数量）在所有 benchmark 上均领先，尤其在文本生成相关任务（GenAI-Bench +8.6 pp vs ASCR）。DPG-Bench 是唯一 ASCR 略低于 ShowO 的 benchmark（−0.17 pp，基本持平）。
+>
+> **Pattern**: ASCR50 shows the largest gain on Hard64 (+6.3 pp) and beats ShowO on 4 of 5 benchmarks. BAGEL (7B, 5× params) leads on all benchmarks, with the largest gap on text-generation tasks (GenAI-Bench: +8.6 pp over ASCR). DPG-Bench is the only benchmark where ASCR is marginally below ShowO (−0.17 pp, effectively tied).
+
+---
+
 ## Source Documents
 
 The project is built from two planning documents placed in the project root:
@@ -1691,6 +1709,18 @@ ASCR matches BAGEL's score on this complex compositional prompt (+25 pp over Sho
 | <img src="docs/examples/dpg_earth_showo.png" width="225" alt="ShowO — Earth with music notes"> | <img src="docs/examples/dpg_earth_ascr.png" width="225" alt="ASCR — Earth with music notes"> | <img src="docs/examples/dpg_earth_bagel.png" width="225" alt="BAGEL — Earth with music notes"> |
 
 ASCR **surpasses BAGEL** on this global-category prompt (+30 pp over ShowO, +10 pp over BAGEL).
+
+---
+
+##### `The sky is adorned with the impressive formation of four sleek Blades aircraft, each painted in vibrant hues of red and white…` *(entity — BAGEL wins)*
+
+> Scores: ShowO **20%** · ASCR **20%** · **BAGEL 90%** ↑↑
+
+| ShowO (baseline) | ASCR50 | BAGEL-7B-MoT |
+|:---:|:---:|:---:|
+| <img src="docs/examples/dpg_aircraft_formation_showo.png" width="225" alt="ShowO — four aircraft formation"> | <img src="docs/examples/dpg_aircraft_formation_ascr.png" width="225" alt="ASCR — four aircraft formation"> | <img src="docs/examples/dpg_aircraft_formation_bagel.png" width="225" alt="BAGEL — four aircraft formation"> |
+
+This prompt requires counting (four aircraft), specific colors (red and white), and a formation. The 1.3B ShowO/ASCR models struggle with the combined constraint — ASCR's correction loop does not recover here. BAGEL's larger 7B model handles the counting and color binding correctly, scoring 90% (+70 pp over ShowO/ASCR). This example illustrates the class of prompts where model scale matters more than the correction loop.
 
 ---
 
