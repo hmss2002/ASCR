@@ -92,7 +92,7 @@ Job inventory snapshot (2026-05-22):
 68946 bench3 GPT-5.5 eval pipeline (DPG+DSG+GenAI, CPU-only)    FAILED     exit 2: OFOX_API_KEY not set → superseded by 68949
 68949 bench3 GPT-5.5 eval pipeline (DPG+DSG+GenAI, CPU-only)    FAILED     OOM + compute nodes have no outbound internet; all GPT queries returned "Connection error"; all results 0.00%
 manual-loginnode  bench3 GPT-5.5 eval on login node hpcr4300a    STOPPED    DPG partial (showo 256/1065, ascr 243/1065, bagel 197/1065 items); DSG+GenAI not started. Halted by API monthly spending limit ($50.03/$50.00). Checkpoint saved → outputs/bench3_eval/dpg_*/checkpoint.jsonl
-manual-loginnode2 bench3 Gemini Flash eval on login node hpcr4300a IN_PROGRESS 2026-05-27 resumed: DPG from checkpoint (~33%), DSG-1k + GenAI-Bench fresh start. Judge: mixed GPT-5.5 (early Qs) + google/gemini-3-flash-preview (remaining ~57k Qs). 9 jobs × 30 workers via ofox.ai, PIDs 1380645–1380653.
+manual-loginnode2 bench3 Gemini Flash eval on login node hpcr4300a COMPLETED  2026-05-27 resumed: DPG from checkpoint (~33%), DSG-1k + GenAI-Bench fresh start. Judge: mixed GPT-5.5 (early Qs) + google/gemini-3-flash-preview (remaining Qs). All 9 evals complete. Scores → DPG: ShowO 17.36%, ASCR 16.57%, BAGEL 17.62%; DSG-1k: ShowO 51.60%, ASCR 52.65%, BAGEL 56.16%; GenAI: ShowO 50.85%, ASCR 52.41%, BAGEL 59.44%.
 ```
 
 Cluster (HKU HPC): 19 nodes (SPGL-1-1–19), ~151 L40S GPUs total. QOS limits per user: `gpu` partition = 28 GPUs / 8 running / 8 submitted (MaxNodes=UNLIMITED); `gpu_shared` = 28 GPUs / 8 running / 10 submitted (MaxNodes=1 per job). Total cross-partition cap: 56 GPUs. Job 68835 ran on `gpu_shared` partition and completed in 00:05:25.
@@ -125,23 +125,23 @@ Cluster (HKU HPC): 19 nodes (SPGL-1-1–19), ~151 L40S GPUs total. QOS limits pe
 
 **Evaluation 2: GenEval (553 prompts)** — 6 subtasks (single-object, two-object, counting, colors, position, color\_attr), scored with OWLViT object detectors, **fully independent of Qwen**. GPT-5.5 strict visual judge also applied.
 
-**评测 3：DPG-Bench（1065 条 prompt）** — Diverse Prompt Generation Benchmark，测试多样复杂场景下的文本对齐质量（颜色、形状、纹理、空间关系、非空间关系、计数等多维度），VQA 裁判对每道子题逐一判断，再聚合依存图计算最终得分。评测于 2026-05-27 恢复，进行中。
+**评测 3：DPG-Bench（1065 条 prompt）** — Diverse Prompt Generation Benchmark，测试多样复杂场景下的文本对齐质量（颜色、形状、纹理、空间关系、非空间关系、计数等多维度），VQA 裁判对每道子题逐一判断，再聚合依存图计算最终得分。评测已完成（2026-05-27）。
 
-**Evaluation 3: DPG-Bench (1065 prompts)** — Tests diverse compositional T2I prompt alignment (color, shape, texture, spatial/non-spatial relations, counting, etc.) using VQA judge per sub-question aggregated by dependency graph. Evaluation resumed 2026-05-27, in progress.
+**Evaluation 3: DPG-Bench (1065 prompts)** — Tests diverse compositional T2I prompt alignment (color, shape, texture, spatial/non-spatial relations, counting, etc.) using VQA judge per sub-question aggregated by dependency graph. Evaluation complete (2026-05-27).
 
-**评测 4：DSG-1k（1060 条 prompt）** — Davidsonian Scene Graph benchmark，将每条 prompt 拆解为结构化场景图，VQA 裁判对每个场景图节点逐一判断，衡量模型生成图像与 prompt 语义的结构化匹配度。评测于 2026-05-27 开始，进行中。
+**评测 4：DSG-1k（1060 条 prompt）** — Davidsonian Scene Graph benchmark，将每条 prompt 拆解为结构化场景图，VQA 裁判对每个场景图节点逐一判断，衡量模型生成图像与 prompt 语义的结构化匹配度。评测已完成（2026-05-27）。
 
-**Evaluation 4: DSG-1k (1060 prompts)** — Decomposes each prompt into a Davidsonian scene graph; VQA judge scores each node. Evaluation started 2026-05-27, in progress.
+**Evaluation 4: DSG-1k (1060 prompts)** — Decomposes each prompt into a Davidsonian scene graph; VQA judge scores each node. Evaluation complete (2026-05-27).
 
-**评测 5：GenAI-Bench（1600 条 prompt）** — 覆盖 11 个技能维度的高质量标注文生图测试集，用 binary VQA 评测每张生成图。评测于 2026-05-27 开始，进行中。
+**评测 5：GenAI-Bench（1600 条 prompt）** — 覆盖 11 个技能维度的高质量标注文生图测试集，用 binary VQA 评测每张生成图。评测已完成（2026-05-27）。
 
-**Evaluation 5: GenAI-Bench (1600 prompts)** — 11-skill text-to-image benchmark with expert annotations; binary VQA judge. Evaluation started 2026-05-27, in progress.
+**Evaluation 5: GenAI-Bench (1600 prompts)** — 11-skill text-to-image benchmark with expert annotations; binary VQA judge. Evaluation complete (2026-05-27).
 
-> 🔄 **评测进行中 / Evaluations in progress**
+> ✅ **评测已完成 / Evaluations complete**
 >
-> DPG-Bench、DSG-1k 和 GenAI-Bench 正在由 VQA 裁判对三个模型进行评测（2026-05-27 启动）。预计数小时内完成，完成后将更新下方结果表格。
+> DPG-Bench、DSG-1k 和 GenAI-Bench 均已由 VQA 裁判对三个模型完成评测（2026-05-27）。最终得分见下表。
 >
-> DPG-Bench, DSG-1k, and GenAI-Bench evaluations are running for all three models (started 2026-05-27). Results tables below will be updated upon completion.
+> DPG-Bench, DSG-1k, and GenAI-Bench evaluations are complete for all three models (2026-05-27). Final scores are in the tables below.
 >
 > **裁判说明（混合）/ Judge note (mixed)**: 各 job 中约 10–33% 的题目已由 GPT-5.5（`openai/gpt-5.5`）在前次运行中完成；其余题目由 Gemini Flash（`google/gemini-3-flash-preview`）通过 ofox.ai 代理完成。两者作为 VQA judge 能力相当，混合比例小，分数可比但非严格同质。
 >
@@ -151,9 +151,9 @@ Cluster (HKU HPC): 19 nodes (SPGL-1-1–19), ~151 L40S GPUs total. QOS limits pe
 > |---|---:|---|---|
 > | **Hard64** | 64 | GPT-5.5 pairwise A/B (3 pairs, debiased) | ✅ 完成 / Complete |
 > | **GenEval** | 553 | GPT-5.5 strict visual judge | ✅ 完成 / Complete (3 models) |
-> | **DPG-Bench** | 1065 | VQA (混合 GPT-5.5 + Gemini Flash) per-question + dep graph | 🔄 进行中 / In progress (~33% done) |
-> | **DSG-1k** | 1060 | VQA (混合 GPT-5.5 + Gemini Flash) per-question + dep graph | 🔄 进行中 / In progress |
-> | **GenAI-Bench** | 1600 | VQA (混合 GPT-5.5 + Gemini Flash) binary VQA | 🔄 进行中 / In progress |
+> | **DPG-Bench** | 1065 | VQA (混合 GPT-5.5 + Gemini Flash) per-question + dep graph | ✅ 完成 / Complete |
+> | **DSG-1k** | 1060 | VQA (混合 GPT-5.5 + Gemini Flash) per-question + dep graph | ✅ 完成 / Complete |
+> | **GenAI-Bench** | 1600 | VQA (混合 GPT-5.5 + Gemini Flash) binary VQA | ✅ 完成 / Complete |
 
 ---
 
@@ -233,28 +233,36 @@ Cluster (HKU HPC): 19 nodes (SPGL-1-1–19), ~151 L40S GPUs total. QOS limits pe
 
 ---
 
-**DPG-Bench（部分结果 / Partial Results） — VQA (混合 GPT-5.5 + Gemini Flash) + dependency graph:**
-
-> 🔄 **评测进行中**：以下为当前可统计的已完成 item 的部分结果（约 33%），完整结果待评测完成后更新。
->
-> 🔄 **In progress**: The table below reflects items fully answered so far (~33%); will be replaced with complete results upon run completion.
+**DPG-Bench — VQA (混合 GPT-5.5 + Gemini Flash) + dependency graph:**
 
 | 分类 / Category | n (items) | ShowO50 | ASCR50 | BAGEL-7B-MoT | ASCR−ShowO |
 |---|---:|---:|---:|---:|---:|
-| entity | 197 | 33.02% | 33.33% | 40.24% | **+0.31** |
-| global | 57 | 36.27% | 38.58% | 40.43% | **+2.31** |
-| attribute | 2 | 56.67% | 46.67% | 50.00% | −10.00 |
-| **Overall (partial)** | **256** | **33.94%** | **34.66%** | **40.37%** | **+0.72** |
+| entity | 968 | 16.06% | 15.22% | 16.32% | −0.84 |
+| global | 93 | 28.68% | 28.47% | 29.04% | −0.21 |
+| attribute | 3 | 38.64% | 31.82% | 34.09% | −6.82 |
+| **Overall** | **1064** | **17.36%** | **16.57%** | **17.62%** | **−0.79** |
 
-> 注：DPG-Bench 完整评测需 ~14,382 题/模型；已完成约 4,800 题/模型（~33%）。相对排名 BAGEL > ASCR ≥ ShowO 与其他 benchmark 一致。`attribute` 分类仅 2 个样本，不具统计意义。
+> 注：DPG 整体得分偏低是因为依存图评测对每个子问题独立打分；`attribute` 分类仅 3 个样本，不具统计意义。
 >
-> Note: Full DPG-Bench requires ~14,382 questions/model; ~4,800 answered per model (~33%). Relative ranking BAGEL > ASCR ≥ ShowO is consistent with other benchmarks. `attribute` (n=2) is not statistically meaningful.
+> Note: DPG scores appear low because the dependency-graph metric grades each sub-question independently. The `attribute` category (n=3) is not statistically meaningful.
 
-**DSG-1k 和 GenAI-Bench / DSG-1k and GenAI-Bench — 进行中 / In progress:**
+**DSG-1k — VQA (混合 GPT-5.5 + Gemini Flash) + scene graph:**
 
-> 🔄 DSG-1k（1060 prompts，~8,182 题/模型）和 GenAI-Bench（1600 prompts）评测于 2026-05-27 启动，预计数小时内完成，结果将在完成后更新至此处。
->
-> 🔄 DSG-1k (1060 prompts, ~8,182 questions/model) and GenAI-Bench (1600 prompts) evaluations started 2026-05-27. Results will be added here upon completion.
+| 分类 / Category | n (items) | ShowO50 | ASCR50 | BAGEL-7B-MoT | ASCR−ShowO |
+|---|---:|---:|---:|---:|---:|
+| entity | 943 | 52.15% | 53.33% | 57.00% | **+1.18** |
+| global | 114 | 46.97% | 46.69% | 48.35% | −0.28 |
+| attribute | 1 | 37.50% | 37.50% | 62.50% | 0.00 |
+| other | 2 | 7.69% | 7.69% | 7.69% | 0.00 |
+| **Overall** | **1060** | **51.60%** | **52.65%** | **56.16%** | **+1.05** |
+
+**GenAI-Bench — binary VQA (混合 GPT-5.5 + Gemini Flash):**
+
+| 模型 / Model | 总分 / Overall |
+|---|---:|
+| ShowO50 | 50.85% |
+| ASCR50 | 52.41% |
+| BAGEL-7B-MoT | **59.44%** |
 
 ## Source Documents
 

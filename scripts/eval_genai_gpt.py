@@ -25,6 +25,7 @@ import argparse
 import base64
 import json
 import os
+import random
 import re
 import sys
 import threading
@@ -34,7 +35,7 @@ from pathlib import Path
 from typing import Optional
 
 
-GPT_MODEL = "openai/gpt-5.5"
+DEFAULT_MODEL = "openai/gpt-5.5"
 API_BASE = "https://api.ofox.ai/v1"
 
 MAX_RETRIES = 8
@@ -61,8 +62,9 @@ def encode_image(path: str) -> Optional[tuple[str, str]]:
     return base64.b64encode(buf.getvalue()).decode("utf-8"), "image/png"
 
 
-def ask_gpt_yes_no(client, item_id: str, prompt: str, image_b64: str, mime: str = "image/png") -> dict:
-    """Send one VQA question to GPT-5.5, return {item_id, prompt, answer, raw}.
+def ask_gpt_yes_no(client, item_id: str, prompt: str, image_b64: str, mime: str = "image/png",
+                   model: str = DEFAULT_MODEL) -> dict:
+    """Send one VQA question to the judge model, return {item_id, prompt, answer, raw}.
     Retries on rate-limit (429) and transient errors with exponential backoff.
     Raises immediately on 400 bad-request (unsupported image, etc.).
     """
@@ -76,7 +78,7 @@ def ask_gpt_yes_no(client, item_id: str, prompt: str, image_b64: str, mime: str 
     for attempt in range(MAX_RETRIES):
         try:
             response = client.chat.completions.create(
-                model=GPT_MODEL,
+                model=model,
                 messages=[{
                     "role": "user",
                     "content": [
@@ -87,10 +89,14 @@ def ask_gpt_yes_no(client, item_id: str, prompt: str, image_b64: str, mime: str 
                         {"type": "text", "text": question},
                     ],
                 }],
-                max_tokens=8,
+                max_tokens=200,  # thinking models need ~137 reasoning tokens before output
                 temperature=0.0,
             )
-            raw = response.choices[0].message.content.strip().lower()
+            raw = response.choices[0].message.content
+            if raw is None or raw.strip() == "":
+                # reasoning budget exhausted before producing output; treat as retryable
+                raise ValueError("empty response content from thinking model")
+            raw = raw.strip().lower()
             answer = "yes" if raw.startswith("yes") else "no"
             return {"item_id": item_id, "prompt": prompt, "answer": answer, "raw": raw}
         except openai.BadRequestError as e:
@@ -104,26 +110,29 @@ def ask_gpt_yes_no(client, item_id: str, prompt: str, image_b64: str, mime: str 
                 raise  # genuine bad request
         except openai.RateLimitError as e:
             m = re.search(r"Retry in (\d+)s", str(e))
-            wait = float(m.group(1)) + 2.0 if m else backoff
+            wait = float(m.group(1)) + random.uniform(1.0, 20.0) if m else backoff
             wait = min(wait, MAX_BACKOFF)
             time.sleep(wait)
             backoff = min(backoff * 2, MAX_BACKOFF)
-        except Exception:
+        except Exception as exc:
             if attempt == MAX_RETRIES - 1:
                 raise
-            time.sleep(backoff)
+            print(f"  WARN [{item_id} attempt {attempt+1}]: {type(exc).__name__}: {str(exc)[:120]}")
+            time.sleep(backoff + random.uniform(0, 5.0))
             backoff = min(backoff * 2, MAX_BACKOFF)
     raise RuntimeError(f"ask_gpt_yes_no: exhausted {MAX_RETRIES} retries for {item_id}")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Evaluate GenAI-Bench with GPT-5.5.")
+    parser = argparse.ArgumentParser(description="Evaluate GenAI-Bench with VQA judge.")
     parser.add_argument("--metadata", default="configs/benchmark_data/genai_bench.jsonl",
                         help="genai_bench.jsonl from prepare_bench_data.py")
     parser.add_argument("--image-map", required=True, help="image_map.json from build_bench_image_map.py")
     parser.add_argument("--model-key", required=True, choices=["showo", "ascr", "bagel"])
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--workers", type=int, default=30)
+    parser.add_argument("--model", default=DEFAULT_MODEL,
+                        help=f"Judge model to use via ofox.ai (default: {DEFAULT_MODEL})")
     args = parser.parse_args()
 
     api_key = os.environ.get("OFOX_API_KEY", "")
@@ -133,6 +142,7 @@ def main():
 
     from openai import OpenAI
     client = OpenAI(api_key=api_key, base_url=API_BASE)
+    print(f"[GenAI-Bench/{args.model_key}] Judge model: {args.model}")
 
     # Load metadata
     meta_lines = Path(args.metadata).read_text(encoding="utf-8").splitlines()
@@ -190,7 +200,7 @@ def main():
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
         def do_call(task):
             item_id, prompt, img_b64, mime, basic, adv = task
-            r = ask_gpt_yes_no(client, item_id, prompt, img_b64, mime)
+            r = ask_gpt_yes_no(client, item_id, prompt, img_b64, mime, model=args.model)
             r["basic_skills"] = basic
             r["advanced_skills"] = adv
             return r
