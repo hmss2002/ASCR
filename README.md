@@ -138,17 +138,23 @@ Cluster (HKU HPC): 19 nodes (SPGL-1-1–19), ~151 L40S GPUs total. QOS limits pe
 
 > ⚠️ **进行中 / In Progress — DPG / DSG / GenAI 补全重跑**
 >
-> 初次 GPT-5.5 评测因月度 $50 API 预算耗尽，约 67% 的问题返回空回复（被记为 "no"）。已切换至新账户（Gemini-3-flash-preview），正在并行重跑全部 9 个任务补全空缺。以下状态栏和分数基于已有有效回答（非空 raw）的部分数据，最终数字在重跑完成后更新。
+> **根本原因（已修复，两处）：**
+> 1. **API 预算耗尽**：初次 GPT-5.5 评测因月度 $50 API 预算耗尽，返回空内容（HTTP 200，空 content）。已切换至新账户与新 API key。
+> 2. **`max_tokens` 过小**：Gemini-3-flash-preview 是"思考型"模型（thinking model），内部推理约需 137 个 reasoning token，但评测脚本原设定 `max_tokens=8` 不够分配，导致返回值仍为空字符串。已修复为 `max_tokens=200`，并增加了空内容防御性重试（commit `7110148`）。所有包含空 raw 的 checkpoint 条目已被二次清理（合计清除 ~52,044 条空答案）。
 >
-> The initial GPT-5.5 evaluation hit a $50/month API spending limit, causing ~67% of questions to return empty responses (scored as "no"). A new API key with Gemini-3-flash-preview is now re-running all 9 tasks in parallel to fill in the missing answers. The status and scores below are based on valid (non-empty) answers only; final numbers will be updated once the re-run completes.
+> **Root causes (both fixed):**
+> 1. **Spending limit**: The initial GPT-5.5 run hit the $50/month API cap, returning empty content (HTTP 200, empty body). Switched to a new API key.
+> 2. **`max_tokens` too small**: `gemini-3-flash-preview` is a thinking model that internally uses ~137 reasoning tokens. The script had `max_tokens=8`, leaving zero tokens for the actual yes/no answer — still producing an empty response. Fixed to `max_tokens=200` with an empty-content retry guard (commit `7110148`). All empty-raw checkpoint entries have been purged (two rounds, ~52,044 entries total removed).
+>
+> All 9 parallel re-run processes are now producing correct non-empty answers at ~140 RPM combined. ETA: GenAI ~1 h, DSG ~6 h, DPG ~10 h (from the time of the last `max_tokens` fix). 所有 9 个并行进程现在均生成正确的非空答案（~140 RPM），预计 GenAI ~1 小时、DSG ~6 小时、DPG ~10 小时完成。
 >
 > | Benchmark | Prompts | 评测方式 / Method | 状态 / Status |
 > |---|---:|---|---|
 > | **Hard64** | 64 | GPT-5.5 pairwise A/B (3 pairs, debiased) | ✅ 完成 / Complete |
 > | **GenEval** | 553 | GPT-5.5 strict visual judge | ✅ 完成 / Complete (3 models) |
-> | **DPG-Bench** | 1065 | GPT-5.5 + Gemini VQA + dep graph | 🔄 重跑中 / Re-running (~94% coverage, ~9,633 q's remaining/model) |
-> | **DSG-1k** | 1060 | GPT-5.5 + Gemini VQA + dep graph | 🔄 重跑中 / Re-running (~79–86% coverage, ~6,000 q's remaining/model) |
-> | **GenAI-Bench** | 1600 | GPT-5.5 + Gemini binary VQA | 🔄 重跑中 / Re-running (~24–28% coverage, ~1,200 q's remaining/model) |
+> | **DPG-Bench** | 1065 | GPT-5.5 + Gemini VQA + dep graph | 🔄 重跑中 / Re-running (~36% q's done, ~9,200 q's remaining/model) |
+> | **DSG-1k** | 1060 | GPT-5.5 + Gemini VQA + dep graph | 🔄 重跑中 / Re-running (~29% q's done, ~5,800 q's remaining/model) |
+> | **GenAI-Bench** | 1600 | GPT-5.5 + Gemini binary VQA | 🔄 重跑中 / Re-running (~44% done, ~900 remaining/model) |
 
 ---
 
@@ -279,9 +285,9 @@ Cluster (HKU HPC): 19 nodes (SPGL-1-1–19), ~151 L40S GPUs total. QOS limits pe
 
 **DSG-1k 和 GenAI-Bench / DSG-1k and GenAI-Bench — 补全重跑进行中 / Re-run in progress:**
 
-> ~~月度 API 预算（$50）在 DPG-Bench 评测过程中耗尽（已用 $50.03），DSG-1k（1060 prompts，~8,182 题/模型）和 GenAI-Bench（1600 prompts）的 GPT-5.5 评测尚未开始。~~ 已切换至新账户（Gemini-3-flash-preview），正在并行补全所有空缺答案（50,268 题）。
+> 两个根本原因均已修复（详见上方 ⚠️ 说明）：(1) API 预算耗尽；(2) `max_tokens=8` 对"思考型"模型不足。所有 9 个并行进程（3 benchmark × 3 model）正以正确的 `max_tokens=200` 重跑，答案均为非空有效回答，约 140 RPM。
 >
-> ~~The monthly API budget ($50) was exhausted during DPG-Bench evaluation.~~ Switched to a new API account using Gemini-3-flash-preview; all 50,268 unanswered questions across 9 tasks are now being re-queried in parallel.
+> Both root causes fixed (see ⚠️ note above): (1) API spending limit; (2) `max_tokens=8` insufficient for the thinking model. All 9 parallel processes are now running with `max_tokens=200`, producing valid non-empty answers at ~140 RPM combined.
 
 ## Source Documents
 
