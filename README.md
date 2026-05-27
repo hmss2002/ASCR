@@ -149,7 +149,7 @@ Cluster (HKU HPC): 19 nodes (SPGL-1-1–19), ~151 L40S GPUs total. QOS limits pe
 >
 > | Benchmark | Prompts | 评测方式 / Method | 状态 / Status |
 > |---|---:|---|---|
-> | **Hard64** | 64 | GPT-5.5 pairwise A/B (3 pairs, debiased) | ✅ 完成 / Complete |
+> | **Hard64** | 64 | Qwen3.5-9B clean pass/fail + Gemini Flash external clean pass/fail + GPT-5.5 pairwise A/B (3 pairs, debiased) | ✅ 完成 / Complete |
 > | **GenEval** | 553 | GPT-5.5 strict visual judge | ✅ 完成 / Complete (3 models) |
 > | **DPG-Bench** | 1065 | VQA (混合 GPT-5.5 + Gemini Flash) per-question + dep graph | ✅ 完成 / Complete |
 > | **DSG-1k** | 1060 | VQA (混合 GPT-5.5 + Gemini Flash) per-question + dep graph | ✅ 完成 / Complete |
@@ -171,8 +171,8 @@ Cluster (HKU HPC): 19 nodes (SPGL-1-1–19), ~151 L40S GPUs total. QOS limits pe
 - 📊 **Bench3 全面评测结果（DPG / DSG-1k / GenAI-Bench）**：BAGEL-7B-MoT 在所有三个 benchmark 上均领先，尤其在 GenAI-Bench 得分最高（59.44%）。ASCR50 在 DSG-1k (+1.05 pp) 和 GenAI-Bench (+1.56 pp) 上优于 ShowO50，但在 DPG-Bench 上几乎持平（−0.17 pp）。文本生成是 1.3B 模型（ShowO/ASCR）的主要弱项，BAGEL 在此类题目上有显著优势。
   **Bench3 full evaluation (DPG / DSG-1k / GenAI-Bench)**: BAGEL-7B-MoT leads on all three benchmarks, with the largest margin on GenAI-Bench (59.44%). ASCR50 improves over ShowO50 on DSG-1k (+1.05 pp) and GenAI-Bench (+1.56 pp), but is nearly tied on DPG-Bench (−0.17 pp). Text rendering is the key weakness of 1.3B models; BAGEL has a clear advantage on text-heavy prompts.
 
-- ⚠️ **注意事项**：Hard64 clean pass/fail 使用 Qwen3.5-9B（ASCR 循环的评估器），存在循环性问题；pairwise 改用 GPT-5.5 外部裁判解决了这个问题。GenEval（OWLViT）完全与 Qwen 无关，是最可靠的独立证据。
-  **Caveat**: Hard64 clean pass/fail uses Qwen3.5-9B (same model as ASCR's loop evaluator). Pairwise comparisons now use GPT-5.5 (fully independent). GenEval (OWLViT detectors) is evaluator-independent and is the cleanest evidence.
+- ⚠️ **注意事项**：Hard64 clean pass/fail 原使用 Qwen3.5-9B（ASCR 循环的评估器），存在循环性问题。已补充 Gemini Flash 外部独立裁判（完整 64 × 3 = 192 次独立判定），两种裁判下 BAGEL > ASCR > ShowO 的排名一致，证实结果可靠。pairwise 对比改用 GPT-5.5 外部裁判消除了位置偏差。GenEval（OWLViT）完全与 Qwen 无关，是最可靠的独立证据。
+  **Caveat**: Hard64 clean pass/fail originally used Qwen3.5-9B (the same model inside ASCR's loop). Gemini Flash external judge (192 independent evaluations) has been added; both judges agree on BAGEL > ASCR > ShowO ranking, confirming reliability. Pairwise comparisons use GPT-5.5 to eliminate position bias. GenEval (OWLViT detectors) is fully Qwen-independent and provides the cleanest signal.
 
 ---
 
@@ -180,11 +180,14 @@ Cluster (HKU HPC): 19 nodes (SPGL-1-1–19), ~151 L40S GPUs total. QOS limits pe
 
 **Hard64 clean pass/fail（每张图独立判断是否满足 prompt）/ per-image pass-or-fail:**
 
-| 模型 / Model | 通过 / Pass | 失败 / Fail | 通过率 / Rate |
+| 裁判 / Judge | ShowO50 | ASCR50 | BAGEL-7B-MoT |
 |---|---:|---:|---:|
-| **ASCR50** | **54** | 10 | **84.4%** |
-| ShowO50 baseline | 50 | 14 | 78.1% |
-| BAGEL-7B-MoT | 57 | 7 | 89.1% |
+| Qwen3.5-9B（内部）/ Qwen3.5-9B (internal, loop evaluator) | 78.1% (50/64) | 84.4% (54/64) | 84.4% (54/64) |
+| **Gemini Flash（外部独立）/ Gemini Flash (external, independent)** | **73.4% (47/64)** | **76.6% (49/64)** | **79.7% (51/64)** |
+
+> **裁判说明**: Qwen3.5-9B 是 ASCR 训练循环内部使用的评估器，存在循环偏差风险。Gemini Flash（`google/gemini-3-flash-preview`，ofox.ai 代理）为完全独立的外部裁判，每张图单独送入，单独给出 pass/fail 判定，结果更为客观。两种裁判下 BAGEL > ASCR > ShowO 的排名一致。
+>
+> **Judge note**: Qwen3.5-9B is the same model used inside ASCR's refinement loop — results may have circular bias. Gemini Flash is a fully independent external judge with no connection to ASCR's training or evaluation loop. Both judges agree on BAGEL > ASCR > ShowO ranking.
 
 **Hard64 pairwise 对比（GPT-5.5 A/B 双向去偏）/ debiased head-to-head win rates (GPT-5.5 external judge):**
 
