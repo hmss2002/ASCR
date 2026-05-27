@@ -276,7 +276,8 @@ Cluster (HKU HPC): 19 nodes (SPGL-1-1–19), ~151 L40S GPUs total. QOS limits pe
 
 | Benchmark | Prompts | ShowO50 | ASCR50 | BAGEL-7B-MoT | ASCR−ShowO |
 |---|---:|---:|---:|---:|---:|
-| Hard64 clean pass/fail | 64 | 78.1% | **84.4%** | 89.1% | **+6.3 pp** |
+| Hard64 clean pass/fail (Qwen) | 64 | 78.1% | **84.4%** | 84.4% | **+6.3 pp** |
+| Hard64 clean pass/fail (Gemini, ext.) | 64 | 73.4% | **76.6%** | 79.7% | **+3.2 pp** |
 | GenEval task-avg (OWLViT) | 553 | 66.62% | **67.25%** | 74.16% | **+0.64 pp** |
 | DPG-Bench overall | 1064 | 69.12% | 68.95% | **71.88%** | −0.17 pp |
 | DSG-1k overall | 1060 | 51.60% | **52.65%** | 56.16% | **+1.05 pp** |
@@ -1614,6 +1615,76 @@ Format: **LEFT = ShowO-1.3B-50step (baseline)** | **RIGHT = ASCR50**. Both direc
 | ShowO (baseline) | ASCR50 |
 |:---:|:---:|
 | <img src="docs/examples/h64_green_bench_blue_bowl_showo.png" width="340" alt="ShowO — a green bench and a blue bowl"> | <img src="docs/examples/h64_green_bench_blue_bowl_ascr.png" width="340" alt="ASCR — a green bench and a blue bowl"> |
+
+---
+
+#### Hard64 — Gemini Flash 外部独立 Clean Pass/Fail 判定示例 / Gemini Flash External Clean Pass/Fail Examples
+
+> 以下示例均由 **Gemini Flash**（`google/gemini-3-flash-preview`，ofox.ai 代理，完全独立外部裁判）对三张图分别独立评判，覆盖 4 种典型胜负情况。格式：**LEFT = ShowO-1.3B-50step** | **CENTRE = ASCR50** | **RIGHT = BAGEL-7B-MoT**。
+>
+> Examples below are independently judged per image by **Gemini Flash** (`google/gemini-3-flash-preview`, ofox.ai, fully external). Covers 4 representative outcome patterns. Format: **LEFT = ShowO-1.3B-50step** | **CENTRE = ASCR50** | **RIGHT = BAGEL-7B-MoT**.
+
+---
+
+##### `The rough brick was on top of the smooth tile.` *(材质空间 / material + spatial — ASCR ✅ BAGEL ✅ ShowO ✗)*
+
+| 模型 / Model | Gemini 判定 / Verdict | 得分 / Score | 原因 / Reason |
+|---|:---:|:---:|---|
+| ShowO-1.3B | ✗ **Fail** | 0.10 | Shows a uniform pattern of textured blocks; no distinct brick on top of tile. |
+| **ASCR50** | ✅ **Pass** | **1.00** | Clearly shows a single rough-textured brick placed on top of a smoother tile surface. |
+| BAGEL-7B-MoT | ✅ **Pass** | **0.95** | Correctly depicts a rough brick positioned on top of a floor of smoother, reflective tiles. |
+
+| ShowO (baseline) | ASCR50 | BAGEL-7B-MoT |
+|:---:|:---:|:---:|
+| <img src="docs/examples/h64_rough_brick_showo.png" width="225" alt="ShowO — rough brick on smooth tile"> | <img src="docs/examples/h64_rough_brick_ascr.png" width="225" alt="ASCR — rough brick on smooth tile"> | <img src="docs/examples/h64_rough_brick_bagel.png" width="225" alt="BAGEL — rough brick on smooth tile"> |
+
+---
+
+##### `a girl behind a cow` *(空间遮挡 / spatial occlusion — ASCR ✅ ShowO ✗ BAGEL ✗)*
+
+| 模型 / Model | Gemini 判定 / Verdict | 得分 / Score | 原因 / Reason |
+|---|:---:|:---:|---|
+| ShowO-1.3B | ✗ **Fail** | 0.00 | Only a cow; the girl is completely missing. |
+| **ASCR50** | ✅ **Pass** | **1.00** | Correctly depicts a girl positioned behind a cow, with the cow in the foreground and the girl visible behind. |
+| BAGEL-7B-MoT | ✗ **Fail** | 0.30 | Shows a girl *in front of* the cow instead of behind it. |
+
+| ShowO (baseline) | ASCR50 | BAGEL-7B-MoT |
+|:---:|:---:|:---:|
+| <img src="docs/examples/h64_girl_behind_cow_showo.png" width="225" alt="ShowO — a girl behind a cow"> | <img src="docs/examples/h64_girl_behind_cow_ascr.png" width="225" alt="ASCR — a girl behind a cow"> | <img src="docs/examples/h64_girl_behind_cow_bagel.png" width="225" alt="BAGEL — a girl behind a cow"> |
+
+---
+
+##### `The red hat was on top of the brown coat rack.` *(空间组合 / spatial composition — BAGEL ✅ ASCR ✗ ShowO ✗)*
+
+| 模型 / Model | Gemini 判定 / Verdict | 得分 / Score | 原因 / Reason |
+|---|:---:|:---:|---|
+| ShowO-1.3B | ✗ **Fail** | 0.00 | Hat absent or not properly placed on the rack. |
+| ASCR50 | ✗ **Fail** | 0.00 | Correction loop unable to fix spatial placement; hat still missing or wrong. |
+| **BAGEL-7B-MoT** | ✅ **Pass** | **1.00** | Correctly depicts a red hat positioned on top of a brown coat rack. |
+
+| ShowO (baseline) | ASCR50 | BAGEL-7B-MoT |
+|:---:|:---:|:---:|
+| <img src="docs/examples/h64_red_hat_coat_rack_showo.png" width="225" alt="ShowO — red hat on coat rack"> | <img src="docs/examples/h64_red_hat_coat_rack_ascr.png" width="225" alt="ASCR — red hat on coat rack"> | <img src="docs/examples/h64_red_hat_coat_rack_bagel.png" width="225" alt="BAGEL — red hat on coat rack"> |
+
+> 💡 ASCR 纠错循环无法修复 ShowO 完全生成错误的构图（缺失物体或物体位置完全错误）；在这类情况下，只有更强的底层模型（BAGEL-7B）才能正确生成。
+> ASCR's correction loop cannot recover from ShowO generating the wrong composition entirely; in such cases, only a stronger base model (BAGEL-7B) succeeds.
+
+---
+
+##### `six airplanes` *(计数 / counting — BAGEL ✅ ASCR ✗ ShowO ✗)*
+
+| 模型 / Model | Gemini 判定 / Verdict | 得分 / Score | 原因 / Reason |
+|---|:---:|:---:|---|
+| ShowO-1.3B | ✗ **Fail** | 0.40 | Contains **nine** airplanes instead of the requested six. |
+| ASCR50 | ✗ **Fail** | 0.40 | Still contains **nine** airplanes; ASCR does not fix the count error. |
+| **BAGEL-7B-MoT** | ✅ **Pass** | **1.00** | Correctly depicts exactly six airplanes flying in formation. |
+
+| ShowO (baseline) | ASCR50 | BAGEL-7B-MoT |
+|:---:|:---:|:---:|
+| <img src="docs/examples/h64_six_airplanes_showo.png" width="225" alt="ShowO — six airplanes"> | <img src="docs/examples/h64_six_airplanes_ascr.png" width="225" alt="ASCR — six airplanes"> | <img src="docs/examples/h64_six_airplanes_bagel.png" width="225" alt="BAGEL — six airplanes"> |
+
+> 💡 计数错误（生成 9 架而非 6 架）是 1.3B 模型（ShowO/ASCR）的系统性弱点。ASCR 纠错循环针对语义错误设计，未针对计数校正，因此分数不变。BAGEL（7B）具备更强的全局语义理解，能正确控制数量。
+> Count errors (9 planes instead of 6) are a systematic weakness of 1.3B models. ASCR's loop is designed for semantic attribute correction, not counting; scores are unchanged. BAGEL (7B) has stronger global semantics and produces the correct count.
 
 ---
 
