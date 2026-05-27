@@ -89,10 +89,14 @@ def ask_gpt_yes_no(client, item_id: str, prompt: str, image_b64: str, mime: str 
                         {"type": "text", "text": question},
                     ],
                 }],
-                max_tokens=8,
+                max_tokens=200,  # thinking models need ~137 reasoning tokens before output
                 temperature=0.0,
             )
-            raw = response.choices[0].message.content.strip().lower()
+            raw = response.choices[0].message.content
+            if raw is None or raw.strip() == "":
+                # reasoning budget exhausted before producing output; treat as retryable
+                raise ValueError("empty response content from thinking model")
+            raw = raw.strip().lower()
             answer = "yes" if raw.startswith("yes") else "no"
             return {"item_id": item_id, "prompt": prompt, "answer": answer, "raw": raw}
         except openai.BadRequestError as e:
