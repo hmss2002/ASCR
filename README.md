@@ -152,9 +152,9 @@ Cluster (HKU HPC): 19 nodes (SPGL-1-1–19), ~151 L40S GPUs total. QOS limits pe
 > |---|---:|---|---|
 > | **Hard64** | 64 | GPT-5.5 pairwise A/B (3 pairs, debiased) | ✅ 完成 / Complete |
 > | **GenEval** | 553 | GPT-5.5 strict visual judge | ✅ 完成 / Complete (3 models) |
-> | **DPG-Bench** | 1065 | GPT-5.5 + Gemini VQA + dep graph | 🔄 重跑中 / Re-running (~36% q's done, ~9,200 q's remaining/model) |
-> | **DSG-1k** | 1060 | GPT-5.5 + Gemini VQA + dep graph | 🔄 重跑中 / Re-running (~29% q's done, ~5,800 q's remaining/model) |
-> | **GenAI-Bench** | 1600 | GPT-5.5 + Gemini binary VQA | 🔄 重跑中 / Re-running (~44% done, ~900 remaining/model) |
+> | **DPG-Bench** | 1065 | GPT-5.5 + Gemini VQA + dep graph | 🔄 重跑中 / Re-running (~44% q's done, ~8,100 q's remaining/model) |
+> | **DSG-1k** | 1060 | GPT-5.5 + Gemini VQA + dep graph | 🔄 重跑中 / Re-running (~43% q's done, ~4,700 q's remaining/model) |
+> | **GenAI-Bench** | 1600 | GPT-5.5 + Gemini binary VQA | ✅ 完成 / Complete (1594–1595/1595) |
 
 ---
 
@@ -267,23 +267,19 @@ Cluster (HKU HPC): 19 nodes (SPGL-1-1–19), ~151 L40S GPUs total. QOS limits pe
 
 ---
 
-**GenAI-Bench（当前有效结果 / Current valid-answer scores） — GPT-5.5 + Gemini binary VQA:**
+**GenAI-Bench（最终结果 / Final scores） — Gemini-3-flash-preview binary VQA (n=1594–1595):**
 
-> 🔄 **重跑中 / Re-running**: GenAI-Bench 当前有效覆盖约 24–28%（373–451/1595 items）；剩余约 1,144–1,237 题/模型正由 Gemini-3-flash-preview 补全。
->
-> GenAI-Bench currently has ~24–28% valid coverage; remaining ~1,144–1,237 questions/model being filled in by Gemini-3-flash-preview.
-
-| 模型 / Model | 有效回答数 / Valid answers | 准确率 / Accuracy |
+| 模型 / Model | 回答数 / Answered | 准确率 / Accuracy |
 |---|---:|---:|
-| ShowO50 | 381 | 57.2% |
-| ASCR50 | 451 | 52.1% |
-| BAGEL-7B-MoT | 397 | 62.2% |
+| ShowO50 | 1595 | **50.8%** |
+| ASCR50 | 1595 | **52.4%** |
+| BAGEL-7B-MoT | 1594 | **59.4%** |
 
-> GenAI-Bench 有效覆盖较低（~25%），当前分数受样本偏差影响较大，待补全后更新。
+> ✅ GenAI-Bench 已全部完成（1594–1595/1595 items per model）。ASCR50 在 GenAI-Bench 上超越 ShowO50 **+1.6 pp**（52.4% vs 50.8%）。BAGEL-7B-MoT 以 59.4% 领先，符合其 7B 模型规模优势。
 >
-> GenAI-Bench valid coverage is low (~25%); current scores are subject to sample bias and will be updated after re-run completes.
+> ✅ GenAI-Bench evaluation complete. ASCR50 outperforms ShowO50 by **+1.6 pp** (52.4% vs 50.8%). BAGEL-7B-MoT leads at 59.4%, consistent with its 5× larger model scale.
 
-**DSG-1k 和 GenAI-Bench / DSG-1k and GenAI-Bench — 补全重跑进行中 / Re-run in progress:**
+**DSG-1k 和 DPG-Bench / DSG-1k and DPG-Bench — 补全重跑进行中 / Re-run in progress:**
 
 > 两个根本原因均已修复（详见上方 ⚠️ 说明）：(1) API 预算耗尽；(2) `max_tokens=8` 对"思考型"模型不足。所有 9 个并行进程（3 benchmark × 3 model）正以正确的 `max_tokens=200` 重跑，答案均为非空有效回答，约 140 RPM。
 >
