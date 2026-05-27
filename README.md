@@ -92,7 +92,7 @@ Job inventory snapshot (2026-05-22):
 68946 bench3 GPT-5.5 eval pipeline (DPG+DSG+GenAI, CPU-only)    FAILED     exit 2: OFOX_API_KEY not set → superseded by 68949
 68949 bench3 GPT-5.5 eval pipeline (DPG+DSG+GenAI, CPU-only)    FAILED     OOM + compute nodes have no outbound internet; all GPT queries returned "Connection error"; all results 0.00%
 manual-loginnode  bench3 GPT-5.5 eval on login node hpcr4300a    STOPPED    DPG partial (showo 256/1065, ascr 243/1065, bagel 197/1065 items); DSG+GenAI not started. Halted by API monthly spending limit ($50.03/$50.00). Checkpoint saved → outputs/bench3_eval/dpg_*/checkpoint.jsonl
-manual-loginnode2 bench3 Gemini Flash eval on login node hpcr4300a COMPLETED  2026-05-27 resumed: DPG from checkpoint (~33%), DSG-1k + GenAI-Bench fresh start. Judge: mixed GPT-5.5 (early Qs) + google/gemini-3-flash-preview (remaining Qs). All 9 evals complete. Scores → DPG: ShowO 17.36%, ASCR 16.57%, BAGEL 17.62%; DSG-1k: ShowO 51.60%, ASCR 52.65%, BAGEL 56.16%; GenAI: ShowO 50.85%, ASCR 52.41%, BAGEL 59.44%.
+manual-loginnode2 bench3 Gemini Flash eval on login node hpcr4300a COMPLETED  2026-05-27 resumed: DPG from checkpoint (~33%), DSG-1k + GenAI-Bench fresh start. Judge: mixed GPT-5.5 (early Qs) + google/gemini-3-flash-preview (remaining Qs). All 9 evals complete. Scores → DPG: ShowO 69.12%, ASCR 68.95%, BAGEL 71.88%; DSG-1k: ShowO 51.60%, ASCR 52.65%, BAGEL 56.16%; GenAI: ShowO 50.85%, ASCR 52.41%, BAGEL 59.44%.
 ```
 
 Cluster (HKU HPC): 19 nodes (SPGL-1-1–19), ~151 L40S GPUs total. QOS limits per user: `gpu` partition = 28 GPUs / 8 running / 8 submitted (MaxNodes=UNLIMITED); `gpu_shared` = 28 GPUs / 8 running / 10 submitted (MaxNodes=1 per job). Total cross-partition cap: 56 GPUs. Job 68835 ran on `gpu_shared` partition and completed in 00:05:25.
@@ -168,6 +168,9 @@ Cluster (HKU HPC): 19 nodes (SPGL-1-1–19), ~151 L40S GPUs total. QOS limits pe
 - 🔵 **ASCR50 与 BAGEL-7B-MoT 在 Hard64 直接对比中几乎持平**：GPT-5.5 A/B 去偏评测（独立外部裁判，无位置偏差）显示 ASCR50 **51.7%** (15/29 决定性样本) vs BAGEL 48.3%。BAGEL 相对 ShowO 有 59.7% 的胜率，但面对 ASCR 时优势几乎消失，说明 ASCR 纠错循环弥补了大部分模型规模劣势。
   **ASCR50 edges out BAGEL-7B-MoT in direct GPT-5.5 head-to-head on Hard64**: ASCR 51.7% (15/29 decisive) vs BAGEL 48.3%. BAGEL leads ShowO by 59.7%, but the gap nearly disappears vs ASCR — the correction loop recovers most of the model-scale disadvantage.
 
+- 📊 **Bench3 全面评测结果（DPG / DSG-1k / GenAI-Bench）**：BAGEL-7B-MoT 在所有三个 benchmark 上均领先，尤其在 GenAI-Bench 得分最高（59.44%）。ASCR50 在 DSG-1k (+1.05 pp) 和 GenAI-Bench (+1.56 pp) 上优于 ShowO50，但在 DPG-Bench 上几乎持平（−0.17 pp）。文本生成是 1.3B 模型（ShowO/ASCR）的主要弱项，BAGEL 在此类题目上有显著优势。
+  **Bench3 full evaluation (DPG / DSG-1k / GenAI-Bench)**: BAGEL-7B-MoT leads on all three benchmarks, with the largest margin on GenAI-Bench (59.44%). ASCR50 improves over ShowO50 on DSG-1k (+1.05 pp) and GenAI-Bench (+1.56 pp), but is nearly tied on DPG-Bench (−0.17 pp). Text rendering is the key weakness of 1.3B models; BAGEL has a clear advantage on text-heavy prompts.
+
 - ⚠️ **注意事项**：Hard64 clean pass/fail 使用 Qwen3.5-9B（ASCR 循环的评估器），存在循环性问题；pairwise 改用 GPT-5.5 外部裁判解决了这个问题。GenEval（OWLViT）完全与 Qwen 无关，是最可靠的独立证据。
   **Caveat**: Hard64 clean pass/fail uses Qwen3.5-9B (same model as ASCR's loop evaluator). Pairwise comparisons now use GPT-5.5 (fully independent). GenEval (OWLViT detectors) is evaluator-independent and is the cleanest evidence.
 
@@ -237,14 +240,14 @@ Cluster (HKU HPC): 19 nodes (SPGL-1-1–19), ~151 L40S GPUs total. QOS limits pe
 
 | 分类 / Category | n (items) | ShowO50 | ASCR50 | BAGEL-7B-MoT | ASCR−ShowO |
 |---|---:|---:|---:|---:|---:|
-| entity | 968 | 16.06% | 15.22% | 16.32% | −0.84 |
-| global | 93 | 28.68% | 28.47% | 29.04% | −0.21 |
-| attribute | 3 | 38.64% | 31.82% | 34.09% | −6.82 |
-| **Overall** | **1064** | **17.36%** | **16.57%** | **17.62%** | **−0.79** |
+| entity | 968 | 69.74% | 69.51% | **72.54%** | −0.23 |
+| global | 93 | 63.13% | 63.56% | **65.84%** | **+0.43** |
+| attribute | 3 | **77.27%** | 75.00% | 70.45% | −2.27 |
+| **Overall** | **1064** | 69.12% | 68.95% | **71.88%** | −0.17 |
 
-> 注：DPG 整体得分偏低是因为依存图评测对每个子问题独立打分；`attribute` 分类仅 3 个样本，不具统计意义。
+> 注：`attribute` 分类仅 3 个样本，不具统计意义。BAGEL 在 entity/global 明显领先；ASCR 与 ShowO 在 DPG 上几乎持平（−0.17 pp）。
 >
-> Note: DPG scores appear low because the dependency-graph metric grades each sub-question independently. The `attribute` category (n=3) is not statistically meaningful.
+> Note: `attribute` (n=3) is not statistically meaningful. BAGEL leads clearly on entity/global; ASCR and ShowO are nearly tied on DPG (−0.17 pp).
 
 **DSG-1k — VQA (混合 GPT-5.5 + Gemini Flash) + scene graph:**
 
@@ -1688,6 +1691,136 @@ ASCR matches BAGEL's score on this complex compositional prompt (+25 pp over Sho
 | <img src="docs/examples/dpg_earth_showo.png" width="225" alt="ShowO — Earth with music notes"> | <img src="docs/examples/dpg_earth_ascr.png" width="225" alt="ASCR — Earth with music notes"> | <img src="docs/examples/dpg_earth_bagel.png" width="225" alt="BAGEL — Earth with music notes"> |
 
 ASCR **surpasses BAGEL** on this global-category prompt (+30 pp over ShowO, +10 pp over BAGEL).
+
+---
+
+#### DSG-1k — Scene-Graph VQA Score (per-item)
+
+Format: **LEFT = ShowO** | **CENTRE = ASCR50** | **RIGHT = BAGEL-7B-MoT**.  
+Score = fraction of scene-graph nodes answered "yes" (Gemini Flash judge).
+
+---
+
+##### `A rainbow colored pirate flag` — *ASCR wins decisively*
+
+> Scores: ShowO **0%** (0/2) · **ASCR 100%** (2/2) ↑↑ · BAGEL 50% (1/2)
+
+VQA nodes: *Is there a pirate flag?* · *Is it rainbow colored?* — ASCR answers both correctly; ShowO fails both.
+
+| ShowO (baseline) | ASCR50 | BAGEL-7B-MoT |
+|:---:|:---:|:---:|
+| <img src="docs/examples/dsg_pirate_flag_showo.png" width="225" alt="ShowO — rainbow pirate flag"> | <img src="docs/examples/dsg_pirate_flag_ascr.png" width="225" alt="ASCR — rainbow pirate flag"> | <img src="docs/examples/dsg_pirate_flag_bagel.png" width="225" alt="BAGEL — rainbow pirate flag"> |
+
+ASCR generates a clearly colorful pirate flag; ShowO generates a plain flag without rainbow coloring.
+
+---
+
+##### `The word 'exquisite' written in modern calligraphy.` — *BAGEL wins on text*
+
+> Scores: ShowO **0%** (0/3) · ASCR **0%** (0/3) · **BAGEL 67%** (2/3) ↑↑
+
+VQA nodes: *Is text present?* · *Does it say 'exquisite'?* · *Is it in calligraphy style?* — Only BAGEL handles text rendering.
+
+| ShowO (baseline) | ASCR50 | BAGEL-7B-MoT |
+|:---:|:---:|:---:|
+| <img src="docs/examples/dsg_calligraphy_word_showo.png" width="225" alt="ShowO — calligraphy word"> | <img src="docs/examples/dsg_calligraphy_word_ascr.png" width="225" alt="ASCR — calligraphy word"> | <img src="docs/examples/dsg_calligraphy_word_bagel.png" width="225" alt="BAGEL — calligraphy word"> |
+
+BAGEL correctly renders the word "exquisite" in a calligraphic style. Both ShowO and ASCR (1.3B models) cannot generate readable text.
+
+---
+
+##### `statue of liberty covered in graffiti, spray paint, 2d, matte, illustration` — *BAGEL leads multi-attribute*
+
+> Scores: ShowO **33%** (2/6) · ASCR **33%** (2/6) · **BAGEL 67%** (4/6) ↑↑
+
+| ShowO (baseline) | ASCR50 | BAGEL-7B-MoT |
+|:---:|:---:|:---:|
+| <img src="docs/examples/dsg_liberty_graffiti_showo.png" width="225" alt="ShowO — liberty graffiti"> | <img src="docs/examples/dsg_liberty_graffiti_ascr.png" width="225" alt="ASCR — liberty graffiti"> | <img src="docs/examples/dsg_liberty_graffiti_bagel.png" width="225" alt="BAGEL — liberty graffiti"> |
+
+BAGEL better handles the multi-attribute prompt (graffiti style + illustration + 2D appearance). ShowO and ASCR tie at 33% on this stylized prompt.
+
+---
+
+##### `beautiful isometric word 'DRAW' entirely made of pencils…` — *ASCR and BAGEL both improve over ShowO*
+
+> Scores: ShowO **0%** (0/12) · ASCR **42%** (5/12) · **BAGEL 58%** (7/12)
+
+| ShowO (baseline) | ASCR50 | BAGEL-7B-MoT |
+|:---:|:---:|:---:|
+| <img src="docs/examples/dsg_isometric_draw_showo.png" width="225" alt="ShowO — isometric DRAW"> | <img src="docs/examples/dsg_isometric_draw_ascr.png" width="225" alt="ASCR — isometric DRAW"> | <img src="docs/examples/dsg_isometric_draw_bagel.png" width="225" alt="BAGEL — isometric DRAW"> |
+
+ShowO completely fails this complex compositional prompt. ASCR captures the isometric style and pencils (+42 pp), while BAGEL also adds better text/composition (+58 pp).
+
+---
+
+#### GenAI-Bench — Binary VQA (Gemini Flash judge)
+
+Format: **LEFT = ShowO** | **CENTRE = ASCR50** | **RIGHT = BAGEL-7B-MoT**.  
+Score = "yes" (✅) or "no" (✗) per prompt.
+
+---
+
+##### `A bamboo cutting board with three slices of fresh bread on top.` — *ASCR wins, others fail counting*
+
+| Model | Verdict |
+|---|:---:|
+| ShowO-1.3B | ✗ No |
+| **ASCR50** | ✅ **Yes** |
+| BAGEL-7B-MoT | ✗ No |
+
+| ShowO (baseline) | ASCR50 | BAGEL-7B-MoT |
+|:---:|:---:|:---:|
+| <img src="docs/examples/genai_bread_cuttingboard_showo.png" width="225" alt="ShowO — bread cutting board"> | <img src="docs/examples/genai_bread_cuttingboard_ascr.png" width="225" alt="ASCR — bread cutting board"> | <img src="docs/examples/genai_bread_cuttingboard_bagel.png" width="225" alt="BAGEL — bread cutting board"> |
+
+*ASCR correctly generates a bamboo cutting board with exactly three bread slices. ShowO misses either the bamboo texture or the count; BAGEL also fails.*
+
+---
+
+##### `A boy and a dog standing in the desert.` — *ASCR + BAGEL beat ShowO*
+
+| Model | Verdict |
+|---|:---:|
+| ShowO-1.3B | ✗ No |
+| **ASCR50** | ✅ **Yes** |
+| **BAGEL-7B-MoT** | ✅ **Yes** |
+
+| ShowO (baseline) | ASCR50 | BAGEL-7B-MoT |
+|:---:|:---:|:---:|
+| <img src="docs/examples/genai_boy_dog_desert_showo.png" width="225" alt="ShowO — boy and dog desert"> | <img src="docs/examples/genai_boy_dog_desert_ascr.png" width="225" alt="ASCR — boy and dog desert"> | <img src="docs/examples/genai_boy_dog_desert_bagel.png" width="225" alt="BAGEL — boy and dog desert"> |
+
+*Both ASCR and BAGEL correctly depict a boy and dog together in a desert setting. ShowO fails (missing one subject or wrong scene).*
+
+---
+
+##### `A mural featuring the word 'Unity' in bold, colorful letters.` — *BAGEL wins text generation*
+
+| Model | Verdict |
+|---|:---:|
+| ShowO-1.3B | ✗ No |
+| ASCR50 | ✗ No |
+| **BAGEL-7B-MoT** | ✅ **Yes** |
+
+| ShowO (baseline) | ASCR50 | BAGEL-7B-MoT |
+|:---:|:---:|:---:|
+| <img src="docs/examples/genai_unity_mural_showo.png" width="225" alt="ShowO — Unity mural"> | <img src="docs/examples/genai_unity_mural_ascr.png" width="225" alt="ASCR — Unity mural"> | <img src="docs/examples/genai_unity_mural_bagel.png" width="225" alt="BAGEL — Unity mural"> |
+
+*BAGEL can render legible text ("Unity") in colorful bold letters. The 1.3B ShowO and ASCR models cannot reliably render specific words.*
+
+---
+
+##### `An e-reader displaying 'please' rests on a cozy armchair.` — *BAGEL wins text + scene*
+
+| Model | Verdict |
+|---|:---:|
+| ShowO-1.3B | ✗ No |
+| ASCR50 | ✗ No |
+| **BAGEL-7B-MoT** | ✅ **Yes** |
+
+| ShowO (baseline) | ASCR50 | BAGEL-7B-MoT |
+|:---:|:---:|:---:|
+| <img src="docs/examples/genai_ereader_please_showo.png" width="225" alt="ShowO — e-reader please"> | <img src="docs/examples/genai_ereader_please_ascr.png" width="225" alt="ASCR — e-reader please"> | <img src="docs/examples/genai_ereader_please_bagel.png" width="225" alt="BAGEL — e-reader please"> |
+
+*BAGEL correctly shows an e-reader device on an armchair with the word "please" visible on screen. ShowO and ASCR both generate scenes that miss either the text content or the e-reader device.*
 
 ---
 
