@@ -3,7 +3,60 @@
 ASCR is a research prototype for studying and correcting confidence-semantic inconsistency in masked image-token generation. The central observation is that an image region can become confidence-stable during iterative denoising while still being semantically wrong with respect to the text prompt. Stage 1 starts with a zero-training implementation that uses a visible 4x4 grid and structured local semantic feedback to selectively reopen image-token regions instead of retrying the whole image.
 
 This README is the project control document. It records the research plan, implementation plan, current progress, expected interfaces, cluster workflow, and GitHub synchronization policy. It should be updated whenever a meaningful implementation batch is completed.
- 
+
+<a id="toc"></a>
+## 目录 / Table of Contents
+
+- [跨模型同口径可比结果 / Cross-Model Comparable Results](#cross-model-results) ⭐ **先看这里 / start here**
+- [Stage 1 实验：直接 32×32 Token 重开 / Direct Token-Reopen Variant](#stage1-direct-variant)
+- [实验阶段日志（Phase 2–12 已完成）与下一步 / Experiment Phase Log & What Is Next](#phase-log)
+- [结果摘要：Show-o vs ASCR vs BAGEL 多 benchmark / Results Summary](#results-summary)
+- [迁移路线图 / Roadmap — 离散扩散模型候选](#roadmap)
+- [用法 / Usage](#usage)
+- [Research Thesis & Three-Stage Roadmap](#research-thesis)
+- [Evaluation Methodology](#evaluation-methodology)
+- [Repository Architecture](#repository-architecture)
+- [Stage 1 Implementation Plan](#implementation-plan)
+- [Quickstart](#quickstart)
+- [Qualitative Examples / 示例图片](#qualitative-examples)
+
+<a id="cross-model-results"></a>
+## 跨模型同口径可比结果 / Cross-Model Comparable Results (Same Clean Gemini Rubric · Hard64)
+
+> **一句话 / TL;DR**：在**同一个 clean Gemini-3-Flash 裁判**、各模型**各自默认高质量生成**、同一 **T2I-CompBench Hard64**（64 prompts）下，把同一套 ASCR Stage-1 流程（外部 **Qwen3.5-9B** 粗网格 selector：4×4 找错 → dilation → 投影回 token 网格重开）迁移到**三个离散扩散底模**上对比。**底模强弱排序：Lumina-DiMOO > Show-o > MMaDA-8B**；**ASCR + Qwen-9B 在任一底模上都不损害最终质量**，且**底模越强、ASCR 提升空间越小**。
+>
+> Under **one identical clean Gemini-3-Flash judge**, with **each model at its own default high-quality generation**, on the same **Hard64** set, the same ASCR Stage-1 pipeline (external **Qwen3.5-9B** coarse selector: 4×4 → dilation → project-to-token reopen) is ported onto **three discrete-diffusion base models**. Base ordering: **Lumina-DiMOO > Show-o > MMaDA-8B**; ASCR+Qwen-9B **never hurts** final quality on any base, and the **stronger the base, the smaller the ASCR headroom**.
+
+### 六臂同口径主表 / Six-arm same-rubric table
+
+| 底模 / Base model | 默认高质量生成 / Default HQ gen | baseline clean | **+ Qwen-9B coarse ASCR** clean | ASCR Δ | 去偏 pairwise（+ASCR vs 自身 baseline）|
+|---|---|---:|---:|---:|---|
+| **Lumina-DiMOO** (~8B, 统一离散扩散) | 1024², 64 步, cfg 4.0 | **82.8%** (53/64) | **84.4%** (54/64) | **+1.6pp** | 1 / 0 / 63（只赢不输）|
+| **Show-o** (~1.5B) | 512², 50 步, cfg 4.0 | 73.4% (47/64) | **78.1%** (50/64) | **+4.7pp** | 5 / 0 / 59（只赢不输）|
+| **MMaDA-8B** (HQ) | 512², 20 步, cfg 5.0 | 57.8% (37/64) | 56.2% (36/64) | −1.6pp\* | 3 / 0 / 61（只赢不输）|
+
+\* MMaDA 的 −1.6pp 仅是**单图裁判噪声**（差 1 张）；双向去偏 pairwise 显示 **3 胜 0 负**，即 ASCR 实际**从不回退**。
+The MMaDA −1.6pp is single-image judge noise (1 image); debiased pairwise is 3 wins / 0 losses (ASCR never regresses).
+
+### 跨模型双向去偏 pairwise / Cross-model debiased pairwise
+
+| 对比 / Comparison | A 胜 / loss / 平 | A 决定性胜率 / decisive |
+|---|---|---:|
+| Lumina baseline **vs** Show-o baseline | 21 / 4 / 39 | **84.0%** |
+| Show-o baseline **vs** MMaDA baseline | 26 / 5 / 33 | **83.9%** |
+| Lumina+Qwen **vs** Show-o+Qwen | 18 / 4 / 42 | **81.8%** |
+| Show-o+Qwen **vs** MMaDA+Qwen | 29 / 3 / 32 | **90.6%** |
+
+### 主要结论 / Key takeaways
+
+1. **同口径下底模排序明确 / Clear base ordering under one rubric**：Lumina-DiMOO (82.8/84.4%) > Show-o (73.4/78.1%) > MMaDA-8B (57.8/56.2%)；Lumina 对 Show-o、Show-o 对 MMaDA 都是 ~80–90% 决定性胜。
+2. **Show-o 的 73.4% 不是口径错觉 / Show-o's 73.4% is not a rubric artifact**：即便给 MMaDA-8B 它的高质量默认（20 步/cfg5）并配同一个外部 Qwen-9B selector，Show-o（1.5B）在 Hard64 组合性 prompt 上仍决定性强于 MMaDA-8B。
+3. **ASCR + Qwen-9B 从不回退 / ASCR never regresses**：三个底模的去偏 pairwise 均「只赢不输」（5/0/59、3/0/61、1/0/63）。
+4. **底模越强、提升空间越小 / Stronger base → smaller headroom**：Show-o +4.7pp → MMaDA 不回退 → Lumina +1.6pp（Lumina 近 SOTA，仅 9/64 触发修订，selector 几乎挑不出组合性错误）。
+
+> **范围说明 / Scope**：本区是**跨底模、同一 clean Gemini 口径**的 Hard64 研究（迁移 ASCR 到 Show-o / MMaDA-8B / Lumina-DiMOO）。它与下方 [结果摘要](#results-summary)（Show-o vs ASCR vs **BAGEL-7B** 的**多 benchmark** 研究）口径不同、**不可直接混用数字**。完整数据：`docs/fair_4way_hard64_results.json`（阶段 11）、`docs/lumina_qwen_coarse_hard64_results.json`（阶段 12）；实现与过程见下方[实验阶段日志](#phase-log)阶段 10–12。
+
+<a id="stage1-direct-variant"></a>
 ## Stage 1 实验：直接 32×32 Token 重开 (Direct Token-Reopen Variant)
 
 ### 准备做什么 / What We Are Doing
@@ -46,7 +99,11 @@ three-way against the coarse pipeline and the ShowO baseline on identical prompt
   全套 **61 个测试全部通过**；`run_stage1_direct --dry-run` 与 `compare_stage1_variants --help` 端到端冒烟通过
   （三路真实对比需 GPU 节点上的 ShowO + Qwen 模型，经 sbatch 运行）。
 
-### 即将完成什么 / What Is Next
+<a id="phase-log"></a>
+### 实验阶段日志（Phase 2–12，已完成）与下一步 / Experiment Phase Log (COMPLETE) & What Is Next
+
+> 说明 / Note：下列各阶段**均已完成**；每个阶段末尾的「即将完成什么」是**该阶段**当时的后续设想。项目当前整体的「下一步」见本节最后的[阶段十二](#phase-log)结尾与上方[跨模型可比结果](#cross-model-results)的结论。最新的同口径跨底模对比（阶段 11–12）汇总见[文首可比结果区](#cross-model-results)。
+
 
 **阶段二（已完成 / Phase 2 — COMPLETE）— Hard64 质量对比评测**
 
@@ -291,6 +348,7 @@ pairwise（无上限 direct vs coarse_b512，双向去偏）：**direct 胜 1 / 
 > 生成产物 `outputs/benchmarks_hard64_uncapped_direct_<stamp>/`，评判 `outputs/phase7_uncapped_judge_<stamp>/`；
 > Q1 隔离重判产物 `outputs/phase7_dilation_isolation_<stamp>/`（`clean_coarse_dil{0,1}.json` 均 47/64，baseline×3 = 47/64）。
 
+<a id="roadmap"></a>
 ### 迁移路线图 / Roadmap — 把 ASCR 迁到更新更大的离散扩散模型
 
 当前 baseline 是 **Show-o（~1.3–1.5B，MAGVIT-v2 离散 token，masked 并行解码）**。ASCR 的「重开特定 token → 重新 diffusion」
@@ -319,6 +377,7 @@ pairwise（无上限 direct vs coarse_b512，双向去偏）：**direct 胜 1 / 
 同样 masked 离散扩散**，把 `GeneratorAdapter` 换成 MMaDA 的生成 API 即可复用现有 ASCR 全部 token-reopen / mask-projection 基础设施，
 迁移成本最低且模型规模从 1.5B 提升到 8B。
 
+<a id="usage"></a>
 ### 用法 / Usage
 
 ```bash
@@ -490,7 +549,10 @@ Cluster (HKU HPC): 19 nodes (SPGL-1-1–19), ~151 L40S GPUs total. QOS limits pe
 
 
 
+<a id="results-summary"></a>
 ## 结果摘要 / Results Summary
+
+> **范围 / Scope**：本区是 **Show-o vs ASCR50 vs BAGEL-7B-MoT** 的**多 benchmark**研究（Hard64 / GenEval / DPG / DSG-1k / GenAI-Bench）。若要看**跨底模、同一 clean Gemini 口径**的 Hard64 对比（Lumina-DiMOO / Show-o / MMaDA-8B），见[文首跨模型可比结果区](#cross-model-results)。两区口径不同，数字不可直接混用。
 
 ### 三个模型是什么 / What Are the Three Models?
 
@@ -693,6 +755,7 @@ The documents define ASCR as a three-stage project:
 2. Stage 2: replace the coarse interface with a learned semantic reopening selector.
 3. Stage 3: show cross-model transfer across unified masked multimodal generators.
 
+<a id="research-thesis"></a>
 ## Research Thesis
 
 Masked image-token generators usually rely on token confidence to decide where uncertainty remains. This works for uncertainty, but not necessarily for semantic wrongness. ASCR targets a specific failure mode:
@@ -744,6 +807,7 @@ Stage 1 must leave these interfaces ready:
 - Model-specific config files without changing the ASCR loop.
 - Transfer benchmark runner that can evaluate the same prompt subsets across multiple generators.
 
+<a id="evaluation-methodology"></a>
 ## Evaluation Methodology
 
 ### Benchmark choice: GenEval vs T2I-CompBench hard64
@@ -907,6 +971,7 @@ The practical Stage 1 loop is:
 11. Log every intermediate artifact and decision.
 12. Stop when the evaluator returns no actionable semantic error, the iteration budget is exhausted, or fallback logic triggers abstention.
 
+<a id="repository-architecture"></a>
 ## Repository Architecture
 
 ### Directory Tree
@@ -1171,6 +1236,7 @@ outputs/<run-name>/
 <details>
 <summary><strong>Stage 1 Implementation Plan</strong> — development task tracking (S1.0–S1.10)</summary>
 
+<a id="implementation-plan"></a>
 ## Stage 1 Implementation Plan
 
 ### S1.0 Repository Bootstrap
@@ -1414,6 +1480,7 @@ Policy:
 - Do not commit secrets, local environment folders, model weights, checkpoints, generated outputs, or large datasets.
 - If GitHub authentication is missing on the server, stop at the authentication boundary and ask the user to complete authentication.
 
+<a id="quickstart"></a>
 ## Quickstart
 
 The canonical Stage 1 workflow uses the Qwen3.5-9B evaluator + ShowO generator on the
@@ -1482,6 +1549,7 @@ Previously open decisions and their resolutions:
 
 Keep Stage 1 simple enough to prove the mechanism, but structure it so Stage 2 and Stage 3 do not require rewriting the project. The grid and JSON interface are implementation devices for the first prototype, not the final scientific claim.
 
+<a id="qualitative-examples"></a>
 ## Qualitative Examples / 示例图片
 
 **如何阅读这些图片 / How to read the images:**

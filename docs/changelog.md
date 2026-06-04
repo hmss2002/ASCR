@@ -580,3 +580,19 @@ under the SAME clean Gemini rubric vs Show-o and MMaDA.
   (+1.6pp) but only 9/64 revised (near-SOTA baseline leaves little compositional headroom). Stronger
   base -> smaller ASCR headroom, but ASCR never hurts final quality. Results:
   docs/lumina_qwen_coarse_hard64_results.json.
+
+### Phase 13 — Consolidated cross-model comparable-results summary + README tidy
+
+Documentation-only, content-preserving (README 3308 -> 3376 lines, purely additive).
+
+- New top section "跨模型同口径可比结果 / Cross-Model Comparable Results (Same Clean Gemini Rubric ·
+  Hard64)": six-arm clean table (Lumina 82.8/84.4% > Show-o 73.4/78.1% > MMaDA 57.8/56.2%),
+  cross-model debiased pairwise (Lumina>Show-o 84.0/81.8%; Show-o>MMaDA 83.9/90.6% decisive), key
+  takeaways (base ordering, Show-o's 73.4% is not a rubric artifact, ASCR never regresses, stronger
+  base -> smaller headroom). Links to docs/fair_4way_hard64_results.json + lumina_qwen_coarse_hard64_results.json.
+- Added bilingual Table of Contents with 13 stable <a id> anchors; all TOC links resolve.
+- Fixed structural mislabel: heading "即将完成什么 / What Is Next" (which actually held the COMPLETE
+  Phase 2-12 logs) renamed to "实验阶段日志（Phase 2-12 已完成）与下一步 / Experiment Phase Log
+  (COMPLETE) & What Is Next" with a clarifying note. Cross-linked the older Show-o/ASCR/BAGEL
+  "结果摘要" to the new cross-base-model section (different rubric, not directly comparable).
+- No content removed; no code touched (96/96 tests unaffected).
