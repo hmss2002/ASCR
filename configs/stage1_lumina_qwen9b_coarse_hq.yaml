@@ -1,0 +1,53 @@
+stage: 1
+run_name: stage1_lumina_qwen9b_coarse_hq
+seed: 1234
+max_iterations: 3
+ascr_start_mode: baseline
+return_initial_on_max_error: true
+image_size: 1024
+coarse_grid_size: 4
+token_grid_size: 64
+dilation: 1
+output_dir: outputs/stage1_lumina_qwen9b_coarse_hq
+
+generator:
+  name: lumina
+  checkpoint_path: models/lumina-dimoo
+  repo_path: third_party/Lumina-DiMOO
+  device: cuda
+  guidance_scale: 4.0
+  generation_timesteps: 64
+  temperature: 1.0
+  seed: 1234
+
+evaluator:
+  name: qwen_vl
+  backend: qwen3_6
+  model_path: models/qwen3.5-9b
+  device: cuda
+  device_map: null
+  torch_dtype: bfloat16
+  processor_use_fast: false
+  trust_remote_code: true
+  local_files_only: true
+  strict_json: true
+  enable_thinking: true
+  max_new_tokens: 768
+  repair_max_new_tokens: 1024
+  max_selected_cells: 8
+  temperature: 0.0
+  top_p: 1.0
+  attn_implementation: null
+
+selector:
+  name: grid_semantic
+  coarse_grid_size: 4
+  token_grid_size: 64
+  dilation: 1
+  max_selected_cells: 8
+  min_confidence: 0.0
+
+tracing:
+  enabled: true
+  save_hidden_states: false
+  save_confidence_maps: true

@@ -106,3 +106,6 @@ data/benchmarks/processed/
 # Exception: pairwise example images committed to docs/ for README
 !docs/examples/
 !docs/examples/**
+third_party/
+.venv-*/
+.venv-lumina/
