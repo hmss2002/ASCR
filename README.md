@@ -48,7 +48,7 @@ three-way against the coarse pipeline and the ShowO baseline on identical prompt
 
 ### 即将完成什么 / What Is Next
 
-**阶段二（已实现工具链，待在集群上执行）/ Phase 2 — Hard64 质量对比评测**
+**阶段二（已完成 / Phase 2 — COMPLETE）— Hard64 质量对比评测**
 
 用外部、无偏的 **Gemini 3 Flash Preview**（经 ofox.ai 代理）在 **T2I-CompBench Hard64**（64 prompts）上
 对比 **direct-token** 与 **coarse（4×4 下采样）** 两种重开策略哪个图像质量更好。指标：① 每个 arm 的 Gemini
@@ -68,12 +68,21 @@ three-way against the coarse pipeline and the ShowO baseline on identical prompt
 `scripts/collect_variant_images.py`、`scripts/judge_variants_gemini.py`、`scripts/run_hard64_variant_gemini.sh`；
 `scripts/shard_prompts.py` 追加 `--global-workers/--global-offset` 做跨节点全局分片。
 
-**结果表**：通过率 / 去偏胜率将在集群跑完后回填（_pending cluster run_）。
+**结果（2026-06-04 已在集群跑完，Hard64 64 prompts，4 GPU/arm，Gemini 3 Flash 裁判）/ Results**
 
-| 评测 | baseline (ShowO) | coarse (4×4) | direct (token) |
+| 评测 / Metric | baseline (ShowO) | coarse (4×4) | direct (token) |
 | --- | --- | --- | --- |
-| Gemini clean 通过率 | _pending_ | _pending_ | _pending_ |
-| direct vs coarse 去偏胜率 | — | _pending_ | _pending_ |
+| Gemini clean 通过率 / pass-rate | 70.3% (45/64) | **75.0% (48/64)** | 67.2% (43/64) |
+| direct vs coarse 去偏 pairwise | — | 5 胜 / 59 平 | 0 胜（去偏决断胜率 0.0%） |
+
+**结论 / Conclusion**：在 Hard64 上，**4×4 下采样（coarse）显著优于直接 32×32 token 选择（direct）**。direct 的 clean
+通过率（67.2%）甚至略低于未修订的 baseline（70.3%），双向去偏 pairwise 中 direct 对 coarse **零决断胜场**（5 负 59 平）。
+这表明：**当前 Qwen 评估器尚不能可靠地直接判定 1024 个离散 token 中具体哪几个出错**——把判定下采样到 4×4 粗网格再上采样/dilation
+的既有做法，反而给评估器提供了更稳健、更易定位的信号。direct-token 路径作为对照实验已验证其当前不占优；后续若要让直选可用，
+需更强的 token 级定位能力（如更大评估模型、更细的 overlay 标注，或对 token 选择加轻度 dilation）。
+
+> 复现：生成产物在 `outputs/benchmarks_hard64_variant_{coarse,direct}_20260604_180356/`，评判结果在
+> `outputs/hard64_variant_judge_20260604_180356/`（`clean_*.json` + `pairwise_direct_vs_coarse.json`）。
 
 ### 用法 / Usage
 
