@@ -163,6 +163,36 @@ class MMaDANativeEngine:
                 next_tokens[index] = self.mask_token_id
         return next_tokens
 
+    def token_confidence(self, prompt, model_tokens):
+        """Score the model's confidence in each of its own image tokens.
+
+        Runs a single MMaDA forward pass over the *current* (fully known) image
+        tokens in the text-to-image layout and reads, for every one of the
+        ``num_vq_tokens`` image positions, the softmax probability the model
+        assigns to the token that is actually present. Lower probability means the
+        model is less confident that token is correct, i.e. a stronger candidate
+        to reopen. This lets MMaDA judge its own 1024 discrete tokens directly,
+        with no down-sampling and no external selector.
+
+        Returns a list of ``num_vq_tokens`` floats in ``[0, 1]`` (row-major).
+        """
+        self.load()
+        if model_tokens is None:
+            model_tokens = self.empty_model_tokens()
+        image_prompt_tokens = self._image_prompt_tokens(model_tokens)
+        input_ids, attention_mask = self.uni_prompting(([prompt], image_prompt_tokens), "t2i_gen")
+        offset = self.token_offset
+        num_vq = self.num_vq_tokens
+        with self.torch.no_grad():
+            attention_bias = (attention_mask[:, :, None] & attention_mask[:, None, :]).bool().unsqueeze(1)
+            logits = self.model(input_ids, attention_bias=attention_bias).logits
+            image_logits = logits[:, -(num_vq + 1):-1, offset:offset + self.codebook_size]
+            probs = image_logits.softmax(dim=-1)
+            present = self.torch.tensor(model_tokens, dtype=self.torch.long, device=probs.device).reshape(1, -1)
+            present = self.torch.clamp(present, min=0, max=self.codebook_size - 1)
+            gathered = self.torch.gather(probs, -1, present.unsqueeze(-1)).squeeze(-1)
+        return gathered.reshape(-1).detach().cpu().float().tolist()
+
     def answer_image(self, question, image_path, max_new_tokens=256):
         self.load()
         image_tokens = self.torch.tensor(self.encode_image(image_path), dtype=self.torch.long, device=self.device).reshape(1, -1)

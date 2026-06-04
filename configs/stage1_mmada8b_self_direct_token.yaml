@@ -34,6 +34,8 @@ evaluator:
   image_size: 512
   max_new_tokens: 256
   max_selected_cells: 64
+  confidence_fallback: true
+  confidence_fallback_cells: 64
 
 selector:
   name: direct_token

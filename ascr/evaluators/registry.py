@@ -35,6 +35,8 @@ def _build_mmada_self(config):
         image_size=int(config.get("image_size", evaluator_config.get("image_size", 512))),
         max_new_tokens=int(evaluator_config.get("max_new_tokens", 256)),
         max_selected_cells=int(evaluator_config.get("max_selected_cells", config.get("selector", {}).get("max_selected_cells", 64))),
+        confidence_fallback=bool(evaluator_config.get("confidence_fallback", True)),
+        confidence_fallback_cells=evaluator_config.get("confidence_fallback_cells", None),
     )
 
 

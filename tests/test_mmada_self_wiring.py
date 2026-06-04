@@ -47,6 +47,12 @@ class _FakeEngine:
     def encode_image(self, image_path):
         return list(range(self.num_vq_tokens))
 
+    def token_confidence(self, prompt, model_tokens):
+        confidences = [0.9] * self.num_vq_tokens
+        for i in range(5):
+            confidences[i] = 0.01 * (i + 1)
+        return confidences
+
     def force_mask(self, model_tokens, token_mask):
         next_tokens = list(model_tokens)
         for row, col in token_mask.selected_indices():
@@ -141,6 +147,30 @@ class MMaDASelfEvaluatorParsingTests(unittest.TestCase):
             result = evaluator.evaluate("a scene", str(image), 0)
         total = sum(len(region.cells) for region in result.regions)
         self.assertLessEqual(total, 2)
+
+    def test_confidence_fallback_when_localization_fails(self):
+        evaluator = MMaDASelfEvaluator(max_selected_cells=64, confidence_fallback=True, confidence_fallback_cells=5)
+        evaluator._engine = _FakeEngine(["No, the layout is wrong.", "1"])
+        with tempfile.TemporaryDirectory() as tmp:
+            from PIL import Image
+            Image.new("RGB", (64, 64), (0, 0, 0)).save(Path(tmp) / "decoded.ppm")
+            grid = Path(tmp) / "grid.ppm"
+            Image.new("RGB", (64, 64), (0, 0, 0)).save(grid)
+            result = evaluator.evaluate("a scene", str(grid), 0)
+        self.assertTrue(result.has_error)
+        cells = {(c.row, c.col) for region in result.regions for c in region.cells}
+        self.assertEqual(cells, {(0, 0), (0, 1), (0, 2), (0, 3), (0, 4)})
+
+    def test_confidence_fallback_disabled_abstains(self):
+        evaluator = MMaDASelfEvaluator(max_selected_cells=64, confidence_fallback=False)
+        evaluator._engine = _FakeEngine(["No, the layout is wrong.", "1"])
+        with tempfile.TemporaryDirectory() as tmp:
+            from PIL import Image
+            Image.new("RGB", (64, 64), (0, 0, 0)).save(Path(tmp) / "decoded.ppm")
+            grid = Path(tmp) / "grid.ppm"
+            Image.new("RGB", (64, 64), (0, 0, 0)).save(grid)
+            result = evaluator.evaluate("a scene", str(grid), 0)
+        self.assertFalse(result.has_error)
 
 
 class MMaDASelfLoopTests(unittest.TestCase):

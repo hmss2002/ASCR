@@ -69,7 +69,7 @@ class MMaDASelfEvaluator(SemanticEvaluator):
     model. A ``max_selected_cells`` cap is kept as a guardrail (see Phase-7 finding).
     """
 
-    def __init__(self, repo_path="external/MMaDA", checkpoint_path="models/mmada-8b-mixcot", vq_model_path="models/magvitv2", device="cuda", grid_size=32, image_size=512, max_new_tokens=256, max_selected_cells=64):
+    def __init__(self, repo_path="external/MMaDA", checkpoint_path="models/mmada-8b-mixcot", vq_model_path="models/magvitv2", device="cuda", grid_size=32, image_size=512, max_new_tokens=256, max_selected_cells=64, confidence_fallback=True, confidence_fallback_cells=None):
         self.repo_path = repo_path
         self.checkpoint_path = checkpoint_path
         self.vq_model_path = vq_model_path
@@ -78,6 +78,8 @@ class MMaDASelfEvaluator(SemanticEvaluator):
         self.image_size = int(image_size)
         self.max_new_tokens = int(max_new_tokens)
         self.max_selected_cells = int(max_selected_cells)
+        self.confidence_fallback = bool(confidence_fallback)
+        self.confidence_fallback_cells = int(confidence_fallback_cells) if confidence_fallback_cells is not None else int(max_selected_cells)
         self._engine = None
 
     def attach_engine(self, engine):
@@ -98,6 +100,48 @@ class MMaDASelfEvaluator(SemanticEvaluator):
                 token_grid_size=self.grid_size,
             )
         return self._engine
+
+    def _clean_image_for(self, grid_image_path):
+        """The non-overlaid decoded image that sits beside the grid overlay."""
+        path = Path(grid_image_path)
+        for name in ("decoded.ppm", "decoded.png"):
+            candidate = path.with_name(name)
+            if candidate.exists():
+                return str(candidate)
+        return str(grid_image_path)
+
+    def _confidence_fallback_cells(self, original_prompt, grid_image_path):
+        """Let MMaDA judge its own 1024 tokens directly via per-token confidence.
+
+        When the free-form ``R{row}C{col}`` localization fails to ground to the
+        token grid, fall back to the model's own confidence: re-encode the clean
+        decoded image to its discrete tokens, score every token with
+        :meth:`MMaDANativeEngine.token_confidence`, and reopen the lowest-confidence
+        cells (capped by ``confidence_fallback_cells``). No down-sampling, no
+        external selector: the same 8B model decides which of its own tokens are wrong.
+        """
+        if not self.confidence_fallback:
+            return []
+        engine = self._engine_instance()
+        score_fn = getattr(engine, "token_confidence", None)
+        encode_fn = getattr(engine, "encode_image", None)
+        if not callable(score_fn) or not callable(encode_fn):
+            return []
+        clean_path = self._clean_image_for(grid_image_path)
+        try:
+            tokens = encode_fn(clean_path)
+            confidences = score_fn(original_prompt, tokens)
+        except Exception:
+            return []
+        if not confidences:
+            return []
+        grid = self.grid_size
+        expected = grid * grid
+        if len(confidences) != expected:
+            return []
+        cap = max(1, min(self.confidence_fallback_cells, self.max_selected_cells, expected))
+        order = sorted(range(expected), key=lambda i: confidences[i])[:cap]
+        return [[idx // grid, idx % grid] for idx in order]
 
     def evaluate(self, original_prompt, grid_image_path, iteration, current_prompt=None):
         if not Path(grid_image_path).exists():
@@ -136,6 +180,11 @@ class MMaDASelfEvaluator(SemanticEvaluator):
             raw_cells = []
         if not raw_cells:
             raw_cells = _parse_cells_from_text(loc_text, self.grid_size, self.max_selected_cells)
+        if not raw_cells:
+            fallback = self._confidence_fallback_cells(original_prompt, grid_image_path)
+            if fallback:
+                raw_cells = fallback
+                loc_payload = {"source": "self_confidence_fallback", "cells": fallback}
         if not raw_cells:
             return SemanticEvaluation.abstain(
                 "MMaDA found a semantic issue but did not localize any token cells.",
