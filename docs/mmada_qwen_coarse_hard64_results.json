@@ -1,0 +1,31 @@
+{
+  "task": "Stage-1 original coarse ASCR (4x4 -> dilation -> 32x32 token reopen) with the base GENERATOR swapped Show-o -> MMaDA-8B, keeping the Qwen3.5-9B VLM as the selector (everything else unchanged)",
+  "benchmark": "T2I-CompBench Hard64 (64 prompts)",
+  "judge": "google/gemini-3-flash-preview (ofox.ai proxy)",
+  "clean_pass_criterion": "Single-image strict prompt-following judge returns {matches_prompt, score 0-1}; PASS when score >= 0.5 (objects, counts, colors, attributes, spatial relations, semantics).",
+  "architecture_note": "MMaDA (transformers 4.46) and Qwen3.5-9B (transformers 5.2.dev fork) are incompatible in one process (MMaDA remote code lacks all_tied_weights_keys under 5.2.dev). So each pair uses TWO GPUs: a resident MMaDA worker (.venv-mmada) + a resident Qwen eval server (.venv-qwen36) communicating over a file IPC dir (ascr/evaluators/remote_eval.py + scripts/qwen_eval_server.py). 4 nodes x 8 GPU = 16 pairs, models loaded once each.",
+  "generation": {
+    "generator": "MMaDA-8B-MixCoT (generation_timesteps=15, 512px)",
+    "selector": "Qwen3.5-9B VLM (max_new_tokens=768, repair 1024), coarse grid 4x4, dilation=1, max_selected_cells=8",
+    "max_iterations": 3,
+    "prompts": 64,
+    "revised_prompts": 27,
+    "stop_reasons": {"no_semantic_error": 48, "max_iterations": 16}
+  },
+  "clean_pass_rate": {
+    "mmada_baseline": {"pass": 33, "total": 64, "rate": 0.516},
+    "mmada_plus_qwen9b_coarse_phase10": {"pass": 37, "total": 64, "rate": 0.578},
+    "mmada_self_coarse_phase9": {"pass": 33, "total": 64, "rate": 0.516},
+    "mmada_self_direct_phase8": {"pass": 33, "total": 64, "rate": 0.516}
+  },
+  "pairwise_debiased": {
+    "mmada_plus_qwen9b_coarse_vs_baseline": {"revised_wins": 2, "baseline_wins": 0, "ties": 62, "decisive_win_rate": 1.0},
+    "mmada_self_coarse_vs_baseline_phase9": {"revised_wins": 0, "baseline_wins": 0, "ties": 64},
+    "mmada_self_direct_vs_baseline_phase8": {"revised_wins": 0, "baseline_wins": 0, "ties": 64}
+  },
+  "conclusion": "Swapping ONLY the generator (Show-o -> MMaDA-8B) while keeping the original Qwen-9B coarse ASCR selector gives a real, non-regressive gain: +6.2pp clean (33->37 / 51.6%->57.8%) and 2 wins / 0 losses / 62 ties vs baseline. This is markedly better than letting MMaDA judge itself (Phase 8 direct-self and Phase 9 coarse-self both stayed at 51.6% and 0/0/64 ties). I.e. the external Qwen-9B selector is what drives the ASCR improvement; the gain seen for Show-o ASCR transfers to MMaDA-8B with the selector unchanged.",
+  "caveats": [
+    "The MMaDA baseline (51.6%) is selector-INDEPENDENT (baseline = initial generation, no revision); the selector only affects the revised arm. So the earlier choice of MMaDA-self vs Qwen does not change the baseline.",
+    "This baseline uses generation_timesteps=15 at 512px for speed; the historical Show-o numbers used 50 steps and a different judge/prompt rubric, so 51.6% here is NOT directly comparable to those numbers. A strict Show-o-vs-MMaDA comparison would require re-judging Show-o under this identical clean Gemini judge."
+  ]
+}

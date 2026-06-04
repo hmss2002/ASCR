@@ -8,6 +8,47 @@ section.
 
 ---
 
+## 2026-06-04 Phase 10 — Swap only the generator (Show-o → MMaDA-8B), keep the Qwen3.5-9B selector
+
+Answers the user's hypothesis: run the *original* coarse ASCR pipeline (4×4 evaluate →
+dilation → 32×32 token reopen) but change ONLY the base generator from Show-o to
+**MMaDA-8B**, keeping the **Qwen3.5-9B** VLM as the selector (everything else, including the
+selector, unchanged). Fully additive.
+
+**Engineering blocker + solution:** MMaDA (transformers 4.46) and Qwen3.5-9B
+(transformers 5.2.dev fork) cannot live in one process — MMaDA's remote code fails on
+`all_tied_weights_keys` under 5.2.dev. Built a **two-process file-IPC pipeline**: each pair
+uses two GPUs — a resident MMaDA worker (`.venv-mmada`) + a resident Qwen eval server
+(`.venv-qwen36`) talking over a shared IPC dir. New files: `ascr/evaluators/remote_eval.py`
+(`RemoteFileEvaluator`), `scripts/qwen_eval_server.py`,
+`scripts/run_mmada_qwen_coarse_hard64.py`, `configs/stage1_mmada8b_qwen9b_coarse.yaml`,
+`jobs/stage1_mmada_qwen_coarse_hard64_8gpu.sbatch`, `tests/test_remote_eval_wiring.py`
+(6 tests). Whole suite **96/96 pass**.
+
+**Run:** 4 nodes × 8 GPU = 16 pairs (each model loaded once). Hard64: 64/64 generated,
+27 revised (Qwen judged 48/64 already correct — more decisive than self-eval).
+
+**Gemini 3 Flash (clean: score ≥ 0.5; pairwise: bidirectional debiased):**
+
+| metric | MMaDA baseline | **MMaDA + Qwen-9B coarse (P10)** | MMaDA self-coarse (P9) | MMaDA self-direct (P8) |
+| --- | --- | --- | --- | --- |
+| clean pass-rate | 33/64 = 51.6% | **37/64 = 57.8% (+6.2pp)** | 33/64 = 51.6% | 33/64 = 51.6% |
+| pairwise vs baseline (w/l/t) | — | **2 / 0 / 62** | 0 / 0 / 64 | 0 / 0 / 64 |
+
+**Conclusion:** keeping the external Qwen-9B selector (only swapping the generator) is what
+makes ASCR actually improve over baseline (+6.2pp, wins 2 / loses 0 vs baseline), whereas
+letting MMaDA judge itself (P8/P9) stayed flat at 51.6% / 0-0-64. The ASCR gain is driven by
+the Qwen-9B selector and transfers to MMaDA-8B unchanged — matching the user's intuition.
+
+**Clarifications:** (1) the clean pass criterion is a strict Gemini prompt-following judge
+returning `{matches_prompt, score}`, PASS at `score ≥ 0.5`. (2) The MMaDA baseline (51.6%) is
+**selector-independent** (baseline = initial generation, no revision), so changing the
+selector does not change it; the earlier Show-o "73.4%" used a *different* benchmark/judge
+rubric and is not comparable to this strict clean Hard64 judge; this baseline also runs only
+`generation_timesteps=15` for speed. Results: `docs/mmada_qwen_coarse_hard64_results.json`.
+
+---
+
 ## 2026-06-04 Phase 9 — MMaDA self-evaluation + the ORIGINAL ASCR coarse (4×4) selection strategy
 
 Additive Stage-1 task that again uses **MMaDA-8B as a "selector that calls itself"**, but —
