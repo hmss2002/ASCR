@@ -97,6 +97,34 @@ three-way against the coarse pipeline and the ShowO baseline on identical prompt
 > `outputs/hard64_variant_judge_20260604_180356/`（`clean_*.json` + `pairwise_direct_vs_coarse.json`）。
 > 核查脚本：审计上述 `trace.jsonl` 的 `evaluation.has_error` / `reopen_mask.selected_count` / `regions[].cells`。
 
+### 迁移路线图 / Roadmap — 把 ASCR 迁到更新更大的离散扩散模型
+
+当前 baseline 是 **Show-o（~1.3–1.5B，MAGVIT-v2 离散 token，masked 并行解码）**。ASCR 的「重开特定 token → 重新 diffusion」
+**只适用于「离散图像 token + masked/吸收态迭代并行解码（discrete masked diffusion）」**的模型，**不**适用于纯自回归 (AR) 逐 token
+预测、也不适用于连续扩散/flow-matching。基于此判据，对 2024–2026 的统一多模态/图像生成模型做了调研：
+
+**✅ 兼容且推荐（开源、>1.5B、离散 masked diffusion）/ Compatible & recommended**
+
+| 排名 | 模型 | 规模 | 图像 tokenizer | 码本 | 机制 | 与 ASCR 的契合度 |
+| ---: | --- | --- | --- | --- | --- | --- |
+| 1 | **MMaDA-8B** (arXiv 2505.15809, NeurIPS'25, Gen-Verse) | 8B | MAGVIT-v2(与 Show-o 同) | 8192 | 统一离散扩散(文+图) | ⭐⭐⭐ **近乎 drop-in**：同 tokenizer、同 32×32 grid，现有 token-reopen/mask 接口几乎零改动 |
+| 2 | **Lumina-DiMOO** (arXiv 2510.06308, 上海 AI Lab) | ~8B (LLaDA backbone) | aMUSEd-VQ | 8192 | 全离散 masked diffusion；支持图像编辑/任意分辨率 | ⭐⭐ 低成本：同码本/同 f=16；需处理 `<end-of-line>` 行边界 token |
+| 3 | **UniDisc** (arXiv 2503.20853, CMU) | 1.4B | 离散 VQ | — | 统一文+图 masked diffusion | ⭐⭐ 机制兼容但略低于 1.5B，适合做消融基线 |
+| 4 | **Meissonic** (arXiv 2410.08261, ICLR'25) | ~1B | MIM | ~8192 | 非自回归 masked 图像建模 | ⭐ 仅 T2I（无理解）、规模偏小，适合纯 T2I 基线 |
+
+> 另有两个**待核实**的候选：**Omni-Diffusion**（any-to-any 离散 masked diffusion，约 8B）与 **Lavida-O**（Elastic-MoT 统一
+> masked diffusion，高分辨率），机制相符但规模/权重开放情况需在迁移前进一步核实。
+
+**❌ 不兼容（纯自回归或连续扩散，ASCR 的重开-重扩散不直接适用）/ NOT compatible**
+
+- **连续扩散 / flow-matching**：Show-o2（flow matching + 3D causal VAE）、BAGEL-7B（rectified flow + 连续 VAE）、Transfusion、MAR（连续 masked-AR）。
+- **自回归逐 token（即便是离散 token）**：Emu3-8B、Chameleon-7B/34B、Janus / Janus-Pro-7B、LlamaGen、Liquid、VILA-U、Lumina-mGPT。
+- 说明：AR 模型一旦解码就固定顺序，无法像 masked diffusion 那样「重开任意子集 token 并并行重采样」，因此 ASCR 机制不直接迁移。
+
+**推荐下一步 / Recommended next target**：**MMaDA-8B**——它与 Show-o 用**同一个 MAGVIT-v2 tokenizer、同样 32×32=1024 离散 token、
+同样 masked 离散扩散**，把 `GeneratorAdapter` 换成 MMaDA 的生成 API 即可复用现有 ASCR 全部 token-reopen / mask-projection 基础设施，
+迁移成本最低且模型规模从 1.5B 提升到 8B。
+
 ### 用法 / Usage
 
 ```bash
