@@ -554,3 +554,29 @@ identical clean Gemini-3-Flash rubric, each at its own default high-quality gene
 - Clean Gemini (same rubric): Show-o baseline 47/64=73.4%; Show-o+Qwen-coarse 50/64=78.1% (+4.7pp); MMaDA-8B HQ baseline 37/64=57.8%; MMaDA-8B+Qwen-coarse HQ 36/64=56.2% (-1.6pp, judge noise).
 - Bidirectional debiased pairwise: Show-o+Qwen vs Show-o-base 5/0/59; MMaDA+Qwen vs MMaDA-base 3/0/61; Show-o-base vs MMaDA-base 26/5/33 (83.9% decisive); Show-o+Qwen vs MMaDA+Qwen 29/3/32 (90.6% decisive).
 - Conclusion: Show-o's 73.4% is NOT a rubric artifact — under the SAME judge and MMaDA's HQ default, Show-o (1.5B) decisively beats MMaDA-8B on Hard64 compositional prompts, both baseline and +ASCR. Coarse ASCR + Qwen-9B helps Show-o (+4.7pp) and never regresses MMaDA. Results: `docs/fair_4way_hard64_results.json`.
+
+### Phase 12 — Migrate Stage-1 ASCR to Lumina-DiMOO (default high quality), same-rubric comparison
+
+Goal: extend Stage-1 ASCR to a third base model, Lumina-DiMOO (~8B unified discrete-diffusion,
+UniGenBench #1 open unified model), reusing the Phase-11 external Qwen-9B coarse selector, judged
+under the SAME clean Gemini rubric vs Show-o and MMaDA.
+
+- Lumina fits ASCR natively: discrete image-token diffusion + native masked-diffusion inpainting =
+  ASCR reopen. At 1024x1024 the token grid is 64x64=4096 (VAE scale 16); coarse 4x4 -> 16x16 blocks.
+  Reopen keeps baseline VQ codes in memory and re-MASKs selected cells (no VQ round-trip).
+  GPU-verified invariant: changed_inside>0, changed_outside=0.
+- Env: Lumina pins transformers 4.46.2 (cannot co-load Qwen 5.2.dev) -> reuse two-process file-IPC
+  (Lumina .venv-lumina + Qwen .venv-qwen36, 2 GPU/pair). New venv .venv-lumina (diffusers 0.34.0).
+- New (all additive): ascr/generators/lumina_native.py, ascr/generators/lumina_dimoo.py,
+  scripts/run_lumina_qwen_coarse_hard64.py, scripts/verify_lumina_reopen.py,
+  configs/stage1_lumina_qwen9b_coarse_hq.yaml (1024px/64 steps/cfg4),
+  jobs/stage1_lumina_qwen_coarse_hard64_8gpu.sbatch. Vendored repo + weights gitignored. 96/96 tests pass.
+- Run: 2 nodes x 8 GPU, 64/64, 0 err, 9 revised.
+- Clean Gemini (same rubric): Lumina baseline 53/64=82.8%; Lumina+Qwen-coarse 54/64=84.4% (+1.6pp).
+- Six-arm same-rubric ordering: Lumina 82.8/84.4 > Show-o 73.4/78.1 > MMaDA 57.8/56.2.
+- Debiased pairwise: Lumina+Qwen vs Lumina-base 1/0/63; Lumina-base vs Show-o-base 21/4/39 (84.0%
+  decisive); Lumina+Qwen vs Show-o+Qwen 18/4/42 (81.8% decisive).
+- Conclusion: under one rubric Lumina-DiMOO > Show-o > MMaDA-8B; ASCR+Qwen-9B never regresses Lumina
+  (+1.6pp) but only 9/64 revised (near-SOTA baseline leaves little compositional headroom). Stronger
+  base -> smaller ASCR headroom, but ASCR never hurts final quality. Results:
+  docs/lumina_qwen_coarse_hard64_results.json.

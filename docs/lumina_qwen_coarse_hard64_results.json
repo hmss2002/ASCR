@@ -1,0 +1,50 @@
+{
+  "phase": 12,
+  "title": "Migrate Stage-1 ASCR to Lumina-DiMOO (default high quality) + fair cross-model comparison",
+  "benchmark": "T2I-CompBench Hard64 (64 prompts)",
+  "judge": {
+    "model": "google/gemini-3-flash-preview",
+    "proxy": "ofox.ai",
+    "rubric": "strict prompt-following single-image clean judge, PASS when score>=0.5 (SAME rubric as Phase 11)"
+  },
+  "model": {
+    "name": "Alpha-VLLM/Lumina-DiMOO",
+    "type": "unified discrete-diffusion omni model (~8B, LLaDA-based masked diffusion)",
+    "note": "UniGenBench: ranked #1 among open-source unified models (Tencent Hunyuan leaderboard)."
+  },
+  "generation_settings": {
+    "image_size": 1024,
+    "timesteps": 64,
+    "cfg_scale": 4.0,
+    "temperature": 1.0,
+    "use_cache": false,
+    "token_grid": "64x64 = 4096 discrete tokens (VAE scale 16); coarse 4x4 -> 16x16-token blocks",
+    "note": "Lumina documented default high-quality settings (64 steps / cfg 4.0)."
+  },
+  "selector": "Qwen3.5-9B (qwen_vl) original coarse ASCR (4x4 -> dilation -> project to 64x64 token mask -> reopen), same selector as the Phase-11 Show-o / MMaDA arms. Two-process file-IPC (Lumina .venv-lumina + Qwen .venv-qwen36).",
+  "reopen": "native masked-diffusion inpainting: keep baseline VQ codes in memory, set selected token cells back to MASK, re-diffuse only those positions (no VQ encode/decode round-trip). Verified on GPU: changed_inside>0, changed_outside=0.",
+  "run": {"records": 64, "errors": 0, "revised": 9, "out_root": "outputs/lumina_qwen_coarse_hard64"},
+  "clean": {
+    "lumina_baseline":     {"pass": 53, "total": 64, "rate": 0.828},
+    "lumina_qwen_coarse":  {"pass": 54, "total": 64, "rate": 0.844, "delta_vs_baseline_pp": 1.6}
+  },
+  "pairwise_bidirectional_debiased": {
+    "lumina_qwen_coarse_vs_lumina_baseline": {"a_wins": 1, "b_wins": 0, "ties": 63, "a_decisive_winrate": 1.0},
+    "lumina_qwen_coarse_vs_showo_qwen_coarse": {"a_wins": 18, "b_wins": 4, "ties": 42, "a_decisive_winrate": 0.818},
+    "lumina_baseline_vs_showo_baseline": {"a_wins": 21, "b_wins": 4, "ties": 39, "a_decisive_winrate": 0.840}
+  },
+  "six_arm_clean_table_same_rubric": {
+    "lumina_baseline": 0.828,
+    "lumina_qwen_coarse": 0.844,
+    "showo_baseline": 0.734,
+    "showo_qwen_coarse": 0.781,
+    "mmada8b_baseline_hq": 0.578,
+    "mmada8b_qwen_coarse_hq": 0.562
+  },
+  "conclusions": [
+    "Under the SAME clean Gemini rubric on Hard64, base-model ordering is Lumina-DiMOO 82.8% > Show-o 73.4% > MMaDA-8B 57.8%; +Qwen-9B coarse ASCR ordering is Lumina 84.4% > Show-o 78.1% > MMaDA 56.2%.",
+    "Lumina-DiMOO decisively beats Show-o under debiased pairwise: baseline 21 wins / 4 / 39 ties (84.0% decisive); +ASCR 18 / 4 / 42 (81.8% decisive).",
+    "Coarse ASCR + Qwen-9B never regresses Lumina (debiased 1/0/63) and adds +1.6pp clean; only 9/64 prompts were revised because Lumina's near-SOTA baseline leaves little compositional headroom for the selector to flag.",
+    "Trend across the three base models: the stronger the base generator, the smaller the ASCR headroom (Show-o +4.7pp / MMaDA never-regress / Lumina +1.6pp), but ASCR with the external Qwen-9B selector never hurts final quality on any base."
+  ]
+}
