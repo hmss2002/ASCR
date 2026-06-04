@@ -4,7 +4,107 @@ ASCR is a research prototype for studying and correcting confidence-semantic inc
 
 This README is the project control document. It records the research plan, implementation plan, current progress, expected interfaces, cluster workflow, and GitHub synchronization policy. It should be updated whenever a meaningful implementation batch is completed.
  
+## Stage 1 实验：直接 32×32 Token 重开 (Direct Token-Reopen Variant)
+
+### 准备做什么 / What We Are Doing
+
+现有 Stage 1 重开流程是**经过 4×4 粗网格中介**的：ShowO 先生成 32×32 个离散 image token，解码图被叠加一个
+**4×4 粗网格**（`coarse_grid_size: 4`），评估器（Qwen3.5-9B）只在 **16** 个粗格（`A1`..`D4`）里挑选哪些语义错误，
+然后 `GridSemanticReopeningSelector` → `project_cells_to_token_mask` 把每个 4×4 粗格**上采样**成 8×8 的 token 块
+（factor = 32/4 = 8）并做 **dilation**（`dilation: 1`），最后强制 mask 这些 token 再扩散。也就是说，selector 从未真正在
+token 粒度上决策——它在 4×4 抽象层决策，再机械地下采样评估 / 膨胀 / 上采样回 32×32。
+
+**我们从未测试过 selector 是否有能力直接判断 1024 个 (32×32) 离散 image token 里具体哪几个错了。** 本实验新增一个
+**并行的对比流程**——"direct token reopen"——它**不**做 4×4 粗网格下采样、不 dilation、不上采样/projection，而是让评估器用
+数字坐标 `R{row}C{col}`（行/列 0–31）**直接**挑选哪些 32×32 的离散 image token 错了，并**恰好**重开这些 token 再扩散。
+该流程与现有粗网格流程、ShowO baseline 三路同 prompt/seed 并跑，以直接比较两种重开策略。
+
+The existing Stage 1 loop reopens tokens via a **4×4 coarse-grid abstraction** that is mechanically
+upsampled (×8) and dilated back to the 32×32 token grid, so the selector never decides at token
+granularity. This experiment adds a **parallel** "direct token reopen" variant that skips the coarse
+grid / dilation / upsampling entirely and asks the evaluator to directly pick which of the 32×32
+discrete image tokens are wrong (numeric `R{row}C{col}`, 0–31) and reopens exactly those — runnable
+three-way against the coarse pipeline and the ShowO baseline on identical prompts/seeds.
+
+### 已经做了什么 / What Has Been Done (additive, existing code untouched)
+
+- `DirectTokenReopeningSelector`（追加到 `ascr/revision/selector.py`）：把评估单元当作 token 坐标 1:1 映射成
+  `TokenReopenMask`，无 projection；`dilation` 默认 0（纯直选），并支持 `select_grid_size` 中间粒度（例如 16）。
+- `create_token_grid_overlay`（追加到 `ascr/grids/overlay.py`）：在 token 分辨率上绘制参考网格 + 数字行列刻度，
+  帮助 VLM 定位 32×32 cell；原 `create_grid_overlay` 不变。
+- `QwenVLTokenEvaluator`（新 `ascr/evaluators/qwen_vl_token.py`）：子类化 `QwenVLEvaluator`，只重写问题构造，使用
+  `R{row}C{col}`（0–31）坐标方案与更大的 cell 预算；解析在 `grid_size=token_grid_size`（32）下进行。基类未改动。
+- `DirectTokenReopenLoop`（新 `ascr/core/loop_direct.py`）：镜像 `ASCRLoop` 但渲染 token overlay 并在产物里打上
+  `stage1_variant: direct_token`；原 `ASCRLoop` 保持逐字节不变。
+- Registry/config：`ascr/evaluators/registry.py` 新增 `qwen_vl_token` 名称（纯追加）；新增配置
+  `configs/stage1_showo_qwen35_9b_direct_token.yaml`（`selector.name: direct_token`、`evaluator.name: qwen_vl_token`、
+  `token_grid_size: 32`、`select_grid_size: 32`、`dilation: 0`、`max_selected_cells: 64`）。
+- CLI：`ascr/cli/run_stage1_direct.py`（单 prompt 直选流程）与 `ascr/cli/compare_stage1_variants.py`
+  （每个 prompt 跑 ShowO baseline + 粗网格 ASCR + direct-token ASCR，输出三路对比 suite/markdown）。
+- 测试：`tests/test_direct_token_selector.py`、`test_token_grid_overlay.py`、`test_qwen_vl_token_question.py`、
+  `test_loop_direct.py`（全部 mock，无需加载模型）。在 `.venv`（含 numpy/PIL）下 `python -m unittest discover -s tests`
+  全套 **61 个测试全部通过**；`run_stage1_direct --dry-run` 与 `compare_stage1_variants --help` 端到端冒烟通过
+  （三路真实对比需 GPU 节点上的 ShowO + Qwen 模型，经 sbatch 运行）。
+
+### 即将完成什么 / What Is Next
+
+**阶段二（已实现工具链，待在集群上执行）/ Phase 2 — Hard64 质量对比评测**
+
+用外部、无偏的 **Gemini 3 Flash Preview**（经 ofox.ai 代理）在 **T2I-CompBench Hard64**（64 prompts）上
+对比 **direct-token** 与 **coarse（4×4 下采样）** 两种重开策略哪个图像质量更好。指标：① 每个 arm 的 Gemini
+单图 clean 通过率；② direct vs coarse 的**双向去偏 pairwise 胜率**（A/B 交换两遍消除位置偏置）。
+
+关键约束与设计：
+- **每卡只加载一次模型**：沿用 `*_sharded_reuse` 模式，每 GPU = 一个常驻 worker，加载 ShowO + **单个** Qwen
+  （按 arm 选 grid-4 或 grid-32），之后循环处理 prompts。**绝不在同一卡上同时加载两个 Qwen**（避免 OOM）。
+  新增的 `compare_stage1_variants --arms {coarse|direct}` 保证单次 pass 只加载所选 arm 的 Qwen。
+- **生成 / 评判分离**：计算节点无外网 → 生成（GPU/sbatch）跑在计算节点；Gemini 评判**只能在 login 节点**跑。
+- **多节点并行**：默认 2 arm × 3 节点 × 8 = 48 GPU（≤56 卡、≤8 作业上限），全局分片覆盖 64 prompts 各一次。
+- **密钥安全**：`OFOX_API_KEY` **只经环境变量**注入，**绝不写入任何文件或提交**。
+
+新增脚本（全部附加，不动既有 ASCR 核心 / all additive）：
+`scripts/run_stage1_variant_compare.sh`、`scripts/run_hard64_variant_sharded_reuse.sh`、
+`jobs/stage1_hard64_variant_gen_8gpu.sbatch`、`scripts/submit_hard64_variant_compare.sh`、
+`scripts/collect_variant_images.py`、`scripts/judge_variants_gemini.py`、`scripts/run_hard64_variant_gemini.sh`；
+`scripts/shard_prompts.py` 追加 `--global-workers/--global-offset` 做跨节点全局分片。
+
+**结果表**：通过率 / 去偏胜率将在集群跑完后回填（_pending cluster run_）。
+
+| 评测 | baseline (ShowO) | coarse (4×4) | direct (token) |
+| --- | --- | --- | --- |
+| Gemini clean 通过率 | _pending_ | _pending_ | _pending_ |
+| direct vs coarse 去偏胜率 | — | _pending_ | _pending_ |
+
+### 用法 / Usage
+
+```bash
+# 单 prompt 直选流程（dry-run 用 mock，无需模型）
+python -m ascr.cli.run_stage1_direct --config configs/stage1_showo_qwen35_9b_direct_token.yaml \
+  --prompt "A red cube left of a blue sphere"
+
+# 三路对比：ShowO baseline vs 粗网格 ASCR vs direct-token ASCR
+python -m ascr.cli.compare_stage1_variants \
+  --config configs/stage1_showo_qwen35_9b_direct_token.yaml \
+  --coarse-config configs/stage1_showo_qwen35_9b_fullcap_parallel.yaml \
+  --prompts-file data/hard64.txt --reuse-models
+
+# 单 arm（只加载该 arm 的 Qwen，避免一张卡两个 Qwen）
+python -m ascr.cli.compare_stage1_variants --arms direct --reuse-models \
+  --config configs/stage1_showo_qwen35_9b_direct_token.yaml
+
+# 阶段二 Hard64 对比评测：
+# 1) 计算节点生成（默认 coarse+direct 各 3 节点 = 48 GPU；DRY_RUN=1 仅打印）
+DRY_RUN=1 NODES_PER_ARM=3 bash scripts/submit_hard64_variant_compare.sh
+# 2) login 节点用 Gemini 评判（仅经环境变量传 key）
+export OFOX_API_KEY=sk-...   # 切勿提交；建议轮换已暴露的 key
+DIRECT_RUN_ROOT=outputs/benchmarks_hard64_variant_direct_<stamp> \
+COARSE_RUN_ROOT=outputs/benchmarks_hard64_variant_coarse_<stamp> \
+  bash scripts/run_hard64_variant_gemini.sh
+```
+
+
 ## Stage 1 Status Log (2026-05-22, fair-comparison rerun complete)
+
 
 **Three bugs discovered and fixed:**
 

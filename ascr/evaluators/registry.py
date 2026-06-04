@@ -3,11 +3,13 @@ import os
 from ascr.evaluators.mock import MockSemanticEvaluator
 from ascr.evaluators.local_vlm import LocalVLMEvaluator
 from ascr.evaluators.qwen_vl import QwenVLEvaluator
+from ascr.evaluators.qwen_vl_token import QwenVLTokenEvaluator
 from ascr.evaluators.showo_mmu import ShowOMMUEvaluator
 
 
 SHOWO_BACKENDS = {"showo_mmu", "showo-mmu", "showo_vlm", "showo-vlm"}
 QWEN_BACKENDS = {"qwen", "qwen_vl", "qwen-vl", "qwen3_6", "qwen3.6", "qwen36", "qwen3_6_vl", "qwen3.6-vl"}
+QWEN_TOKEN_BACKENDS = {"qwen_vl_token", "qwen-vl-token", "qwen_token", "qwen-token", "qwen3_6_token", "qwen36_token"}
 
 
 def _as_bool(value, default=False):
@@ -58,6 +60,31 @@ def _build_qwen_vl(config):
     )
 
 
+def _build_qwen_vl_token(config):
+    evaluator_config = config.get("evaluator", config)
+    select_grid_size = int(evaluator_config.get("select_grid_size", config.get("select_grid_size", config.get("token_grid_size", 32))))
+    return QwenVLTokenEvaluator(
+        select_grid_size=select_grid_size,
+        model_path=os.environ.get("QWEN_MODEL_PATH", evaluator_config.get("model_path", "models/qwen3.5-9b")),
+        device=evaluator_config.get("device", "cuda"),
+        device_map=evaluator_config.get("device_map", "auto"),
+        torch_dtype=evaluator_config.get("torch_dtype", "bfloat16"),
+        trust_remote_code=_as_bool(evaluator_config.get("trust_remote_code", True), True),
+        local_files_only=_as_bool(os.environ.get("QWEN_LOCAL_FILES_ONLY", evaluator_config.get("local_files_only", False)), False),
+        strict_json=_as_bool(evaluator_config.get("strict_json", True), True),
+        image_size=int(config.get("image_size", evaluator_config.get("image_size", 512))),
+        max_new_tokens=int(evaluator_config.get("max_new_tokens", 768)),
+        repair_max_new_tokens=evaluator_config.get("repair_max_new_tokens"),
+        max_selected_cells=int(evaluator_config.get("max_selected_cells", config.get("selector", {}).get("max_selected_cells", 64))),
+        temperature=float(evaluator_config.get("temperature", 0.0)),
+        top_p=float(evaluator_config.get("top_p", 1.0)),
+        attn_implementation=evaluator_config.get("attn_implementation"),
+        processor_use_fast=_as_bool(evaluator_config.get("processor_use_fast", False), False),
+        enable_thinking=_as_bool(evaluator_config.get("enable_thinking", True), True),
+        max_memory=os.environ.get("QWEN_MAX_MEMORY", evaluator_config.get("max_memory")),
+    )
+
+
 def build_evaluator(name, config):
     name = (name or "mock").lower()
     config = config or {}
@@ -65,6 +92,8 @@ def build_evaluator(name, config):
         return MockSemanticEvaluator()
     if name in SHOWO_BACKENDS:
         return _build_showo_mmu(config)
+    if name in QWEN_TOKEN_BACKENDS:
+        return _build_qwen_vl_token(config)
     if name in QWEN_BACKENDS:
         return _build_qwen_vl(config)
     if name in {"local_vlm", "local-vlm"}:
@@ -72,6 +101,8 @@ def build_evaluator(name, config):
         backend = str(evaluator_config.get("backend", "heuristic")).lower()
         if backend in SHOWO_BACKENDS:
             return _build_showo_mmu(config)
+        if backend in QWEN_TOKEN_BACKENDS:
+            return _build_qwen_vl_token(config)
         if backend in QWEN_BACKENDS:
             return _build_qwen_vl(config)
         return LocalVLMEvaluator(
