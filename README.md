@@ -59,6 +59,10 @@ three-way against the coarse pipeline and the ShowO baseline on identical prompt
 `B∈{64,256,512}`、两边 dilation=0** 后重跑 Hard64，发现公平之后 direct 与 coarse **几乎无差距**（均落在 baseline ±1.6%、
 pairwise 61–64/64 平局），且**加大上限并不能显著提升质量**——瓶颈在「选得准」而非「选得多」。详见下文「预算对齐的上限扫描」小节。
 
+**阶段七（已完成 / Phase 7 — COMPLETE）— 两个追问：coarse 是否退化 & direct 是否需要上限**：
+① 经字节级 md5 与单会话隔离重判证实，coarse 准确度的变化纯属 **Gemini 裁判非确定性**（baseline 图逐字节一致、dilation 翻转 0 判定），coarse≈baseline（净 0），并非算法退化；
+② 把 direct 上限放开到 1024（无上限）重跑 Hard64，得 **70.3% < baseline 73.4%**——无上限会退化为近乎整图重生成（决定重开时中位数 400 / 均值 543 token），**比什么都不做还差且极慢**，证明**上限是必要护栏、瓶颈仍是「选得准」**。详见下文「两个追问」小节。
+
 关键约束与设计：
 - **每卡只加载一次模型**：沿用 `*_sharded_reuse` 模式，每 GPU = 一个常驻 worker，加载 ShowO + **单个** Qwen
   （按 arm 选 grid-4 或 grid-32），之后循环处理 prompts。**绝不在同一卡上同时加载两个 Qwen**（避免 OOM）。
@@ -142,6 +146,46 @@ direct `max_selected_cells=B`，coarse `max_selected_cells=B/64`（=1/4/8 个粗
 > 评判在 `outputs/hard64_capsweep_judge_b{64,256,512}_<stamp>/`。
 > 配置：`configs/stage1_showo_qwen35_9b_{direct_token,coarse}_b{64,256,512}.yaml`；
 > 提交脚本：`scripts/submit_hard64_capsweep.sh`（`BUDGETS`/`ARMS`/`GPUS_PER_RUN` 可调）。
+
+### 两个追问 / Two follow-up questions（2026-06-04，Phase 7）
+
+回答用户两个问题：① 改完之后的 coarse「相比什么都不做的 baseline」准确度怎么没上一次高了？是我动了 coarse 算法，还是只是随机波动？② direct 到底要不要给「最多改几个 token」的上限——它想改几个改几个不就好了吗？
+
+#### Q1：coarse 准确度变化 = 裁判随机性，不是算法退化
+
+- **我确实改了 coarse，但只改了一个无关紧要的参数**：相比上一轮 `fullcap_parallel`，预算对齐版 `coarse_b512` **只把 `dilation` 从 1 改成 0**（为与 direct 的 dilation=0 公平对齐），`max_selected_cells=8` 两轮完全一致。
+- **干净隔离实验（无 GPU，单次 Gemini 评判会话内重判）**：同一会话里重判 baseline×3、coarse@dilation=1（Phase-3 旧图）、coarse@dilation=0（Phase-6 b512 图）。结果**全部 = 47/64 (73.44%)**。
+  - dilation=1 vs dilation=0：**改变了 10 张图的像素字节，却翻转了 0 个 pass/fail 判定** → dilation 对 Hard64 通过率**无实质影响**。
+  - coarse vs baseline 的逐图翻转：**修好 4 张 / 弄坏 4 张 / 净 0**（两种 dilation 下都一样）→ coarse 在 Hard64 clean 通过率上**对 baseline 没有可测量的净增益**。
+- **baseline 的通过率为何会变（70.3%→73–75%）**：把 Phase-3 与 Phase-6 两轮的 64 张 baseline 图做 **md5 校验，逐字节完全一致** → baseline 生成毫无变化；通过率差异**100% 来自 Gemini 裁判的非确定性**（同一批图重判得到 45/47/47/48 不等，约 ±1–2 张）。
+- **结论**：我没有让 coarse 退化；上一次「coarse 75 vs baseline 70」的领先是一次**有利的裁判抽样**。把裁判噪声去掉后，**coarse ≈ baseline**（净 0）。这与上一节「公平对齐后差距消失、瓶颈在选得准而非选得多」完全一致。
+
+#### Q2：direct 需要上限吗？——需要，不设上限反而**比什么都不做还差**
+
+「想改几个改几个」我们直接做了实验：把 direct 的 `max_selected_cells` 放到 **1024（=全 32×32 网格，等价无上限）**，`dilation=0`，`max_new_tokens=8192`，在 Hard64 上重新生成 64 张后用 Gemini 评判。
+
+| 配置 | clean 通过率 | vs baseline |
+| --- | --- | --- |
+| baseline（什么都不做） | **73.4% (47/64)** | — |
+| direct **无上限**（max=1024） | **70.3% (45/64)** | **↓ 比 baseline 还低 2 张** |
+
+pairwise（无上限 direct vs coarse_b512，双向去偏）：**direct 胜 1 / coarse 胜 3 / 平 60** → 无上限 direct 略逊。
+
+**为什么会更差——评估器一旦「决定动手」就大面积重开**：统计无上限运行里每次迭代的实际重开规模：
+
+- 全部迭代中 **46% 判为「无需修改」（重开 0 个 token，直接收敛）**；
+- 但**只要决定重开，规模中位数就高达 400 个 token、均值 543、上四分位直接顶到 1024**（即整张图全部 1024 个 token）。
+
+也就是说，「让它自由选」会**退化成近乎整图重生成**：评估器缺乏 token 级精确定位能力时，倾向于「大片标红」，重开如此大面积反而**破坏了原图已经正确的语义/构图连贯性**，于是质量掉到 baseline 之下，而且**极慢**（重开 ~400–1024 token 的扩散迭代远比重开几十个慢）。
+
+**结论 / Conclusion**：
+1. **上限是必要的护栏**，不是可有可无的限制。去掉上限后 direct 退化为「整图重画」，质量 70.3% < baseline 73.4%，且速度极慢。它**不会**「想改几个改几个」地保持克制——反而会大面积乱标。
+2. 这再次印证全篇结论：**真正的瓶颈是「选得准」（精确定位哪几个 token 错了），而不是「能选多少」**。无上限只是把「选得多而散」推到极致，于是更差。
+3. 合理的上限既保护输出 JSON 长度、又强制 ASCR 的「选择性小步修复」本质；提升方向是更强的定位信号（更大评估模型 / 更细 overlay / 置信度加权），而非放大或取消 `max_selected_cells`。
+
+> 复现：无上限配置 `configs/stage1_showo_qwen35_9b_direct_token_uncapped.yaml`（`max_selected_cells=1024`、`dilation=0`、`max_new_tokens=8192`）；
+> 生成产物 `outputs/benchmarks_hard64_uncapped_direct_<stamp>/`，评判 `outputs/phase7_uncapped_judge_<stamp>/`；
+> Q1 隔离重判产物 `outputs/phase7_dilation_isolation_<stamp>/`（`clean_coarse_dil{0,1}.json` 均 47/64，baseline×3 = 47/64）。
 
 ### 迁移路线图 / Roadmap — 把 ASCR 迁到更新更大的离散扩散模型
 
