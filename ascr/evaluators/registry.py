@@ -11,6 +11,7 @@ SHOWO_BACKENDS = {"showo_mmu", "showo-mmu", "showo_vlm", "showo-vlm"}
 QWEN_BACKENDS = {"qwen", "qwen_vl", "qwen-vl", "qwen3_6", "qwen3.6", "qwen36", "qwen3_6_vl", "qwen3.6-vl"}
 QWEN_TOKEN_BACKENDS = {"qwen_vl_token", "qwen-vl-token", "qwen_token", "qwen-token", "qwen3_6_token", "qwen36_token"}
 MMADA_SELF_BACKENDS = {"mmada_self", "mmada-self", "mmada", "mmada_mmu", "mmada-mmu"}
+MMADA_SELF_COARSE_BACKENDS = {"mmada_self_coarse", "mmada-self-coarse", "mmada_coarse", "mmada-coarse"}
 
 
 def _as_bool(value, default=False):
@@ -35,6 +36,27 @@ def _build_mmada_self(config):
         image_size=int(config.get("image_size", evaluator_config.get("image_size", 512))),
         max_new_tokens=int(evaluator_config.get("max_new_tokens", 256)),
         max_selected_cells=int(evaluator_config.get("max_selected_cells", config.get("selector", {}).get("max_selected_cells", 64))),
+        confidence_fallback=bool(evaluator_config.get("confidence_fallback", True)),
+        confidence_fallback_cells=evaluator_config.get("confidence_fallback_cells", None),
+    )
+
+
+def _build_mmada_self_coarse(config):
+    from ascr.evaluators.mmada_self_coarse import MMaDASelfCoarseEvaluator
+    evaluator_config = config.get("evaluator", config)
+    generator_config = config.get("generator", {})
+    grid_size = int(config.get("coarse_grid_size", evaluator_config.get("grid_size", 4)))
+    token_grid_size = int(config.get("token_grid_size", evaluator_config.get("token_grid_size", 32)))
+    return MMaDASelfCoarseEvaluator(
+        repo_path=evaluator_config.get("repo_path", generator_config.get("repo_path", "external/MMaDA")),
+        checkpoint_path=evaluator_config.get("checkpoint_path", generator_config.get("checkpoint_path", "models/mmada-8b-mixcot")),
+        vq_model_path=evaluator_config.get("vq_model_path", generator_config.get("vq_model_path", "models/magvitv2")),
+        device=evaluator_config.get("device", generator_config.get("device", "cuda")),
+        grid_size=grid_size,
+        token_grid_size=token_grid_size,
+        image_size=int(config.get("image_size", evaluator_config.get("image_size", 512))),
+        max_new_tokens=int(evaluator_config.get("max_new_tokens", 48)),
+        max_selected_cells=int(evaluator_config.get("max_selected_cells", config.get("selector", {}).get("max_selected_cells", 6))),
         confidence_fallback=bool(evaluator_config.get("confidence_fallback", True)),
         confidence_fallback_cells=evaluator_config.get("confidence_fallback_cells", None),
     )
@@ -112,6 +134,8 @@ def build_evaluator(name, config):
         return MockSemanticEvaluator()
     if name in SHOWO_BACKENDS:
         return _build_showo_mmu(config)
+    if name in MMADA_SELF_COARSE_BACKENDS:
+        return _build_mmada_self_coarse(config)
     if name in MMADA_SELF_BACKENDS:
         return _build_mmada_self(config)
     if name in QWEN_TOKEN_BACKENDS:

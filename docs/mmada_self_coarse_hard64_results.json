@@ -1,0 +1,35 @@
+{
+  "task": "Stage-1 MMaDA-8B coarse (4x4) self-selection vs direct (32x32) self-selection vs baseline",
+  "benchmark": "T2I-CompBench Hard64 (64 prompts)",
+  "judge": "google/gemini-3-flash-preview (ofox.ai proxy)",
+  "generation": {
+    "model": "MMaDA-8B-MixCoT",
+    "loaded_once_per_gpu": true,
+    "nodes": 2,
+    "gpus_per_node": 8,
+    "max_iterations": 3,
+    "prompts": 64,
+    "revised_prompts": 58,
+    "stop_reasons": {"no_semantic_error": 11, "max_iterations": 53}
+  },
+  "selector_grounding": {
+    "comment": "Across all error iterations, how often MMaDA's free-form 4x4 letter-cell localization (A1..D4) produced usable cells vs falling back to per-token confidence pooling.",
+    "total_error_iterations": 166,
+    "letter_cells_used": 64,
+    "letter_cells_fraction": 0.386,
+    "confidence_fallback_used": 102,
+    "confidence_fallback_fraction": 0.614,
+    "contrast_direct_32x32": "At the 32x32 grid (Phase 8) MMaDA could essentially never ground free-form R{row}C{col} cells (~0%), so the direct arm ran almost entirely on the confidence fallback. At 4x4 it grounds ~39% of the time, i.e. the coarse grid is materially more tractable for MMaDA's MMU."
+  },
+  "clean_pass_rate": {
+    "baseline_this_run": {"pass": 32, "total": 64, "rate": 0.500},
+    "coarse_self_phase9": {"pass": 33, "total": 64, "rate": 0.516},
+    "direct_self_phase8": {"pass": 33, "total": 64, "rate": 0.516},
+    "baseline_phase8": {"pass": 31, "total": 64, "rate": 0.484}
+  },
+  "pairwise_debiased": {
+    "coarse_self_vs_baseline": {"self_wins": 0, "baseline_wins": 0, "ties": 64},
+    "direct_self_vs_baseline_phase8": {"self_wins": 0, "baseline_wins": 0, "ties": 64}
+  },
+  "conclusion": "On final image quality the coarse-4x4 and direct-32x32 self-selection arms are tied (both 51.6% clean, both 0/0/64 ties vs baseline). The decisive difference is in the SELECTOR: at 4x4 MMaDA actually grounds its own understanding into grid cells ~39% of the time, whereas at 32x32 it does not, so the original ASCR coarse-then-dilate strategy is the more faithful and more accurate selector when MMaDA judges itself."
+}

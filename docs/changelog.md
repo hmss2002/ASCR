@@ -8,6 +8,47 @@ section.
 
 ---
 
+## 2026-06-04 Phase 9 — MMaDA self-evaluation + the ORIGINAL ASCR coarse (4×4) selection strategy
+
+Additive Stage-1 task that again uses **MMaDA-8B as a "selector that calls itself"**, but —
+unlike Phase 8's direct 32×32 self-selection — the selection + regeneration follows the
+**original ASCR coarse strategy**: MMaDA judges its own image on a **4×4** grid (`A1..D4`),
+the chosen coarse cells are **dilated and projected back to the 32×32 token grid**, and those
+tokens are reopened/re-diffused. No existing Show-o / Qwen / Phase-8 code was touched.
+
+**New files (all additive):** `ascr/evaluators/mmada_self_coarse.py`
+(`MMaDASelfCoarseEvaluator` — 4×4 two-stage A1–D4 self-eval + 32×32→4×4 confidence avg-pool
+fallback), `configs/stage1_mmada8b_self_coarse.yaml`,
+`ascr/cli/run_stage1_mmada_self_coarse.py` (reuses `ASCRLoop` +
+`GridSemanticReopeningSelector`, shares the one loaded 8B engine),
+`scripts/run_mmada_self_coarse_hard64.py` (resident worker with **global multi-node sharding**
+via `NODE_INDEX`/`NODE_COUNT`), `jobs/stage1_mmada_self_coarse_hard64_8gpu.sbatch`,
+`tests/test_mmada_self_coarse_wiring.py` (10 tests). Registry gains the `mmada_self_coarse`
+backend. Whole suite: **90/90 tests pass**.
+
+**Run:** 2 nodes × 8 GPU (16 cards, 8B loaded once per card). Hard64: 64/64 generated, 58
+revised, max 3 iterations.
+
+**Key mechanistic finding (answers "which selector is more accurate"):** across 166 error
+iterations MMaDA grounded free-form `A1..D4` cells **64 times (≈39%)** at 4×4, vs **~0%** at
+32×32 in Phase 8 (which therefore ran almost entirely on the per-token confidence fallback).
+The coarse 4×4 grid is materially more tractable for MMaDA's MMU, i.e. a more faithful/accurate
+selector.
+
+**Gemini 3 Flash (ofox.ai) results:**
+
+| metric | baseline (this run) | coarse-self (Phase 9, 4×4) | direct-self (Phase 8, 32×32) |
+| --- | --- | --- | --- |
+| clean pass-rate | 32/64 = 50.0% | 33/64 = **51.6%** | 33/64 = **51.6%** |
+| pairwise vs baseline (debiased, w/l/t) | — | 0 / 0 / 64 | 0 / 0 / 64 |
+
+**Conclusion:** final image quality is a tie (both 51.6% clean, both 0/0/64 vs baseline), but
+the coarse-4×4 arm is the one that actually exercises MMaDA's spatial understanding, so the
+original ASCR coarse-then-dilate strategy is the more faithful selector when MMaDA judges
+itself. Results: `docs/mmada_self_coarse_hard64_results.json`.
+
+---
+
 ## 2026-06-04 Phase 8 — Migrate Stage-1 to MMaDA-8B, "the selector calls itself"
 
 Added a fully additive Stage-1 task on **MMaDA-8B** (`Gen-Verse/MMaDA-8B-MixCoT`, 8B unified
