@@ -81,8 +81,21 @@ three-way against the coarse pipeline and the ShowO baseline on identical prompt
 的既有做法，反而给评估器提供了更稳健、更易定位的信号。direct-token 路径作为对照实验已验证其当前不占优；后续若要让直选可用，
 需更强的 token 级定位能力（如更大评估模型、更细的 overlay 标注，或对 token 选择加轻度 dilation）。
 
+**运作正确性核查 / Direct-mode sanity check**：对 64 条 direct 轨迹（`trace.jsonl`）逐一审计，确认 direct 路径
+**机制上完全正常工作**，并非空跑：
+
+- **12/64** 个 prompt 触发了至少一次「发现错误 → 选 token → 重开 → 重新 diffusion」；这 12 个的最终图与 baseline
+  **逐字节不同**（md5 全部改变），证明 token 级重开确实重跑了扩散、改写了图像。
+- 评估器选择的坐标**布满 0–31 的整行整列**（行、列都用满 0…31），即确实在 **32×32=1024** 个离散 token 上做 token 级定位，
+  **没有退化成 4×4**。
+- **问题在于"选得太多/太散"**：选中 token 数分布为 `{64:9, 52:1, 49:1, 36:1, 35:1, 32:2, 25:1, 24:1, 20:2, 8:1}`——
+  **9/12 直接顶满 64 的预算上限**。评估器无法精确锁定少数错误 token，而是大面积、零散地标记；重开这些零散 token 后
+  扩散难以连贯修复语义，于是质量不升反降。相比之下 coarse 重开的是**连续的 8×8 token 块**，给扩散一个完整区域去修，
+  反而更有效。
+
 > 复现：生成产物在 `outputs/benchmarks_hard64_variant_{coarse,direct}_20260604_180356/`，评判结果在
 > `outputs/hard64_variant_judge_20260604_180356/`（`clean_*.json` + `pairwise_direct_vs_coarse.json`）。
+> 核查脚本：审计上述 `trace.jsonl` 的 `evaluation.has_error` / `reopen_mask.selected_count` / `regions[].cells`。
 
 ### 用法 / Usage
 
