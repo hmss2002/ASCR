@@ -1,0 +1,19 @@
+{
+  "task": "MMaDA-8B self-selection Stage-1 (Hard64, Gemini-3-Flash-Preview judge)",
+  "model": "Gen-Verse/MMaDA-8B-MixCoT",
+  "benchmark": "T2I-CompBench Hard64 (64 prompts)",
+  "baseline_clean_pass": 31,
+  "baseline_pass_rate": 48.44,
+  "self_clean_pass": 33,
+  "self_pass_rate": 51.56,
+  "pairwise": {
+    "direct_wins": 0,
+    "coarse_wins": 0,
+    "ties": 64,
+    "direct_win_rate_decisive": null,
+    "direct_win_rate_all": 0.0
+  },
+  "prompts_revised": 63,
+  "prompts_total": 64,
+  "localization": "free-form R{row}C{col} self-localization fails to ground to 32x32; 63/64 used self-confidence token fallback (max 64 cells/iter)"
+}
