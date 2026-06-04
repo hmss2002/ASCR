@@ -22,6 +22,7 @@ site/
 .deps/
 .venv/
 venv/
+.venv-mmada/
 env/
 ENV/
 .conda/
