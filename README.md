@@ -54,6 +54,11 @@ three-way against the coarse pipeline and the ShowO baseline on identical prompt
 对比 **direct-token** 与 **coarse（4×4 下采样）** 两种重开策略哪个图像质量更好。指标：① 每个 arm 的 Gemini
 单图 clean 通过率；② direct vs coarse 的**双向去偏 pairwise 胜率**（A/B 交换两遍消除位置偏置）。
 
+**阶段六（已完成 / Phase 6 — COMPLETE）— 预算对齐的上限扫描**：解释了「64 上限」来自 `max_selected_cells`，
+并修正了上一轮 direct/coarse **重开预算不公平**（单位不同：coarse 1 格=64 token）的问题。在**对齐可重开 token 数
+`B∈{64,256,512}`、两边 dilation=0** 后重跑 Hard64，发现公平之后 direct 与 coarse **几乎无差距**（均落在 baseline ±1.6%、
+pairwise 61–64/64 平局），且**加大上限并不能显著提升质量**——瓶颈在「选得准」而非「选得多」。详见下文「预算对齐的上限扫描」小节。
+
 关键约束与设计：
 - **每卡只加载一次模型**：沿用 `*_sharded_reuse` 模式，每 GPU = 一个常驻 worker，加载 ShowO + **单个** Qwen
   （按 arm 选 grid-4 或 grid-32），之后循环处理 prompts。**绝不在同一卡上同时加载两个 Qwen**（避免 OOM）。
@@ -96,6 +101,47 @@ three-way against the coarse pipeline and the ShowO baseline on identical prompt
 > 复现：生成产物在 `outputs/benchmarks_hard64_variant_{coarse,direct}_20260604_180356/`，评判结果在
 > `outputs/hard64_variant_judge_20260604_180356/`（`clean_*.json` + `pairwise_direct_vs_coarse.json`）。
 > 核查脚本：审计上述 `trace.jsonl` 的 `evaluation.has_error` / `reopen_mask.selected_count` / `regions[].cells`。
+
+### 预算对齐的上限扫描 / Budget-matched cap sweep（公平性修正）
+
+**「64」这个上限是谁决定的？/ Where does the cap come from**：它就是配置里的 `max_selected_cells`，在两处生效——
+① Qwen 提示词里「select at most N cells」这句**软约束**（`qwen_vl_token.py:43/68`、`qwen_vl.py:421/439`）；
+② 解析阶段 `_budget_regions`（`qwen_vl.py:141`）与 `parse_semantic_evaluation`（`schemas.py:178`，超出即截断）的**硬截断**。
+所以它是一个**纯配置项**，可以任意调大。
+
+**关键发现：之前的对比并不公平 / The prior comparison was unfair**：两条路线的 `max_selected_cells` **单位不同**——
+direct 数的是**单个 token**，coarse 数的是 **4×4 粗格块**，而经 `project_cells_to_token_mask`（`projection.py:4`，factor=32/4=8）
+后**每个粗格块 = 8×8 = 64 个 token**。上一节的结果里 coarse 用 `max=8`（≈512 token，外加 dilation=1）对阵 direct 的 `max=64`（=64 token），
+**direct 实际只拿到约 1/8 的重开预算**。direct「输」很大程度上是被这个不公平预算造成的假象。
+
+**修正方案 / Fix**：按**可重开 token 数 `B` 对齐**两条路线，两边都 `dilation=0`，扫 `B∈{64,256,512}`：
+direct `max_selected_cells=B`，coarse `max_selected_cells=B/64`（=1/4/8 个粗格块）。direct 的 `max_new_tokens` 同步放大到
+1024/4096/7168，确保列出 `B` 个 `R{row}C{col}` 坐标不被输出长度截断（已冒烟验证 B=256 能真选到 256 且无截断）。
+
+**结果（2026-06-04，Hard64 64 prompts，4 GPU/arm，Gemini 3 Flash 裁判，同一确定性 baseline）/ Results**
+
+| 预算 B (token) | baseline | direct (token) | coarse (4×4) | pairwise（direct 胜 / coarse 胜 / 平） |
+| ---: | --- | --- | --- | --- |
+| 64  | 73.4% (47/64) | **75.0% (48/64)** | 73.4% (47/64) | 0 / 0 / 64 |
+| 256 | 73.4% (47/64) | 73.4% (47/64) | **75.0% (48/64)** | 1 / 1 / 62 |
+| 512 | 75.0% (48/64) | **76.6% (49/64)** | 73.4% (47/64) | 0 / 3 / 61 |
+
+（baseline 通过率在不同 B 间的 ±1.6% 波动来自 Gemini 裁判对同一张 baseline 图重判时的轻微非确定性，约 1 张图的量级。）
+
+**结论 / Conclusion**：
+1. **公平之后，巨大的差距消失了**：上一节那种「coarse 75.0% vs direct 67.2%」的大幅落差，在**预算对齐**后**不复存在**——
+   三个预算下 direct 与 coarse 的 clean 通过率都落在彼此 ±1.6%（≤1 张图）以内，pairwise **61–64/64 为平局**，决断胜场极少且大致对称。
+   即**之前 direct「明显更差」主要是预算不公平的假象**，而非直选机制本身不行。
+2. **大幅加大上限并不能「解决问题」/ Raising the cap does NOT help much**：把预算从 64 一路加到 512（8×），
+   两条路线的通过率都只在 **73–77%** 附近徘徊，并未随预算单调提升。说明瓶颈在**选得准不准（哪些 token）**，
+   而不是**选得多不多（几个 token）**——给更多预算只是让评估器选得更多更散，对最终质量帮助有限。
+3. 因此「9/12 顶满 64 上限」这个现象，根因不是上限太小，而是**评估器缺乏精确的 token 级定位能力**；
+   提升方向应是更强的定位信号（更大评估模型 / 更细 overlay / 置信度加权选择），而非单纯放大 `max_selected_cells`。
+
+> 复现：每个预算的生成产物在 `outputs/benchmarks_hard64_capsweep_{direct,coarse}_b{64,256,512}_<stamp>/`，
+> 评判在 `outputs/hard64_capsweep_judge_b{64,256,512}_<stamp>/`。
+> 配置：`configs/stage1_showo_qwen35_9b_{direct_token,coarse}_b{64,256,512}.yaml`；
+> 提交脚本：`scripts/submit_hard64_capsweep.sh`（`BUDGETS`/`ARMS`/`GPUS_PER_RUN` 可调）。
 
 ### 迁移路线图 / Roadmap — 把 ASCR 迁到更新更大的离散扩散模型
 
