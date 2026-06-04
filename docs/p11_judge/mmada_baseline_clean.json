@@ -1,0 +1,531 @@
+{
+  "protocol": "gemini_variant_clean_v1",
+  "created_at_utc": "2026-06-04T17:40:55.629480Z",
+  "arm_label": "mmada_baseline",
+  "image_field": "final_image",
+  "items_file": "outputs/mmada_qwen_coarse_hq_hard64/baseline_manifest.json",
+  "model": "google/gemini-3-flash-preview",
+  "pass_threshold": 0.5,
+  "prompt_count": 64,
+  "judged_count": 64,
+  "done": true,
+  "counts": {
+    "fail": 27,
+    "pass": 37
+  },
+  "pass_rate": 57.81,
+  "records": [
+    {
+      "prompt": "a green bench and a blue bowl",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p000.png",
+      "status": "pass",
+      "matches_prompt": true,
+      "score": 1.0,
+      "reason": "The image correctly depicts a blue bowl sitting on top of a green bench."
+    },
+    {
+      "prompt": "an oblong cucumber and a teardrop plum",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p001.png",
+      "status": "fail",
+      "matches_prompt": false,
+      "score": 0.4,
+      "reason": "The image contains two objects with the requested shapes, but they do not clearly resemble a cucumber or a plum, appearing more like abstract or alien plant life."
+    },
+    {
+      "prompt": "a plastic toy and a glass bottle",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p002.png",
+      "status": "fail",
+      "matches_prompt": false,
+      "score": 0.3,
+      "reason": "The image depicts a single, surreal, fused object containing elements of both a toy and a bottle rather than two distinct, recognizable items as requested."
+    },
+    {
+      "prompt": "a giraffe next to a lamp",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p003.png",
+      "status": "pass",
+      "matches_prompt": true,
+      "score": 1.0,
+      "reason": "The image correctly depicts a giraffe standing next to a lamp."
+    },
+    {
+      "prompt": "a dog in front of a desk",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p004.png",
+      "status": "fail",
+      "matches_prompt": false,
+      "score": 0.2,
+      "reason": "The dog is positioned behind the desk rather than in front of it."
+    },
+    {
+      "prompt": "two boys",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p005.png",
+      "status": "pass",
+      "matches_prompt": true,
+      "score": 1.0,
+      "reason": "The image clearly shows the silhouettes of two boys."
+    },
+    {
+      "prompt": "The red hat was on top of the brown coat rack.",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p006.png",
+      "status": "pass",
+      "matches_prompt": false,
+      "score": 0.5,
+      "reason": "The image shows a red hat on a stand, but the stand is black rather than brown and does not clearly resemble a coat rack."
+    },
+    {
+      "prompt": "The blue water bottle was on top of the red backpack.",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p007.png",
+      "status": "fail",
+      "matches_prompt": false,
+      "score": 0.2,
+      "reason": "The image shows a distorted, fused object with blue and red sections rather than a distinct blue water bottle resting on top of a separate red backpack."
+    },
+    {
+      "prompt": "a blue bench and a green bowl",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p008.png",
+      "status": "pass",
+      "matches_prompt": true,
+      "score": 1.0,
+      "reason": "The image correctly depicts a blue bench on the left and a large green bowl in the center."
+    },
+    {
+      "prompt": "a pentagonal stop sign and a spherical traffic light",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p009.png",
+      "status": "fail",
+      "matches_prompt": false,
+      "score": 0.1,
+      "reason": "The image shows a multi-sided red shape that is not a pentagon and lacks the 'STOP' text, and the central sphere does not resemble a traffic light."
+    },
+    {
+      "prompt": "rubber sole shoes and fluffy clouds",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p010.png",
+      "status": "pass",
+      "matches_prompt": false,
+      "score": 0.8,
+      "reason": "The image features a shoe with a rubber sole and fluffy clouds, but it only shows a single shoe instead of the plural 'shoes' requested in the prompt."
+    },
+    {
+      "prompt": "a girl on the top of a frog",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p011.png",
+      "status": "pass",
+      "matches_prompt": true,
+      "score": 1.0,
+      "reason": "The image clearly shows a girl standing on top of a large frog, satisfying all elements of the prompt."
+    },
+    {
+      "prompt": "a car in front of a mouse",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p012.png",
+      "status": "fail",
+      "matches_prompt": false,
+      "score": 0.2,
+      "reason": "The image shows a mouse in front of a car, which is the reverse of the requested spatial relationship."
+    },
+    {
+      "prompt": "six airplanes",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p013.png",
+      "status": "pass",
+      "matches_prompt": true,
+      "score": 1.0,
+      "reason": "The image correctly depicts exactly six objects that are clearly intended to be airplanes, despite some AI-generated distortions."
+    },
+    {
+      "prompt": "The black phone was resting on the brown charger.",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p014.png",
+      "status": "fail",
+      "matches_prompt": false,
+      "score": 0.4,
+      "reason": "The object on top is not clearly a phone and is bi-colored (black and brown) rather than just black, although it is resting on a brown base that could be a charger."
+    },
+    {
+      "prompt": "The fluffy cat is on the left of the soft pillow.",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p015.png",
+      "status": "fail",
+      "matches_prompt": false,
+      "score": 0.4,
+      "reason": "The cat is sitting on top of the pillow rather than to the left of it as specified in the prompt."
+    },
+    {
+      "prompt": "a green bench and a blue cake",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p016.png",
+      "status": "fail",
+      "matches_prompt": false,
+      "score": 0.4,
+      "reason": "The image features a green and teal bench, but it is missing the blue cake requested in the prompt."
+    },
+    {
+      "prompt": "a cubic ice cube and a spherical ice bucket",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p017.png",
+      "status": "fail",
+      "matches_prompt": false,
+      "score": 0.3,
+      "reason": "The image shows a cubic white box and a spherical container with ice, but the cubic object is not an ice cube and the spherical object is more of a globe than a bucket."
+    },
+    {
+      "prompt": "a metallic desk lamp and a fluffy sweater",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p018.png",
+      "status": "fail",
+      "matches_prompt": false,
+      "score": 0.4,
+      "reason": "The image features a distorted metallic lamp, but the fluffy object lacks the structure and features of a sweater, appearing instead as an abstract fluffy mass."
+    },
+    {
+      "prompt": "a mouse on side of a key",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p019.png",
+      "status": "pass",
+      "matches_prompt": true,
+      "score": 0.7,
+      "reason": "The image shows a mouse interacting with a metallic object that resembles a key, though both the mouse and the key are highly distorted and abstract."
+    },
+    {
+      "prompt": "a sheep in front of a key",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p020.png",
+      "status": "fail",
+      "matches_prompt": false,
+      "score": 0.2,
+      "reason": "The image shows a key in front of a sheep, which is the reverse of the requested spatial relationship."
+    },
+    {
+      "prompt": "five drums",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p021.png",
+      "status": "pass",
+      "matches_prompt": true,
+      "score": 1.0,
+      "reason": "The image contains exactly five drum-like objects, including two floating flat drums, two tom-style drums, and one large bass drum."
+    },
+    {
+      "prompt": "The leather wallet was inside the brown purse.",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p022.png",
+      "status": "fail",
+      "matches_prompt": false,
+      "score": 0.2,
+      "reason": "The image shows a single brown leather wallet or pouch, but it is not inside a brown purse as requested."
+    },
+    {
+      "prompt": "The soft pillow was on top of the hard rocking chair.",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p023.png",
+      "status": "fail",
+      "matches_prompt": false,
+      "score": 0.3,
+      "reason": "The image shows multiple pillows on a minimalist chair frame, but it lacks a recognizable rocking chair with rockers."
+    },
+    {
+      "prompt": "a blue bench and a green cake",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p024.png",
+      "status": "fail",
+      "matches_prompt": false,
+      "score": 0.4,
+      "reason": "The image depicts a surreal, abstract object where a green cake-like form is fused with a fragmented blue bench, rather than showing two distinct objects as requested."
+    },
+    {
+      "prompt": "an oblong eggplant and a teardrop melon",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p025.png",
+      "status": "fail",
+      "matches_prompt": false,
+      "score": 0.2,
+      "reason": "The image shows a single fused, surreal object that resembles an eggplant but lacks a distinct teardrop melon as requested."
+    },
+    {
+      "prompt": "a rubber band and a wooden floor",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p026.png",
+      "status": "pass",
+      "matches_prompt": false,
+      "score": 0.5,
+      "reason": "The image features a wooden floor, but the blue object is not a rubber band; it is a thick, loop-like structure with a long tail extending off-screen, which is inconsistent with a standard rubber band."
+    },
+    {
+      "prompt": "a bee on the right of a refrigerator",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p027.png",
+      "status": "fail",
+      "matches_prompt": false,
+      "score": 0.2,
+      "reason": "The bee is positioned on the left side of the refrigerator, which contradicts the prompt's requirement for it to be on the right."
+    },
+    {
+      "prompt": "a cat behind a boy",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p028.png",
+      "status": "pass",
+      "matches_prompt": true,
+      "score": 1.0,
+      "reason": "The image accurately depicts a boy in the foreground with a large cat positioned behind him."
+    },
+    {
+      "prompt": "one turtle",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p029.png",
+      "status": "pass",
+      "matches_prompt": true,
+      "score": 1.0,
+      "reason": "The image correctly depicts exactly one turtle as requested."
+    },
+    {
+      "prompt": "The rectangular picture frame was hung above the beige couch.",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p030.png",
+      "status": "pass",
+      "matches_prompt": true,
+      "score": 1.0,
+      "reason": "The image perfectly depicts a rectangular picture frame positioned on the wall above a beige couch."
+    },
+    {
+      "prompt": "The green plant was on the right of the white wall.",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p031.png",
+      "status": "pass",
+      "matches_prompt": true,
+      "score": 1.0,
+      "reason": "The image correctly depicts a green plant positioned to the right of a white wall."
+    },
+    {
+      "prompt": "a brown horse and a blue vase",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p032.png",
+      "status": "pass",
+      "matches_prompt": true,
+      "score": 0.9,
+      "reason": "The image correctly depicts a brown horse and a blue vase, although the horse has some anatomical distortions and a blue muzzle."
+    },
+    {
+      "prompt": "a cubic block and a cylindrical bottle",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p033.png",
+      "status": "pass",
+      "matches_prompt": false,
+      "score": 0.6,
+      "reason": "The image contains a cylindrical bottle, but the block is a rectangular prism rather than a cubic one."
+    },
+    {
+      "prompt": "a fabric towel and a glass table",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p034.png",
+      "status": "pass",
+      "matches_prompt": true,
+      "score": 1.0,
+      "reason": "The image correctly depicts a fabric towel resting on a glass surface that functions as a table."
+    },
+    {
+      "prompt": "a balloon on the right of a person",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p035.png",
+      "status": "pass",
+      "matches_prompt": true,
+      "score": 1.0,
+      "reason": "The image correctly depicts a single person on the left and a single balloon to their right."
+    },
+    {
+      "prompt": "a chair hidden by a mouse",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p036.png",
+      "status": "fail",
+      "matches_prompt": false,
+      "score": 0.1,
+      "reason": "The chair is clearly visible and not hidden by the mouse; instead, a small mouse is sitting on the chair."
+    },
+    {
+      "prompt": "seven women",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p037.png",
+      "status": "pass",
+      "matches_prompt": false,
+      "score": 0.5,
+      "reason": "The image only contains five women, failing to meet the count of seven specified in the prompt."
+    },
+    {
+      "prompt": "The brown dog was lying on the green mat.",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p038.png",
+      "status": "pass",
+      "matches_prompt": true,
+      "score": 1.0,
+      "reason": "The image accurately depicts a brown dog lying on a green mat with some red patterns."
+    },
+    {
+      "prompt": "The blue bowl was on top of the white placemat.",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p039.png",
+      "status": "pass",
+      "matches_prompt": true,
+      "score": 1.0,
+      "reason": "The image accurately depicts a blue bowl sitting on top of a white textured placemat."
+    },
+    {
+      "prompt": "a blue horse and a brown vase",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p040.png",
+      "status": "pass",
+      "matches_prompt": true,
+      "score": 0.9,
+      "reason": "The image correctly depicts a blue horse and a vase that is primarily brown, although the vase also contains blue accents."
+    },
+    {
+      "prompt": "a cubic block and a cylindrical canister",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p041.png",
+      "status": "pass",
+      "matches_prompt": false,
+      "score": 0.5,
+      "reason": "The image contains a cylindrical canister, but the second object is a thin rectangular panel rather than a cubic block."
+    },
+    {
+      "prompt": "a metallic car and a fabric dress",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p042.png",
+      "status": "fail",
+      "matches_prompt": false,
+      "score": 0.4,
+      "reason": "The image shows a car and a dress fused together, but both appear to be made of the same metallic material, failing the requirement for a 'fabric' dress."
+    },
+    {
+      "prompt": "a cat on the top of a sofa",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p043.png",
+      "status": "pass",
+      "matches_prompt": true,
+      "score": 0.9,
+      "reason": "The image correctly depicts a cat positioned on the top backrest of a sofa, although the cat's face exhibits significant AI distortion."
+    },
+    {
+      "prompt": "a girl behind a cow",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p044.png",
+      "status": "fail",
+      "matches_prompt": false,
+      "score": 0.2,
+      "reason": "The girl and the cow are surrealistically merged together rather than the girl being positioned behind the cow."
+    },
+    {
+      "prompt": "eight cars",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p045.png",
+      "status": "pass",
+      "matches_prompt": false,
+      "score": 0.5,
+      "reason": "The image contains only four cars instead of the requested eight."
+    },
+    {
+      "prompt": "The rectangular mirror was hung above the white sink.",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p046.png",
+      "status": "pass",
+      "matches_prompt": true,
+      "score": 1.0,
+      "reason": "The image clearly shows a rectangular mirror positioned directly above a white sink, matching all aspects of the prompt."
+    },
+    {
+      "prompt": "The black chair is on top of the blue rug.",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p047.png",
+      "status": "pass",
+      "matches_prompt": true,
+      "score": 1.0,
+      "reason": "The image correctly depicts a black chair positioned on top of a blue rug."
+    },
+    {
+      "prompt": "a blue backpack and a brown cow",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p048.png",
+      "status": "pass",
+      "matches_prompt": false,
+      "score": 0.5,
+      "reason": "The image shows a surreal fusion where the brown cow is physically merged into the blue backpack rather than two distinct objects."
+    },
+    {
+      "prompt": "a diamond pendant and a round locket",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p049.png",
+      "status": "fail",
+      "matches_prompt": false,
+      "score": 0.4,
+      "reason": "The image shows two circular jewelry pieces, one of which is a large diamond-like pendant, but the other lacks the defining features of a locket such as a hinge or opening mechanism."
+    },
+    {
+      "prompt": "a rubber ball and a leather wallet",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p050.png",
+      "status": "pass",
+      "matches_prompt": true,
+      "score": 0.8,
+      "reason": "The image contains a blue spherical object representing a ball and an orange textured object with a zipper representing a leather wallet, although both objects have significant AI-generated distortions."
+    },
+    {
+      "prompt": "a desk on the right of a horse",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p051.png",
+      "status": "pass",
+      "matches_prompt": true,
+      "score": 1.0,
+      "reason": "The image correctly depicts a horse on the left and a desk positioned to its right."
+    },
+    {
+      "prompt": "a girl behind a sheep",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p052.png",
+      "status": "fail",
+      "matches_prompt": false,
+      "score": 0.3,
+      "reason": "The girl is positioned beside the sheep rather than behind it, and she incorrectly has sheep ears."
+    },
+    {
+      "prompt": "two rabbits",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p053.png",
+      "status": "pass",
+      "matches_prompt": true,
+      "score": 1.0,
+      "reason": "The image accurately depicts exactly two rabbits as requested."
+    },
+    {
+      "prompt": "The black chair was on the left of the white table.",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p054.png",
+      "status": "pass",
+      "matches_prompt": false,
+      "score": 0.5,
+      "reason": "The chair is black and correctly positioned to the left of the table, but the table itself is black rather than white."
+    },
+    {
+      "prompt": "The square book was next to the green notebook.",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p055.png",
+      "status": "fail",
+      "matches_prompt": false,
+      "score": 0.4,
+      "reason": "The image shows two green rectangular notebooks next to each other, but neither object is square as specified in the prompt."
+    },
+    {
+      "prompt": "a brown backpack and a blue cow",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p056.png",
+      "status": "pass",
+      "matches_prompt": false,
+      "score": 0.6,
+      "reason": "The image shows a brown backpack, but the blue cow is depicted as a cow's head merged into a second blue backpack rather than a separate animal."
+    },
+    {
+      "prompt": "a teardrop pendant and a cubic bracelet charm",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p057.png",
+      "status": "pass",
+      "matches_prompt": false,
+      "score": 0.5,
+      "reason": "The image correctly depicts a teardrop pendant but fails to include the cubic bracelet charm requested in the prompt."
+    },
+    {
+      "prompt": "a fabric towel and a leather chair",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p058.png",
+      "status": "pass",
+      "matches_prompt": true,
+      "score": 1.0,
+      "reason": "The image clearly depicts a tufted leather chair and a textured fabric object that resembles a towel."
+    },
+    {
+      "prompt": "a bicycle on the bottom of a girl",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p059.png",
+      "status": "pass",
+      "matches_prompt": true,
+      "score": 0.9,
+      "reason": "The image shows a girl with a bicycle structure integrated into the lower half of her body, satisfying the spatial requirement of the prompt."
+    },
+    {
+      "prompt": "a vase hidden by a candle",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p060.png",
+      "status": "fail",
+      "matches_prompt": false,
+      "score": 0.2,
+      "reason": "The vase is the most prominent object in the image and is not hidden by a candle; rather, it contains or is surrounded by candles."
+    },
+    {
+      "prompt": "six girls",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p061.png",
+      "status": "fail",
+      "matches_prompt": false,
+      "score": 0.4,
+      "reason": "The image only contains four girls, whereas the prompt specifies six."
+    },
+    {
+      "prompt": "The red book was on top of the yellow bookshelf.",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p062.png",
+      "status": "fail",
+      "matches_prompt": false,
+      "score": 0.3,
+      "reason": "The image is highly abstract and depicts a red rectangle on a yellow background rather than a recognizable book on a bookshelf."
+    },
+    {
+      "prompt": "The rough brick was on top of the smooth tile.",
+      "image": "outputs/mmada_qwen_coarse_hq_hard64/baseline/p063.png",
+      "status": "fail",
+      "matches_prompt": false,
+      "score": 0.1,
+      "reason": "The image shows a uniform wall of blocks with identical textures, failing to depict a distinct rough brick on top of a smooth tile."
+    }
+  ]
+}

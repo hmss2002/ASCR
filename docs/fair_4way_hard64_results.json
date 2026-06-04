@@ -1,0 +1,43 @@
+{
+  "phase": 11,
+  "title": "Fair 4-way Show-o vs MMaDA-8B on Hard64 under ONE identical clean Gemini judge",
+  "benchmark": "T2I-CompBench Hard64 (64 prompts)",
+  "judge": {
+    "model": "google/gemini-3-flash-preview",
+    "proxy": "ofox.ai",
+    "rubric": "strict prompt-following single-image clean judge, PASS when score>=0.5",
+    "note": "Identical rubric/口径 across ALL four arms (this is the apples-to-apples comparison the user asked for)."
+  },
+  "generation_settings": {
+    "showo": {"generation_timesteps": 50, "confidence_steps": 50, "guidance_scale": 4, "image_size": 512, "note": "Show-o default high quality"},
+    "mmada": {"generation_timesteps": 20, "guidance_scale": 5, "image_size": 512, "temperature": 1.0,
+              "note": "MMaDA high-quality default = official eval config stage3_512_cot (20 steps / gs=5). README inference example uses 15/3.5; both documented, 20/5 chosen as the HQ default."}
+  },
+  "selector": {
+    "showo_arm": "Qwen3.5-9B (qwen_vl) original coarse ASCR (4x4 -> dilation -> 32x32 reopen), single-process .venv-qwen36",
+    "mmada_arm": "Qwen3.5-9B (qwen_vl) original coarse ASCR, two-process file-IPC pipeline (MMaDA .venv-mmada + Qwen server .venv-qwen36)"
+  },
+  "clean": {
+    "showo_baseline":      {"pass": 47, "total": 64, "rate": 0.734},
+    "showo_qwen_coarse":   {"pass": 50, "total": 64, "rate": 0.781, "delta_vs_baseline_pp": 4.7},
+    "mmada_baseline_hq":   {"pass": 37, "total": 64, "rate": 0.578},
+    "mmada_qwen_coarse_hq":{"pass": 36, "total": 64, "rate": 0.562, "delta_vs_baseline_pp": -1.6,
+                            "note": "single-image -1 is within Gemini judge noise; debiased pairwise vs baseline is 3 wins / 0 losses (ASCR never regresses)."}
+  },
+  "pairwise_bidirectional_debiased": {
+    "showo_qwen_coarse_vs_showo_baseline": {"a_wins": 5, "b_wins": 0, "ties": 59, "a_decisive_winrate": 1.0},
+    "mmada_qwen_coarse_vs_mmada_baseline": {"a_wins": 3, "b_wins": 0, "ties": 61, "a_decisive_winrate": 1.0},
+    "showo_baseline_vs_mmada_baseline":     {"a_wins": 26, "b_wins": 5, "ties": 33, "a_decisive_winrate": 0.839},
+    "showo_qwen_coarse_vs_mmada_qwen_coarse":{"a_wins": 29, "b_wins": 3, "ties": 32, "a_decisive_winrate": 0.906}
+  },
+  "runs": {
+    "showo_qwen_coarse_hard64": {"records": 64, "errors": 0, "revised": 20, "out_root": "outputs/showo_qwen_coarse_hard64"},
+    "mmada_qwen_coarse_hq_hard64": {"records": 64, "errors": 0, "revised": 24, "out_root": "outputs/mmada_qwen_coarse_hq_hard64"}
+  },
+  "conclusions": [
+    "Under ONE identical clean Gemini rubric, Show-o (1.5B) baseline = 73.4% clearly beats MMaDA-8B HQ baseline = 57.8%; cross-model debiased pairwise = Show-o 26 wins / 5 / 33 ties (83.9% decisive).",
+    "Show-o's 73.4% was NOT merely a rubric artifact: even at MMaDA's high-quality default (20 steps / gs=5) and with the same strong external Qwen-9B coarse selector, Show-o still decisively outperforms MMaDA-8B on this compositional Hard64 set (Show-o+Qwen 78.1% vs MMaDA+Qwen 56.2%; pairwise Show-o 29 / 3 / 32, 90.6% decisive).",
+    "Coarse ASCR with Qwen-9B helps Show-o (+4.7pp clean, 5/0/59 pairwise) and never regresses MMaDA (debiased 3/0/61; the -1.6pp single-image clean is judge noise).",
+    "MMaDA's high-quality default generation_timesteps = 20 (gs=5) per its official eval config stage3_512_cot; the README inference example uses 15/3.5. We used 20/5 as the HQ default, so MMaDA was given its best-quality setting in this fair comparison."
+  ]
+}

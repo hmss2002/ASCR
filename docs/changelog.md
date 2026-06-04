@@ -542,3 +542,15 @@ Next implementation batch:
 3. Run `jobs/stage1_debug_gpu_shared.sbatch` as the first Slurm smoke job.
 4. Promote stable settings to `jobs/stage1_run_gpu.sbatch` for longer formal Stage 1 runs.
 
+
+### Phase 11 — Fair 4-way Show-o vs MMaDA-8B on Hard64 (one identical clean Gemini judge)
+
+Goal: answer whether Show-o's 73.4% was a rubric artifact, and which model wins under ONE
+identical clean Gemini-3-Flash rubric, each at its own default high-quality generation.
+
+- MMaDA HQ default = official eval config `stage3_512_cot`: `timesteps=20, gs=5` (README example uses 15/3.5). Used 20/5. Show-o default HQ = 50 steps / gs=4.
+- New (all additive): `configs/stage1_mmada8b_qwen9b_coarse_hq.yaml`, `scripts/run_showo_qwen_coarse_hard64.py` (single-process Show-o+Qwen resident runner), `jobs/stage1_showo_qwen_coarse_hard64_8gpu.sbatch`. MMaDA arm reuses Phase-10 two-process IPC pipeline.
+- Runs: Show-o arm 1 node x 8 GPU (64/64, 0 err, 20 revised); MMaDA-HQ arm 2 nodes x 8 GPU (64/64, 0 err, 24 revised). Model loaded once per GPU.
+- Clean Gemini (same rubric): Show-o baseline 47/64=73.4%; Show-o+Qwen-coarse 50/64=78.1% (+4.7pp); MMaDA-8B HQ baseline 37/64=57.8%; MMaDA-8B+Qwen-coarse HQ 36/64=56.2% (-1.6pp, judge noise).
+- Bidirectional debiased pairwise: Show-o+Qwen vs Show-o-base 5/0/59; MMaDA+Qwen vs MMaDA-base 3/0/61; Show-o-base vs MMaDA-base 26/5/33 (83.9% decisive); Show-o+Qwen vs MMaDA+Qwen 29/3/32 (90.6% decisive).
+- Conclusion: Show-o's 73.4% is NOT a rubric artifact — under the SAME judge and MMaDA's HQ default, Show-o (1.5B) decisively beats MMaDA-8B on Hard64 compositional prompts, both baseline and +ASCR. Coarse ASCR + Qwen-9B helps Show-o (+4.7pp) and never regresses MMaDA. Results: `docs/fair_4way_hard64_results.json`.
