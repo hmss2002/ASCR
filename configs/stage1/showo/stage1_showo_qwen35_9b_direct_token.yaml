@@ -7,10 +7,15 @@ return_initial_on_max_error: true
 image_size: 512
 coarse_grid_size: 4
 token_grid_size: 32
+# selector grid resolution used by the direct-token evaluator/selector
 select_grid_size: 32
 dilation: 0
+# overlay tick stride for token-grid labels; does not change selection semantics
 label_step: 4
 output_dir: outputs/stage1_qwen35_9b_direct_token
+execution:
+  mode: single_process
+  note: preserved Show-o workflow; generator and evaluator share one process in the current path
 
 generator:
   name: showo

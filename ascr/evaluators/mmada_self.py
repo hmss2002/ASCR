@@ -59,8 +59,7 @@ class MMaDASelfEvaluator(SemanticEvaluator):
 
     Uses the *same* loaded :class:`MMaDANativeEngine` as the generator (shared via
     :meth:`attach_engine`) to run image-to-text understanding (``mmu_generate``) in
-    two stages, mirroring :class:`ascr.evaluators.showo_mmu.ShowOMMUEvaluator` but at
-    direct token-level granularity (``grid_size`` x ``grid_size`` tokens, ``R{row}C{col}``
+    two stages at direct token-level granularity (``grid_size`` x ``grid_size`` tokens, ``R{row}C{col}``
     coordinates 0-indexed). The selected token cells feed
     :class:`ascr.revision.selector.DirectTokenReopeningSelector` (dilation=0), so MMaDA
     both generates the image and decides exactly which discrete image tokens to reopen.

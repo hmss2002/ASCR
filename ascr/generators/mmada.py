@@ -10,8 +10,8 @@ from ascr.generators.showo_native import compact_token_payload, flat_to_grid
 class MMaDAAdapter(GeneratorAdapter):
     """MMaDA-8B generator adapter (masked discrete diffusion, native token loop).
 
-    Mirrors :class:`ascr.generators.showo.ShowOAdapter` but drives an
-    :class:`MMaDANativeEngine`. The same engine instance can be shared with
+    Drives an :class:`MMaDANativeEngine` through the same generator interface used across ASCR.
+    The same engine instance can be shared with
     :class:`ascr.evaluators.mmada_self.MMaDASelfEvaluator` via
     :meth:`share_engine_from` so the 8B model is loaded exactly once and both
     generation and self-evaluation run on the same weights.

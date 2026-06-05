@@ -9,6 +9,9 @@ coarse_grid_size: 4
 token_grid_size: 32
 dilation: 1
 output_dir: outputs/stage1_mmada8b_qwen9b_coarse
+execution:
+  mode: ipc_pair
+  note: generator and Qwen evaluator run as paired processes via IPC
 
 generator:
   name: mmada

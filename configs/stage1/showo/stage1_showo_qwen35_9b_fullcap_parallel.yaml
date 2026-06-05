@@ -9,6 +9,9 @@ coarse_grid_size: 4
 token_grid_size: 32
 dilation: 1
 output_dir: outputs/stage1_qwen35_9b_fullcap_parallel
+execution:
+  mode: single_process
+  note: preserved Show-o workflow; generator and evaluator share one process in the current path
 
 generator:
   name: showo

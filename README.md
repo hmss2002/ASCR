@@ -17,9 +17,10 @@ truth.
 **Mainline task:** Stage-1 zero-training ASCR on Hard64-style compositional prompts
 **Preserved comparison lines:** Show-o, MMaDA-8B, BAGEL-7B reference comparisons
 
-The current project direction is no longer Show-o-first. Show-o remains important as the original
-ASCR baseline and as a historical comparison line, but future work should treat **Lumina-DiMOO** as
-the primary base model.
+The current project direction is no longer Show-o-first. **Lumina-DiMOO** is the primary base
+model for new work. **Show-o** is preserved as the original ASCR baseline and comparison line for
+mechanism studies, direct-token experiments, and historical comparisons. **MMaDA-8B** is preserved
+for self-eval and transferred-selector studies rather than as the mainline development target.
 
 ## 2. Core ASCR logic
 
@@ -62,13 +63,17 @@ The zero-training implementation uses grid overlays, structured evaluator output
 fixed dilation as an engineering interface. The method itself is not the grid; the method is
 **selective semantic reopening of confidence-stable but semantically wrong regions**.
 
-### 2.3 Stage roadmap
+### 2.3 Research stage roadmap
 
 | Stage | Goal | Current status |
 | --- | --- | --- |
 | Stage 1 | Zero-training semantic reopening with external or self evaluators | Implemented and evaluated across Show-o, MMaDA, Lumina |
 | Stage 2 | Learned token-level semantic reopening selector | Scaffold exists under `ascr/training/` |
 | Stage 3 | Cross-model ASCR framework across stronger discrete / masked generators | Direction established by current Lumina migration |
+
+In this section, **Stage 1 / 2 / 3** refer to the **research roadmap** of ASCR, not to a single
+CLI or Slurm command. The operational pipeline used today is the **Stage-1 implementation** of
+that roadmap.
 
 ## 3. Current empirical summary
 
@@ -151,7 +156,7 @@ prefer the Lumina-DiMOO line.
 | `ascr/traces/` | Trace schemas and writers |
 | `ascr/training/` | Stage-2 learned-selector scaffolding |
 
-## 6. Mainline workflow
+## 6. Operational Stage-1 workflow
 
 ### 6.1 Lumina-DiMOO + Qwen coarse ASCR
 
@@ -182,11 +187,21 @@ mock generator/evaluator defaults.
 
 | Track | Purpose | Key paths |
 | --- | --- | --- |
-| Show-o | Original ASCR baseline and direct-token experiments | `configs/stage1/showo/`, `ascr/generators/showo*.py`, `scripts/run/run_showo_qwen_coarse_hard64.py` |
+| Show-o | Preserved baseline and comparison line, including direct-token experiments | `configs/stage1/showo/`, `ascr/generators/showo*.py`, `scripts/run/run_showo_qwen_coarse_hard64.py` |
 | MMaDA-8B | Self-eval and Qwen-selector transfer experiments | `configs/stage1/mmada/`, `ascr/generators/mmada*.py`, `scripts/run/run_mmada_*` |
 | BAGEL | External benchmark reference | `scripts/run/run_bagel_text2image.py`, benchmark jobs under `jobs/benchmarks/` |
 
-## 7. Stage-1 loop
+The direct-token selector path is part of this preserved comparison surface:
+
+- selector logic: `ascr/revision/selector.py` (`DirectTokenReopeningSelector`)
+- token-grid evaluator: `ascr/evaluators/qwen_vl_token.py`
+- direct loop: `ascr/core/loop_direct.py`
+- comparison CLI: `ascr/cli/compare_stage1_variants.py`
+
+The public `ascr-compare-showo` entrypoint is also retained for this preserved Show-o baseline line.
+It exists for legacy comparison workflows, not as the recommended project entrypoint.
+
+## 7. Operational Stage-1 loop
 
 The practical ASCR loop is:
 
@@ -220,6 +235,20 @@ Implementation rules:
 | `configs/benchmarks/data/` | Benchmark metadata and CSV/JSONL payloads small enough for Git |
 | `configs/cluster/` | Cluster partition templates |
 
+### Grid parameter glossary
+
+The active config/schema still uses several grid-related names. Their current meanings are:
+
+| Field | Meaning |
+| --- | --- |
+| `token_grid_size` | Native image-token resolution of the generator (for example 32 or 64) |
+| `coarse_grid_size` | Coarse selection grid used by coarse ASCR selectors (usually 4) |
+| `select_grid_size` | Selector resolution used by direct-token style evaluators/selectors; in practice this is the selector grid size, even though the field name remains `select_grid_size` for compatibility |
+| `label_step` | Tick/label stride used when drawing token-grid overlays for direct-token workflows |
+
+If future cleanup renames `select_grid_size`, the intended semantic target is **selector grid
+size**, not a second token grid.
+
 ## 9. Jobs and scripts
 
 ### Jobs
@@ -243,6 +272,18 @@ Implementation rules:
 | `scripts/benchmark/` | Prompt prep, conversion, pairing, merging, and summarization utilities |
 | `scripts/setup/` | Environment and model download helpers |
 | `scripts/maintenance/` | Submission helpers, diagnostics, cleanup, GitHub sync helper |
+
+### Execution modes
+
+The current Stage-1 runners use two runtime architectures:
+
+| Mode | Used by | Meaning |
+| --- | --- | --- |
+| `single_process` | Show-o pipelines; MMaDA self-eval pipelines | Generator and evaluator logic share one Python process |
+| `ipc_pair` | Lumina + Qwen coarse; MMaDA + Qwen coarse | Generator and evaluator run in separate paired processes and communicate through IPC |
+
+This distinction is currently encoded by runner/job structure rather than a fully enforced config
+schema, so readers should treat the runner + job pair as the operational source of truth.
 
 ## 10. Results and examples
 
@@ -281,6 +322,28 @@ to be tracked by Git:
 
 These directories are intentionally ignored by Git. If a workflow fails because one of them is
 missing, create the required local checkout/model cache instead of committing it.
+
+### Recommended setup sequence
+
+For a fresh local or cluster checkout, the lowest-friction setup order is:
+
+```bash
+python -m pip install -e .
+python -m pip install -r requirements/base.txt
+python -m pip install -r requirements-qwen-vl.txt
+bash scripts/setup/download_showo.sh
+```
+
+Then prepare model-family-specific environments/checkouts as needed:
+
+1. **Qwen evaluator path**: create or activate the evaluator environment (historically named
+   `.venv-qwen36`) used by Qwen-based judging jobs.
+2. **Lumina mainline**: prepare the Lumina checkout/model cache referenced by
+   `configs/stage1/lumina/stage1_lumina_qwen9b_coarse_hq.yaml`.
+3. **MMaDA preserved line**: create the `external/MMaDA/` checkout or override `repo_path` in the
+   relevant configs if the checkout lives elsewhere.
+
+After setup, use the validation commands in section 12 before submitting jobs.
 
 Do not commit:
 
@@ -331,3 +394,5 @@ Going forward:
 4. Put old or superseded narrative material under `docs/archive/`.
 5. Do not create another competing high-level project guide unless this README is intentionally
    replaced.
+6. When archive documents remain searchable, ensure they clearly state that this root `README.md` is
+   the only current project guide.

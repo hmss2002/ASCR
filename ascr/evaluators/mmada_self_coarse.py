@@ -62,9 +62,9 @@ def _parse_letter_cells(text, grid_size):
 class MMaDASelfCoarseEvaluator(SemanticEvaluator):
     """MMaDA-8B judging its own generation at a COARSE grid ("selector calls itself").
 
-    This is the Phase-9 counterpart to :class:`ascr.evaluators.mmada_self.MMaDASelfEvaluator`:
+    This is the coarse-grid counterpart to :class:`ascr.evaluators.mmada_self.MMaDASelfEvaluator`:
     instead of asking MMaDA to localize wrong cells at the full 32x32 token grid (which it
-    cannot ground), it follows the *original* ASCR coarse strategy. MMaDA's MMU understanding
+    cannot ground), it follows the original ASCR coarse strategy. MMaDA's MMU understanding
     replaces the Qwen-9B selector and answers at a small ``grid_size`` x ``grid_size`` grid
     (default 4x4, labels ``A1``-``D4``). The selected coarse cells are then projected to the
     32x32 token grid with dilation by :class:`ascr.revision.selector.GridSemanticReopeningSelector`.

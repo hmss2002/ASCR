@@ -10,6 +10,9 @@ token_grid_size: 32
 dilation: 1
 label_step: 8
 output_dir: outputs/stage1_mmada8b_self_coarse
+execution:
+  mode: single_process
+  note: generator and evaluator share one process and one loaded MMaDA engine
 
 generator:
   name: mmada

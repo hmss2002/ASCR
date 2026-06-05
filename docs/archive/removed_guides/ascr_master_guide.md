@@ -3,6 +3,7 @@
 > Archive note: this guide has been superseded by the root [`../../../README.md`](../../../README.md).
 > Internal links and paths below are preserved as historical context and may not match the current
 > repository layout.
+> Read this file as a historical consolidation draft, not as a second canonical project guide.
 
 This document is the integrated project guide for ASCR. It combines the roles that were
 previously split across the root README, the archived project-control README, and the two
@@ -11,8 +12,8 @@ English blueprint documents:
 - `ASCR_Paper_Blueprint_EN.docx`
 - `ASCR_Workflow_Playbook_EN.docx`
 
-The goal is to keep **one long-form canonical document** that explains the project at three
-levels at once:
+At the time this document was written, the goal was to keep **one long-form integrated document**
+that explained the project at three levels at once:
 
 1. **Research framing** — what problem ASCR claims to solve and why it matters.
 2. **Implementation workflow** — how the Stage-1 loop actually runs in this repository.
@@ -292,9 +293,10 @@ Track source code, configs, prompts, docs, and small metadata in Git. Do **not**
 
 ## 12. How this document relates to the other docs
 
-Use this file as the **single integrated long-form guide**.
+This file was once intended to be the integrated long-form guide, but it has been superseded by the
+root [`../../../README.md`](../../../README.md).
 
-Use the other documents as focused references:
+The references below reflect the repository structure at the time this guide was written:
 
 | Document | Use it for |
 | --- | --- |
@@ -307,12 +309,8 @@ Use the other documents as focused references:
 
 ## 13. Recommended maintenance rule
 
-Going forward, update documents with this order of responsibility:
+Historical note: the maintenance rule below is preserved for context only. The current rule is
+simple: keep the root `README.md` as the single current project guide, and treat this file as
+archived context.
 
-1. **`README.md`** — short and stable front page only
-2. **`docs/ascr_master_guide.md`** — canonical integrated project narrative
-3. **focused docs under `docs/architecture/`, `docs/results_overview.md`, and `docs/history/`** —
-   detailed supporting references
-
-That keeps one clear main document without losing the historical and operational detail that the
-project has accumulated.
+That older split-document approach is intentionally no longer current.
