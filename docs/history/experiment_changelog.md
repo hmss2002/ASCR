@@ -1,10 +1,9 @@
 # ASCR Experiment Changelog
 
-Dated experiment narratives, latest first. This file is referenced from
-[../README.md](../README.md) and holds the long-form historical record that used to live
-inline in the project-control README. The README itself keeps the current Active TODO,
-Quick Results Summary, Stage 1 Benchmark Summary, and the most recent independent GenEval
-section.
+Dated experiment narratives, latest first. The canonical repository entry point is now
+[`../../README.md`](../../README.md). This file holds the dated experiment record, while the
+former oversized root control document is preserved at
+[`project_control_legacy.md`](project_control_legacy.md).
 
 ---
 
