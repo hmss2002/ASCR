@@ -15,10 +15,13 @@ easier to navigate.
 
 ## Judge outputs
 
+The previous ad-hoc phase folders (`docs/p11_judge/`, `docs/p12_judge/`) have been consolidated
+under `docs/results/judges/`.
+
 | Directory | Scope |
 | --- | --- |
-| `docs/p11_judge/` | Phase 11 clean and pairwise judge JSON outputs |
-| `docs/p12_judge/` | Phase 12 Lumina-related clean and pairwise judge JSON outputs |
+| `docs/results/judges/phase11/` | Phase 11 clean and pairwise judge JSON outputs |
+| `docs/results/judges/phase12/` | Phase 12 Lumina-related clean and pairwise judge JSON outputs |
 
 ## Examples
 
