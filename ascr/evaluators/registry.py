@@ -70,7 +70,7 @@ def _build_showo_mmu(config):
         checkpoint_path=evaluator_config.get("checkpoint_path", generator_config.get("checkpoint_path", "models/show-o-512x512")),
         vq_model_path=evaluator_config.get("vq_model_path", generator_config.get("vq_model_path", "models/magvitv2")),
         llm_model_path=evaluator_config.get("llm_model_path", generator_config.get("llm_model_path", "models/phi-1_5")),
-        showo_config_path=evaluator_config.get("showo_config_path", generator_config.get("showo_config_path", "configs/showo_local_512x512.yaml")),
+        showo_config_path=evaluator_config.get("showo_config_path", generator_config.get("showo_config_path", "configs/stage1/showo/showo_local_512x512.yaml")),
         device=evaluator_config.get("device", generator_config.get("device", "cuda")),
         grid_size=int(config.get("coarse_grid_size", evaluator_config.get("grid_size", 4))),
         image_size=int(config.get("image_size", evaluator_config.get("image_size", 512))),

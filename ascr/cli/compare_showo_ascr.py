@@ -19,7 +19,7 @@ from ascr.revision.selector import GridSemanticReopeningSelector
 
 def build_parser():
     parser = argparse.ArgumentParser(description="Compare native original Show-o against ASCR Stage 1.")
-    parser.add_argument("--config", default="configs/stage1_showo_qwen35_9b.yaml")
+    parser.add_argument("--config", default="configs/stage1/showo/stage1_showo_qwen35_9b.yaml")
     parser.add_argument("--prompt", default="A red cube left of a blue sphere")
     parser.add_argument("--prompts-file", default=None, help="Optional newline-delimited prompt suite. Blank lines and # comments are ignored.")
     parser.add_argument("--prompt-limit", type=int, default=None, help="Optional cap for prompt-suite smoke runs.")

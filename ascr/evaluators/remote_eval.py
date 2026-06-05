@@ -4,7 +4,7 @@ The MMaDA-8B generator (transformers 4.46) and the Qwen3.5-9B evaluator
 (transformers 5.2.dev fork) cannot be loaded in the same Python process — MMaDA's
 remote modeling code is incompatible with the newer transformers. To still run the
 *original* coarse ASCR pipeline (MMaDA generator + Qwen-9B selector), the evaluator
-lives in a separate resident process (``scripts/qwen_eval_server.py``) and this thin
+lives in a separate resident process (``scripts/judge/qwen_eval_server.py``) and this thin
 adapter forwards each ``evaluate`` call to it over a shared IPC directory.
 
 Protocol (atomic writes via tmp + rename):

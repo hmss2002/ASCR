@@ -11,7 +11,7 @@ from ascr.revision.selector import GridSemanticReopeningSelector
 
 def build_parser():
     parser = argparse.ArgumentParser(description="Run ASCR Stage 1 on MMaDA-8B with MMaDA itself as a COARSE (4x4) self-selector following the original ASCR coarse-then-dilate strategy (single shared 8B model).")
-    parser.add_argument("--config", default="configs/stage1_mmada8b_self_coarse.yaml", help="Path to YAML or JSON config.")
+    parser.add_argument("--config", default="configs/stage1/mmada/stage1_mmada8b_self_coarse.yaml", help="Path to YAML or JSON config.")
     parser.add_argument("--prompt", default="A red cube left of a blue sphere", help="Original text-to-image prompt.")
     parser.add_argument("--output-dir", default=None, help="Override output directory.")
     parser.add_argument("--max-iterations", type=int, default=None, help="Override max ASCR iterations.")

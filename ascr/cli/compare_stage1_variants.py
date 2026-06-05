@@ -28,8 +28,8 @@ from ascr.revision.selector import DirectTokenReopeningSelector
 
 def build_parser():
     parser = argparse.ArgumentParser(description="Compare Show-o baseline vs coarse-grid ASCR vs direct-token ASCR Stage 1.")
-    parser.add_argument("--config", default="configs/stage1_showo_qwen35_9b_direct_token.yaml")
-    parser.add_argument("--coarse-config", default="configs/stage1_showo_qwen35_9b_fullcap_parallel.yaml", help="Config for the existing coarse-grid ASCR arm; set to 'none' to skip that arm.")
+    parser.add_argument("--config", default="configs/stage1/showo/stage1_showo_qwen35_9b_direct_token.yaml")
+    parser.add_argument("--coarse-config", default="configs/stage1/showo/stage1_showo_qwen35_9b_fullcap_parallel.yaml", help="Config for the existing coarse-grid ASCR arm; set to 'none' to skip that arm.")
     parser.add_argument("--prompt", default="A red cube left of a blue sphere")
     parser.add_argument("--prompts-file", default=None)
     parser.add_argument("--prompt-limit", type=int, default=None)

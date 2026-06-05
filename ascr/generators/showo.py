@@ -17,7 +17,7 @@ class ShowOAdapter(GeneratorAdapter):
         self.checkpoint_path = Path(checkpoint_path or "models/show-o-512x512")
         self.vq_model_path = Path(vq_model_path or "models/magvitv2")
         self.llm_model_path = Path(llm_model_path or "models/phi-1_5")
-        self.showo_config_path = Path(showo_config_path or "configs/showo_local_512x512.yaml")
+        self.showo_config_path = Path(showo_config_path or "configs/stage1/showo/showo_local_512x512.yaml")
         self.device = device
         self.token_grid_size = int(token_grid_size)
         self.image_size = int(image_size)
@@ -83,10 +83,10 @@ class ShowOAdapter(GeneratorAdapter):
         return GenerationState(prompt=correction_prompt, iteration=state.iteration + 1, token_grid=next_grid, image_path=str(output_path), metadata={"generator": "showo", "native_token_loop": False, "reopened_tokens": mask.count(), "mask_path": str(mask_path)})
 
     def generate_t2i(self, prompt, output_path, seed=None):
-        return self._run_script("scripts/run_showo_t2i_local.sh", prompt, output_path, seed=seed)
+        return self._run_script("scripts/run/run_showo_t2i_local.sh", prompt, output_path, seed=seed)
 
     def generate_inpainting(self, prompt, input_image, mask_image, output_path, seed=None):
-        return self._run_script("scripts/run_showo_inpaint_local.sh", prompt, output_path, seed=seed, extra_env={"INPUT_IMAGE": str(input_image), "MASK_IMAGE": str(mask_image)})
+        return self._run_script("scripts/run/run_showo_inpaint_local.sh", prompt, output_path, seed=seed, extra_env={"INPUT_IMAGE": str(input_image), "MASK_IMAGE": str(mask_image)})
 
     def write_inpainting_mask(self, mask, output_path):
         output_path = Path(output_path)

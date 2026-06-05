@@ -49,7 +49,7 @@ def _patch_phi_config_rope_theta():
     AutoConfig._ascr_phi_showo_patched = True
 
 class ShowONativeEngine:
-    def __init__(self, repo_path="external/Show-o", checkpoint_path="models/show-o-512x512", vq_model_path="models/magvitv2", llm_model_path="models/phi-1_5", showo_config_path="configs/showo_local_512x512.yaml", device="cuda", image_size=512, token_grid_size=32, guidance_scale=4.0, generation_timesteps=50):
+    def __init__(self, repo_path="external/Show-o", checkpoint_path="models/show-o-512x512", vq_model_path="models/magvitv2", llm_model_path="models/phi-1_5", showo_config_path="configs/stage1/showo/showo_local_512x512.yaml", device="cuda", image_size=512, token_grid_size=32, guidance_scale=4.0, generation_timesteps=50):
         self.repo_path = Path(repo_path)
         self.checkpoint_path = Path(checkpoint_path)
         self.vq_model_path = Path(vq_model_path)

@@ -1,0 +1,42 @@
+stage: 1
+run_name: stage1_showo_local
+seed: 1234
+max_iterations: 3
+image_size: 512
+coarse_grid_size: 4
+token_grid_size: 32
+dilation: 1
+output_dir: outputs/stage1
+
+generator:
+  name: showo
+  repo_path: external/Show-o
+  showo_config_path: configs/stage1/showo/showo_local_512x512.yaml
+  checkpoint_path: models/show-o-512x512
+  vq_model_path: models/magvitv2
+  llm_model_path: models/phi-1_5
+  device: cuda
+  guidance_scale: 4
+  generation_timesteps: 50
+  seed: 1234
+  native_token_loop: true
+  confidence_steps: 50
+
+evaluator:
+  name: showo_mmu
+  model_path: null
+  device: cuda
+  strict_json: true
+  backend: showo_mmu
+  max_new_tokens: 192
+  abstain_on_parse_error: true
+
+selector:
+  name: grid_semantic
+  max_selected_cells: 6
+  min_confidence: 0.0
+
+tracing:
+  enabled: true
+  save_hidden_states: false
+  save_confidence_maps: true

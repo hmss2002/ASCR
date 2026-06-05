@@ -6,4 +6,4 @@ Current local checkout:
 
 - `external/Show-o/`: shallow clone of `https://github.com/showlab/Show-o.git` for local Stage 1 generator integration.
 
-Use `scripts/download_showo.sh` to recreate the checkout and download model snapshots into `models/`.
+Use `scripts/setup/download_showo.sh` to recreate the checkout and download model snapshots into `models/`.
