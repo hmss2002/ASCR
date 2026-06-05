@@ -7,9 +7,9 @@ from ascr.evaluators.qwen_vl_token import QwenVLTokenEvaluator
 from ascr.evaluators.showo_mmu import ShowOMMUEvaluator
 
 
-SHOWO_BACKENDS = {"showo_mmu", "showo-mmu", "showo_vlm", "showo-vlm"}
-QWEN_BACKENDS = {"qwen", "qwen_vl", "qwen-vl", "qwen3_6", "qwen3.6", "qwen36", "qwen3_6_vl", "qwen3.6-vl"}
-QWEN_TOKEN_BACKENDS = {"qwen_vl_token", "qwen-vl-token", "qwen_token", "qwen-token", "qwen3_6_token", "qwen36_token"}
+SHOWO_BACKENDS = {"showo", "showo_mmu", "showo-mmu"}
+QWEN_BACKENDS = {"qwen", "qwen_vl", "qwen-vl"}
+QWEN_TOKEN_BACKENDS = {"qwen_vl_token", "qwen-vl-token", "qwen_token", "qwen-token"}
 MMADA_SELF_BACKENDS = {"mmada_self", "mmada-self", "mmada", "mmada_mmu", "mmada-mmu"}
 MMADA_SELF_COARSE_BACKENDS = {"mmada_self_coarse", "mmada-self-coarse", "mmada_coarse", "mmada-coarse"}
 

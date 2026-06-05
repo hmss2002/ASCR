@@ -19,7 +19,8 @@
 #   NUM_SHARDS   Default 8
 
 set -euo pipefail
-cd /grp01/cds_bdai/JianyuZhang/ASCR
+PROJECT_ROOT=${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.."; pwd)}
+cd "$PROJECT_ROOT"
 mkdir -p logs
 
 source "${ASCR_ENV:-.venv-qwen36}/bin/activate"

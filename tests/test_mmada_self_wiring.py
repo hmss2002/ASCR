@@ -5,6 +5,7 @@ from pathlib import Path
 
 from ascr.evaluators.mmada_self import MMaDASelfEvaluator, _looks_like_match, _parse_cells_from_text
 from ascr.evaluators.registry import build_evaluator
+from ascr.generators.lumina_dimoo import LuminaAdapter
 from ascr.generators.mmada import MMaDAAdapter
 from ascr.generators.mmada_native import MMaDANativeEngine
 from ascr.generators.registry import build_generator
@@ -63,6 +64,18 @@ class _FakeEngine:
 
 
 class MMaDARegistryTests(unittest.TestCase):
+    def test_registry_builds_lumina_generator_without_load(self):
+        config = {
+            "token_grid_size": 64,
+            "image_size": 1024,
+            "generator": {"name": "lumina", "checkpoint_path": "models/lumina-dimoo"},
+        }
+        generator = build_generator("lumina", config)
+        self.assertIsInstance(generator, LuminaAdapter)
+        self.assertEqual(generator.token_grid_size, 64)
+        self.assertEqual(generator.image_size, 1024)
+        self.assertIsNone(generator._engine)
+
     def test_registry_builds_generator_without_load(self):
         config = {"token_grid_size": 32, "image_size": 512, "generator": {"name": "mmada"}}
         generator = build_generator("mmada", config)

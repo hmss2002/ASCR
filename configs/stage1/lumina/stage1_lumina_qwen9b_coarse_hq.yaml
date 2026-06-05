@@ -22,7 +22,7 @@ generator:
 
 evaluator:
   name: qwen_vl
-  backend: qwen3_6
+  backend: qwen_vl
   model_path: models/qwen3.5-9b
   device: cuda
   device_map: null

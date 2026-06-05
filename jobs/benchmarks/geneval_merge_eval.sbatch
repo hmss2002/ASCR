@@ -14,7 +14,8 @@
 #   ARRAY_RUN_ROOT  - the shared parent directory from the generation jobs
 
 set -euo pipefail
-cd /grp01/cds_bdai/JianyuZhang/ASCR
+PROJECT_ROOT=${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.."; pwd)}
+cd "$PROJECT_ROOT"
 mkdir -p logs
 
 export ASCR_ENV=${ASCR_ENV:-.venv-qwen36}

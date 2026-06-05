@@ -8,7 +8,8 @@
 #   N_SHARDS     - number of parallel shard jobs (default: 8)
 
 set -euo pipefail
-cd /grp01/cds_bdai/JianyuZhang/ASCR
+PROJECT_ROOT=${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.."; pwd)}
+cd "$PROJECT_ROOT"
 mkdir -p logs
 
 PROMPT_FILE="${PROMPT_FILE:-configs/benchmarks/prompts/bench3_combined.txt}"

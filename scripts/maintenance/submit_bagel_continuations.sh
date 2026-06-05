@@ -8,7 +8,8 @@
 # Can be run repeatedly; jobs that are already queued won't be re-submitted.
 
 set -euo pipefail
-cd /grp01/cds_bdai/JianyuZhang/ASCR
+PROJECT_ROOT=${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.."; pwd)}
+cd "$PROJECT_ROOT"
 mkdir -p logs
 
 BENCH_RUN_ROOT="${BENCH_RUN_ROOT:-outputs/bench3_bagel_20260522_193546}"

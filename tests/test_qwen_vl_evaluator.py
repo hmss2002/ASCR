@@ -146,19 +146,19 @@ class QwenVLEvaluatorHelpersTest(unittest.TestCase):
         self.assertEqual(evaluator._model_max_memory(torch), {0: "40GiB", 1: "40GiB"})
 
     def test_registry_passes_qwen_max_memory(self):
-        evaluator = build_evaluator("qwen", {"coarse_grid_size": 4, "image_size": 512, "evaluator": {"model_path": "Qwen/Qwen3.6-35B-A3B", "max_memory": "39GiB"}})
+        evaluator = build_evaluator("qwen", {"coarse_grid_size": 4, "image_size": 512, "evaluator": {"model_path": "Qwen/Qwen3.5-9B", "max_memory": "39GiB"}})
         self.assertIsInstance(evaluator, QwenVLEvaluator)
         self.assertEqual(evaluator.max_memory, "39GiB")
 
     def test_registry_accepts_qwen_backend(self):
-        evaluator = build_evaluator("local_vlm", {"coarse_grid_size": 4, "image_size": 512, "evaluator": {"backend": "qwen3_6", "model_path": "Qwen/Qwen3.6-35B-A3B"}})
+        evaluator = build_evaluator("local_vlm", {"coarse_grid_size": 4, "image_size": 512, "evaluator": {"backend": "qwen_vl", "model_path": "Qwen/Qwen3.5-9B"}})
         self.assertIsInstance(evaluator, QwenVLEvaluator)
-        self.assertEqual(evaluator.model_path, "Qwen/Qwen3.6-35B-A3B")
+        self.assertEqual(evaluator.model_path, "Qwen/Qwen3.5-9B")
         self.assertFalse(evaluator.processor_use_fast)
         self.assertTrue(evaluator.enable_thinking)
 
     def test_registry_can_disable_qwen_thinking(self):
-        evaluator = build_evaluator("local_vlm", {"coarse_grid_size": 4, "image_size": 512, "evaluator": {"backend": "qwen3_6", "model_path": "Qwen/Qwen3.6-35B-A3B", "enable_thinking": False, "repair_max_new_tokens": 512}})
+        evaluator = build_evaluator("local_vlm", {"coarse_grid_size": 4, "image_size": 512, "evaluator": {"backend": "qwen_vl", "model_path": "Qwen/Qwen3.5-9B", "enable_thinking": False, "repair_max_new_tokens": 512}})
         self.assertIsInstance(evaluator, QwenVLEvaluator)
         self.assertFalse(evaluator.enable_thinking)
         self.assertEqual(evaluator.repair_max_new_tokens, 512)

@@ -13,7 +13,6 @@ setup(
             "ascr-stage1-mmada-self-coarse=ascr.cli.run_stage1_mmada_self_coarse:main",
             "ascr-compare-stage1-variants=ascr.cli.compare_stage1_variants:main",
             "ascr-compare-showo=ascr.cli.compare_showo_ascr:main",
-            "ascr-train-selector=ascr.training.train_selector:main",
         ]
     },
 )

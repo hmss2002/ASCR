@@ -2,9 +2,12 @@
 # Re-run all 9 bench3 eval tasks using google/gemini-3-flash-preview.
 # Runs on the login node (requires outbound internet).
 # Usage: bash scripts/maintenance/rerun_bench3_gemini.sh
-# Must be run from /grp01/cds_bdai/JianyuZhang/ASCR with venv active.
+# Run from any checkout; the script resolves the repository root automatically.
 
 set -e
+PROJECT_ROOT=${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.."; pwd)}
+cd "$PROJECT_ROOT"
+
 export OFOX_API_KEY="sk-of-bTORRveHyXdWZyGqRbgddEJDJuAPVPpnIlTPNMKCxJiygQDvvtWlhjJBZglXzihp"
 MODEL="google/gemini-3-flash-preview"
 WORKERS=30

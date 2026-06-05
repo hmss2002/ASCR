@@ -13,8 +13,8 @@ _QWEN35_MOE_NATIVE_MODEL = "Qwen3_5MoeForConditionalGeneration"
 
 def _qwen35_moe_native_error(detail=None):
     message = (
-        "Qwen3.6 qwen3_5_moe checkpoints require native Transformers support. "
-        "Use the .venv-qwen36 environment with Python 3.11, torch>=2.4, matching torchvision, "
+        "Qwen3.5 qwen3_5_moe checkpoints require native Transformers support. "
+        "Use the .venv-qwen36 environment (legacy local name) with Python 3.11, torch>=2.4, matching torchvision, "
         "and Transformers from the official Qwen3.5 support commit fc9137225 or newer."
     )
     if detail:
@@ -44,7 +44,7 @@ def _resolve_qwen_model_class(config, auto_model_class):
     except Exception as exc:
         raise RuntimeError(_qwen35_moe_native_error("could not verify torchvision availability for the Qwen3VL processor")) from exc
     if not is_torchvision_available():
-        raise RuntimeError(_qwen35_moe_native_error("torchvision is required for the Qwen3VL video processor used by Qwen3.6"))
+        raise RuntimeError(_qwen35_moe_native_error("torchvision is required for the Qwen3VL video processor used by Qwen3.5"))
     return Qwen3_5MoeForConditionalGeneration
 
 

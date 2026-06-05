@@ -16,7 +16,8 @@
 #   OFOX_API_KEY    - ofox.ai API key for GPT-5.5
 
 set -euo pipefail
-cd /grp01/cds_bdai/JianyuZhang/ASCR
+PROJECT_ROOT=${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.."; pwd)}
+cd "$PROJECT_ROOT"
 mkdir -p logs
 
 SHOWO_RUN_ROOT="${SHOWO_RUN_ROOT:?Must set SHOWO_RUN_ROOT}"

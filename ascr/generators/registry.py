@@ -2,14 +2,32 @@ from ascr.generators.base import MockGeneratorAdapter
 from ascr.generators.showo import ShowOAdapter
 
 
+def _generator_config(config):
+    return (config or {}).get('generator', config or {})
+
+
 def build_generator(name, config):
     name = (name or 'mock').lower()
     config = config or {}
     if name == 'mock':
         return MockGeneratorAdapter(token_grid_size=int(config.get('token_grid_size', 16)), image_size=int(config.get('image_size', 256)))
+    if name == 'lumina':
+        from ascr.generators.lumina_dimoo import LuminaAdapter
+        generator_config = _generator_config(config)
+        return LuminaAdapter(
+            repo_path=generator_config.get('repo_path'),
+            checkpoint_path=generator_config.get('checkpoint_path'),
+            device=generator_config.get('device', 'cuda'),
+            token_grid_size=int(config.get('token_grid_size', generator_config.get('token_grid_size', 64))),
+            image_size=int(config.get('image_size', generator_config.get('image_size', 1024))),
+            guidance_scale=float(generator_config.get('guidance_scale', 4.0)),
+            generation_timesteps=int(generator_config.get('generation_timesteps', 64)),
+            temperature=float(generator_config.get('temperature', 1.0)),
+            seed=int(config.get('seed', generator_config.get('seed', 1234))),
+        )
     if name == 'mmada':
         from ascr.generators.mmada import MMaDAAdapter
-        generator_config = config.get('generator', config)
+        generator_config = _generator_config(config)
         return MMaDAAdapter(
             repo_path=generator_config.get('repo_path'),
             checkpoint_path=generator_config.get('checkpoint_path'),
@@ -23,7 +41,7 @@ def build_generator(name, config):
             max_seq_length=int(generator_config.get('max_seq_length', 512)),
         )
     if name == 'showo':
-        generator_config = config.get('generator', config)
+        generator_config = _generator_config(config)
         return ShowOAdapter(
             repo_path=generator_config.get('repo_path'),
             checkpoint_path=generator_config.get('checkpoint_path'),

@@ -4,7 +4,8 @@
 # available GPU nodes (gpu + gpu_shared partitions), then chains a
 # merge+evaluate job.
 set -euo pipefail
-cd /grp01/cds_bdai/JianyuZhang/ASCR
+PROJECT_ROOT=${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.."; pwd)}
+cd "$PROJECT_ROOT"
 mkdir -p logs
 
 # ── config ──────────────────────────────────────────────────────────────────

@@ -2,7 +2,8 @@
 # Run after stage1_geneval_generate_8gpu.sbatch (job 68794) finishes successfully.
 # Discovers the new RUN_ROOT and submits 3 scoring jobs (ShowO50/ASCR50/BAGEL).
 set -euo pipefail
-cd /grp01/cds_bdai/JianyuZhang/ASCR
+PROJECT_ROOT=${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.."; pwd)}
+cd "$PROJECT_ROOT"
 
 GEN_JOB=${GEN_JOB:?GEN_JOB env var required (numeric jobid of geneval-gen-8gpu)}
 

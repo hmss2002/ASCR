@@ -17,7 +17,8 @@
 # NODE_INDEX / NODE_COUNT for global prompt sharding.
 
 set -uo pipefail
-cd /grp01/cds_bdai/JianyuZhang/ASCR
+PROJECT_ROOT=${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.."; pwd)}
+cd "$PROJECT_ROOT"
 mkdir -p logs
 
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 TOKENIZERS_PARALLELISM=false

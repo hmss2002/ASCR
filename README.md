@@ -167,6 +167,17 @@ Primary files:
 | Core loop | `ascr/core/loop.py` |
 | Qwen evaluator | `ascr/evaluators/qwen_vl.py` |
 
+The generic Stage-1 CLI is also Lumina-first:
+
+```bash
+python -m ascr.cli.run_stage1 \
+    --config configs/stage1/lumina/stage1_lumina_qwen9b_coarse_hq.yaml \
+    --prompt "A green bench and a blue bowl"
+```
+
+For dependency-free smoke checks, use `--dry-run`; that is the only mode that intentionally forces
+mock generator/evaluator defaults.
+
 ### 6.2 Preserved comparison lines
 
 | Track | Purpose | Key paths |
@@ -221,7 +232,7 @@ Implementation rules:
 | `jobs/stage1/variants/` | Direct-token / cap-sweep / variant generation jobs |
 | `jobs/benchmarks/` | GenEval, BAGEL, and benchmark generation/scoring jobs |
 | `jobs/judges/` | Judge-only Slurm jobs |
-| `jobs/training/` | Stage-2 training jobs |
+| `jobs/training/` | Stage-2 placeholders; selector training is not implemented yet |
 
 ### Scripts
 
@@ -250,6 +261,9 @@ traceability but should not be treated as current guidance.
 Use dedicated virtual environments rather than the base server environment. Different model
 families may require incompatible dependency stacks, especially where MMaDA and Qwen remote code
 or transformer versions conflict.
+
+The `.venv-qwen36` name appears in several jobs as a legacy local environment name, but the current
+evaluator path is Qwen3.5-9B via `qwen_vl`.
 
 ### Runtime setup paths
 

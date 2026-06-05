@@ -5,7 +5,8 @@
 #   COMPLETED_JIDS     - colon-separated IDs of already-completed shard jobs (for merge dependency)
 #   SLICES             - space-separated shard indices to resubmit (e.g. "5 6 7")
 set -euo pipefail
-cd /grp01/cds_bdai/JianyuZhang/ASCR
+PROJECT_ROOT=${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.."; pwd)}
+cd "$PROJECT_ROOT"
 
 ARRAY_RUN_ROOT="${ARRAY_RUN_ROOT:?Must set ARRAY_RUN_ROOT to the bench3 ShowO run directory}"
 COMPLETED_JIDS="${COMPLETED_JIDS:?Must set COMPLETED_JIDS to colon-separated IDs of completed shard jobs}"

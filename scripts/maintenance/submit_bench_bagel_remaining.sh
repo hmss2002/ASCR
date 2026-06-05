@@ -8,7 +8,8 @@
 #   SLICES="5 6 7" \
 #   bash scripts/maintenance/submit_bench_bagel_remaining.sh
 set -euo pipefail
-cd /grp01/cds_bdai/JianyuZhang/ASCR
+PROJECT_ROOT=${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.."; pwd)}
+cd "$PROJECT_ROOT"
 
 BENCH_RUN_ROOT="${BENCH_RUN_ROOT:?Must set BENCH_RUN_ROOT to the bench3 BAGEL run directory}"
 PROMPT_FILE="${PROMPT_FILE:-configs/benchmarks/prompts/bench3_combined.txt}"

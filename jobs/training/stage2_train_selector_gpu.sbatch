@@ -8,8 +8,12 @@
 #SBATCH --error=logs/%x-%j.err
 
 set -euo pipefail
-cd /grp01/cds_bdai/JianyuZhang/ASCR
+PROJECT_ROOT=${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.."; pwd)}
+cd "$PROJECT_ROOT"
 mkdir -p logs checkpoints
+
+echo "Stage-2 selector training is not implemented yet; this job is a placeholder." >&2
+exit 2
 
 ASCR_ENV=${ASCR_ENV:-.venv-qwen36}
 if [[ ! -x "$ASCR_ENV/bin/python" ]]; then
