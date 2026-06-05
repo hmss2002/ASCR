@@ -251,6 +251,23 @@ Use dedicated virtual environments rather than the base server environment. Diff
 families may require incompatible dependency stacks, especially where MMaDA and Qwen remote code
 or transformer versions conflict.
 
+### Runtime setup paths
+
+Several paths referenced by configs and adapters are **runtime setup outputs**, not files expected
+to be tracked by Git:
+
+| Path | Meaning | How it is created |
+| --- | --- | --- |
+| `external/Show-o/` | Local Show-o source checkout for legacy/comparison paths | `bash scripts/setup/download_showo.sh` |
+| `external/MMaDA/` | Local MMaDA source checkout for MMaDA experiments | manual/local cluster checkout; override with `repo_path` in MMaDA configs |
+| `models/lumina-dimoo` | Lumina-DiMOO local model snapshot/cache | cluster model download/cache setup |
+| `models/qwen3.5-9b` | Qwen evaluator local model snapshot/cache | cluster model download/cache setup |
+| `models/show-o-512x512`, `models/phi-1_5`, `models/magvitv2` | Show-o legacy stack models | `bash scripts/setup/download_showo.sh` or local model cache |
+| `models/mmada-8b-mixcot` | MMaDA local model snapshot/cache | local model download/cache setup |
+
+These directories are intentionally ignored by Git. If a workflow fails because one of them is
+missing, create the required local checkout/model cache instead of committing it.
+
 Do not commit:
 
 - model weights;
@@ -269,9 +286,18 @@ be tracked.
 Useful checks:
 
 ```bash
-python -m unittest discover -s tests
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python -m unittest discover -s tests
 python -m ascr.cli.run_stage1 --help
 python -m ascr.cli.compare_stage1_variants --help
+```
+
+Reference checks used after repository reorganizations:
+
+```bash
+rg 'configs/(prompts|benchmark_data|stage1_lumina|stage1_showo|stage1_mmada8b|cluster_gpu|showo_local_512x512)' \
+  README.md ascr configs jobs scripts data external
+rg 'jobs/(geneval_gen_shard|geneval_merge_eval|stage1_t2i_compbench|stage1_hard64_variant_gen|stage1_geneval_score_single|bench_bagel_gen_shard)\.sbatch' \
+  README.md ascr configs jobs scripts data external
 ```
 
 Before committing structural changes:

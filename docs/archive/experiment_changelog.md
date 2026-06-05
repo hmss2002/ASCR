@@ -1,5 +1,8 @@
 # ASCR Experiment Changelog
 
+> Archive note: this file is a historical experiment log. Current project structure and run paths
+> are documented in the root [`../../README.md`](../../README.md).
+
 Dated experiment narratives, latest first. The canonical repository entry point is now
 [`../../README.md`](../../README.md). This file holds the dated experiment record, while the
 former oversized root control document is preserved at

@@ -1,5 +1,9 @@
 # Repository Guide
 
+> Archive note: this guide has been superseded by the root [`../../../README.md`](../../../README.md).
+> Internal links and paths below are preserved as historical context and may not match the current
+> repository layout.
+
 This document is the practical map of the current repository. For the integrated project
 explanation that combines the paper framing, workflow blueprint, and repository reality, start
 with [`../ascr_master_guide.md`](../ascr_master_guide.md).

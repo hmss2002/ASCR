@@ -1,5 +1,9 @@
 # ASCR Master Guide
 
+> Archive note: this guide has been superseded by the root [`../../../README.md`](../../../README.md).
+> Internal links and paths below are preserved as historical context and may not match the current
+> repository layout.
+
 This document is the integrated project guide for ASCR. It combines the roles that were
 previously split across the root README, the archived project-control README, and the two
 English blueprint documents:

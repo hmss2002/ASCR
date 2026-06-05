@@ -1,5 +1,8 @@
 # Stage 1 Design Notes
 
+> Archive note: this guide has been superseded by the root [`../../../README.md`](../../../README.md).
+> The ASCR logic is preserved there in current Lumina-first form.
+
 Stage 1 validates ASCR with a zero-training interface. The grid and JSON exchange are engineering devices for the first prototype, while the method object is selective semantic reopening.
 
 ## Required Properties

@@ -91,8 +91,7 @@ pretrained/
 *.avi
 
 # Keep source planning docs and hand-written docs trackable
-!ASCR_Paper_Blueprint_EN.docx
-!ASCR_Workflow_Playbook_EN.docx
+!docs/archive/blueprints/*.docx
 !docs/**/*.md
 !data/README.md
 

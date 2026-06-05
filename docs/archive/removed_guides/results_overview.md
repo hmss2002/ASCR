@@ -1,5 +1,8 @@
 # Results Overview
 
+> Archive note: this guide has been superseded by the root [`../../../README.md`](../../../README.md).
+> Current result artifacts live under `docs/results/`.
+
 This file collects the key machine-readable result artifacts so the root `docs/` directory is
 easier to navigate.
 
