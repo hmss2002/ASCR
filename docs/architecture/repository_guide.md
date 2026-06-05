@@ -1,6 +1,8 @@
 # Repository Guide
 
-This document is the practical map of the current repository.
+This document is the practical map of the current repository. For the integrated project
+explanation that combines the paper framing, workflow blueprint, and repository reality, start
+with [`../ascr_master_guide.md`](../ascr_master_guide.md).
 
 ## 1. Mainline vs preserved experiment lines
 

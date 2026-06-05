@@ -4,7 +4,9 @@ ASCR (Alternating Semantic-Confidence Revision) is a research codebase for selec
 
 **Current mainline:** **Lumina-DiMOO + Qwen3.5-9B coarse selector** is now the recommended Stage-1 path. **Show-o** and **MMaDA-8B** remain in the repository as preserved comparison and legacy experiment lines.
 
-This root `README.md` is now the **canonical entry point**. The other README files are only local notes for special directories:
+This root `README.md` is now the **short front page**. The fully integrated long-form project
+document is [`docs/ascr_master_guide.md`](docs/ascr_master_guide.md). The other README files are
+only local notes for special directories:
 
 - `data/README.md` - git-ignored datasets and generated payloads
 - `external/README.md` - local third-party checkouts needed on the cluster
@@ -13,6 +15,7 @@ This root `README.md` is now the **canonical entry point**. The other README fil
 
 | Need | Recommended entry |
 | --- | --- |
+| Integrated project guide | [`docs/ascr_master_guide.md`](docs/ascr_master_guide.md) |
 | Current repo map | [`docs/architecture/repository_guide.md`](docs/architecture/repository_guide.md) |
 | Stage-1 design principles | [`docs/architecture/stage1_design.md`](docs/architecture/stage1_design.md) |
 | Key result artifacts | [`docs/results_overview.md`](docs/results_overview.md) |
@@ -55,5 +58,6 @@ The code is already modular under `ascr/`, but the operational assets grew histo
 ## Notes on the cleanup
 
 - No historical experiment assets were deleted.
-- Large historical narrative was moved out of the root README into the archive and changelog docs.
+- Long-form narrative, blueprint framing, and workflow material are now integrated in `docs/ascr_master_guide.md`.
+- Historical material remains preserved in the archive and changelog docs.
 - The next cleanup target, if needed, is the flat `configs/` / `jobs/` / `scripts/` layout; for now the repository guide provides the stable navigation layer without breaking existing paths.
