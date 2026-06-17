@@ -739,3 +739,87 @@ Problems / blockers:
 
 Next action requested:
 - if the Slurm path is required, inspect compute-node network egress / proxy policy for OFOX access and retry the same wrapper after confirming the batch environment can reach `https://api.ofox.ai/v1`.
+
+## 2026-06-18 05:08 HKT - server AI
+
+Context:
+- Machine: HKU AI server login node hpcr4300a; diagnostics also ran on compute nodes `SPGL-1-12` and `SPGL-1-17`
+- Branch before: main
+- Commit before: 65d961d6013bbf42eb82155ec84998730713d7a8
+- Branch after: main
+- Commit after: pending pushed log update carrying this entry
+
+Files changed:
+- docs/AI_COLLAB_LOG.md: appended the network root-cause investigation and the recommended operational split between login-node API work and compute-node downstream training
+
+Commands run:
+- login node diagnostics: `curl -I https://api.ofox.ai/v1`, unauthenticated `curl` POST to `/chat/completions`, `openssl s_client -connect api.ofox.ai:443 -servername api.ofox.ai -brief`, and a Python `httpx`/OpenAI-client probe
+  Result: passed on login node
+  Notes: login node resolved `api.ofox.ai`, completed TLS validation, and reached the OFOX gateway; the only API-level anomaly there remained the known qwen empty-content probe behavior.
+- `sbatch` diagnostics on `SPGL-1-12` and `SPGL-1-17` using `ofox_netdiag.sh`
+  Result: passed as diagnostics, but exposed compute-node network failure
+  Notes: both compute nodes failed hostname resolution for `api.ofox.ai`; `curl`, `httpx`, and the OpenAI client all bottomed out at name-resolution failure, which is what earlier surfaced as `openai.APIConnectionError: Connection error.` in job `70680`.
+- resolver/route checks: `ip route get 47.83.144.71`, `ip route get 147.8.2.254`, and `curl --resolve api.ofox.ai:443:47.83.144.71 https://api.ofox.ai/v1` on compute nodes
+  Result: failed on compute nodes
+  Notes: `SPGL-1-12` reported `RTNETLINK answers: Network is unreachable` for both the OFOX public IP and the configured DNS server; `SPGL-1-17` also failed even when DNS was bypassed with `curl --resolve`, so this is not just a missing resolver entry.
+
+Environment:
+- python: login node and compute diagnostics used Python 3.11.15 from `.venv-qwen36`; system Python 3.9.25 also present
+- torch: unchanged from earlier entries; not relevant to the network root cause
+- cuda: unchanged from earlier entries; not relevant to the network root cause
+- active env: `.venv-qwen36` for Python-side network probes
+- important env vars set/unset, without values: `OFOX_API_KEY` remained shell-only and was present for the diagnostic OpenAI probe; no HTTP(S) proxy env vars were set on login or compute nodes during these checks
+
+Server jobs:
+- job id: 70681
+- mode: Slurm network diagnostics on original failure node
+- command: batch execution of `ofox_netdiag.sh` pinned to `SPGL-1-12`
+- output dir: n/a
+- stdout log: `logs/ofox-netdiag-70681.out`
+- stderr log: `logs/ofox-netdiag-70681.err`
+- status: COMPLETED; diagnostics captured DNS failure and OpenAI/httpx `ConnectError`
+- job id: 70682
+- mode: Slurm network diagnostics on an unpinned GPU node
+- command: batch execution of `ofox_netdiag.sh`
+- output dir: n/a
+- stdout log: `logs/ofox-netdiag-70682.out`
+- stderr log: `logs/ofox-netdiag-70682.err`
+- status: COMPLETED on `SPGL-1-12`; matched the same DNS failure pattern
+- job id: 70683
+- mode: Slurm resolver inspection on second node
+- command: inspect `/etc/resolv.conf`, `nsswitch`, and hostname resolution pinned to `SPGL-1-17`
+- output dir: n/a
+- stdout log: `logs/ofox-resolv-70683.out`
+- stderr log: `logs/ofox-resolv-70683.err`
+- status: COMPLETED; resolver config file exists but hostname resolution still fails
+- job id: 70684
+- mode: Slurm DNS-bypass connectivity test on second node
+- command: `curl --resolve ...` and `openssl s_client` pinned to `SPGL-1-17`
+- output dir: n/a
+- stdout log: `logs/ofox-resolve-bypass-70684.out`
+- stderr log: `logs/ofox-resolve-bypass-70684.err`
+- status: FAILED as a connectivity test; raw IP + SNI path still reports `Network is unreachable`
+- job id: 70685
+- mode: Slurm route inspection on original failure node
+- command: `ip route get` for OFOX IP and DNS server plus `curl --resolve` pinned to `SPGL-1-12`
+- output dir: n/a
+- stdout log: `logs/ofox-route-70685.out`
+- stderr log: `logs/ofox-route-70685.err`
+- status: COMPLETED; explicitly showed `Network is unreachable`
+
+Results:
+- summary: yes, the correct operational split is to do **all OFOX-dependent teacher work on the login node**, then let compute nodes consume the produced files for **non-API downstream work only**. This is already viable because the login node has produced and refreshed `outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/{localization_labels,quality_labels,manifest,audit,dataset,dataset_manifest}.json*`.
+- what was done already: the login node completed the repaired qwen3.7 compact teacher distill rerun, repaired `p037:i000` and `p037:i001`, re-ran audit/export, and refreshed the lightweight `cell-prior` baseline artifacts under `outputs/stage2_baselines/cell_prior_qwen37/`.
+- practical plan from here:
+  - **login node**: run `python scripts/distill/api_probe.py --allow-empty-content`, `LIMIT=64 ... bash scripts/distill/run_teacher_distill.sh`, `python -m ascr.distill.audit`, and `python -m ascr.distill.export_dataset` whenever OFOX-backed teacher data must be created or repaired;
+  - **compute nodes / Slurm**: consume `outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl` for downstream work that does not call OFOX, such as `python -m ascr.training.train_selector --task cell-prior ...`, and any future Stage-2 selector training once that path exists;
+  - **do not** use `jobs/distill/api_teacher_distill.sbatch` again until compute-node DNS / egress or proxy policy is fixed.
+- important logs for the root cause: `logs/ofox-netdiag-login-20260618050338.out`, `logs/ofox-netdiag-70681.out`, `logs/ofox-resolv-70683.err`, `logs/ofox-resolve-bypass-70684.err`, `logs/ofox-route-70685.out`
+
+Problems / blockers:
+- compute nodes currently cannot resolve `api.ofox.ai` and also lack a working route to the OFOX public IP and the configured DNS servers, so the API teacher Slurm wrapper cannot succeed in the current cluster network posture.
+- the present downstream training path in-tree is still the lightweight `cell-prior` baseline; this split does not magically provide the full Stage-2 neural/DDP trainer, it only cleanly separates OFOX-dependent data generation from OFOX-free dataset consumption.
+
+Next action requested:
+- use the login node for future OFOX teacher-data repairs / refreshes.
+- if Slurm is needed, submit only compute-local downstream jobs that read the already exported dataset, or first get cluster admins to provide compute-node egress / proxy access for `api.ofox.ai`.
