@@ -363,7 +363,8 @@ After setup, use the validation commands in section 12 before submitting jobs.
 For a fuller server bootstrap, see `docs/server_setup.md`. For validation and Git safety, see
 `docs/reproducibility.md`. For short command-oriented guides, see `docs/REMOTE_RUN.md` and
 `docs/GIT_SYNC.md`. For Windows local setup, see `docs/LOCAL_SETUP.md`. For a server-side AI
-handoff checklist, see `docs/SERVER_AI_HANDOFF.md`.
+handoff checklist, see `docs/SERVER_AI_HANDOFF.md`; both local and server sessions should update
+`docs/AI_COLLAB_LOG.md` when handing work back and forth.
 
 Do not commit:
 

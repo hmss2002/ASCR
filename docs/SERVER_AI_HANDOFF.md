@@ -2,14 +2,21 @@
 
 This file is for an AI assistant or shell session running on the university GPU
 server. The local repository has been hardened and pushed to GitHub. The server
-copy should sync to the latest `main` and then validate the local server
-environment.
+copy should sync to the latest `main`, validate the local server environment,
+run the requested smoke/full jobs, and record detailed results for the local
+Codex session to inspect next.
+
+Important: after you finish, append a detailed entry to `docs/AI_COLLAB_LOG.md`.
+That log is the shared notebook between the local Codex session and the
+server-side assistant. The human will pass your log entry back to local Codex,
+so include enough detail for local Codex to understand exactly what happened
+without SSH access.
 
 ## Current Git Target
 
 - Repository: https://github.com/hmss2002/ASCR.git
 - Branch: main
-- Expected minimum commit: d7416cd3e81b787dc417bc1c9561f091428141d1
+- Expected minimum commit: 4a12e963911c4bb05a3853da22627288703bfb85
 
 ## Sync The Server Checkout
 
@@ -32,7 +39,7 @@ git checkout main
 git rev-parse HEAD
 ```
 
-Confirm that `git rev-parse HEAD` is `d7416cd3e81b787dc417bc1c9561f091428141d1`
+Confirm that `git rev-parse HEAD` is `4a12e963911c4bb05a3853da22627288703bfb85`
 or newer.
 
 ## Check Server Dependencies
@@ -99,7 +106,8 @@ not implemented as a runnable DDP training pipeline.
 
 ## Report Back
 
-Report:
+Append a detailed entry to `docs/AI_COLLAB_LOG.md`, then report the same
+information to the human. The report must include:
 
 1. `git rev-parse HEAD`
 2. `python --version`
@@ -107,3 +115,13 @@ Report:
 4. whether preflight passed
 5. any missing model/checkpoint/repo path
 6. Slurm job ids and output log paths
+7. exact commands run and whether each passed, failed, or was skipped
+8. files changed, if any, and why
+9. output directories and important result files created
+10. warnings/errors that local Codex should inspect next
+
+If you modify files on the server, run validation, commit the changes, and push
+them to GitHub only if they are safe to sync. Never commit secrets, model
+weights, checkpoints, generated outputs, local caches, Slurm logs, datasets, or
+virtual environments. If you are unsure whether a server-side change should be
+committed, leave it uncommitted and describe it in `docs/AI_COLLAB_LOG.md`.
