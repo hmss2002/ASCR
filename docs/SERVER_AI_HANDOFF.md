@@ -79,6 +79,8 @@ For API teacher distillation, also set:
 ```bash
 export OFOX_BASE_URL=${OFOX_BASE_URL:-https://api.ofox.ai/v1}
 export ASCR_TEACHER_MODEL=${ASCR_TEACHER_MODEL:-bailian/qwen3.7-plus}
+export ASCR_TEACHER_QUALITY_MAX_TOKENS=${ASCR_TEACHER_QUALITY_MAX_TOKENS:-2048}
+export ASCR_TEACHER_LOCALIZATION_MAX_TOKENS=${ASCR_TEACHER_LOCALIZATION_MAX_TOKENS:-2048}
 ```
 
 ## Validate
@@ -127,8 +129,24 @@ Run the first 64-sample teacher pass:
 
 ```bash
 LIMIT=64 OUT_ROOT=outputs/lumina_qwen_hard64 \
-DISTILL_OUT=outputs/teacher_distill/hard64_lumina_qwen \
+DISTILL_OUT=outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact \
 bash scripts/distill/run_teacher_distill.sh
+```
+
+Audit, export, and run the baseline:
+
+```bash
+python -m ascr.distill.audit \
+  --distill-dir outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact
+
+python -m ascr.distill.export_dataset \
+  --distill-dir outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact \
+  --output outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl
+
+python -m ascr.training.train_selector \
+  --task cell-prior \
+  --dataset outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl \
+  --output-dir outputs/stage2_baselines/cell_prior_qwen37
 ```
 
 If policy requires batch execution, submit:
@@ -141,6 +159,19 @@ sbatch --export=ALL,OFOX_API_KEY,ASCR_TEACHER_MODEL=bailian/qwen3.7-plus,LIMIT=6
 If the compute node cannot reach the API, record the failure in
 `docs/AI_COLLAB_LOG.md` and rerun the non-Slurm command on the login node if
 that is permitted by server policy.
+
+For this teacher/distill handoff, push the detailed update to GitHub after
+validation. It is acceptable to force-add the small JSON outputs listed below,
+but do not add images, logs, checkpoints, model weights, caches, `.env`, or API
+keys:
+
+```bash
+git add -f outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/*.json*
+git add -f outputs/stage2_baselines/cell_prior_qwen37/*.json*
+git add docs/AI_COLLAB_LOG.md
+git commit -m "Add qwen3.7 compact teacher distill results"
+git push
+```
 
 Current multi-GPU support is Stage-1 single-node prompt sharding with paired
 worker processes. It is not `torchrun` DDP. Stage-2 training is scaffolded but

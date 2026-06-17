@@ -13,6 +13,8 @@ or scheduler environment:
 export OFOX_API_KEY='<your-ofox-api-key>'
 export OFOX_BASE_URL='https://api.ofox.ai/v1'
 export ASCR_TEACHER_MODEL='bailian/qwen3.7-plus'
+export ASCR_TEACHER_QUALITY_MAX_TOKENS=2048
+export ASCR_TEACHER_LOCALIZATION_MAX_TOKENS=2048
 ```
 
 PowerShell:
@@ -21,6 +23,8 @@ PowerShell:
 $env:OFOX_API_KEY="<your-ofox-api-key>"
 $env:OFOX_BASE_URL="https://api.ofox.ai/v1"
 $env:ASCR_TEACHER_MODEL="bailian/qwen3.7-plus"
+$env:ASCR_TEACHER_QUALITY_MAX_TOKENS="2048"
+$env:ASCR_TEACHER_LOCALIZATION_MAX_TOKENS="2048"
 ```
 
 ## Inputs
@@ -72,7 +76,27 @@ bash scripts/distill/run_teacher_distill.sh
 ```
 
 The command resumes existing JSONL outputs by `sample_id`. Failed samples are
-written to `errors.jsonl`.
+written to `errors.jsonl`. The default prompt mode is compact JSON-only output,
+which is required for `bailian/qwen3.7-plus`.
+
+## Audit, Export, And Baseline
+
+```bash
+python -m ascr.distill.audit \
+  --distill-dir outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact
+
+python -m ascr.distill.export_dataset \
+  --distill-dir outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact \
+  --output outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl
+
+python -m ascr.training.train_selector \
+  --task cell-prior \
+  --dataset outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl \
+  --output-dir outputs/stage2_baselines/cell_prior_qwen37
+```
+
+`cell-prior` is a lightweight baseline only. It does not implement the Stage-2
+learned selector model or DDP training.
 
 ## Slurm
 
@@ -87,3 +111,6 @@ The Slurm job runs `scripts/distill/api_probe.py` first. If the compute node
 cannot reach the API, the job fails before main labeling. If compute nodes have
 no network, run `scripts/distill/run_teacher_distill.sh` on the login node
 instead, assuming policy allows login-node API calls.
+
+Small JSON teacher artifacts may be intentionally committed with `git add -f`.
+Do not commit images, logs, model weights, caches, `.env`, or API keys.

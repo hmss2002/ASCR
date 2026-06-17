@@ -36,6 +36,9 @@ export OUT_ROOT=${OUT_ROOT:-outputs/lumina_qwen_hard64}
 export DISTILL_OUT=${DISTILL_OUT:-outputs/teacher_distill/hard64_lumina_qwen}
 export LIMIT=${LIMIT:-64}
 export WORKERS=${WORKERS:-1}
+export ASCR_TEACHER_QUALITY_MAX_TOKENS=${ASCR_TEACHER_QUALITY_MAX_TOKENS:-2048}
+export ASCR_TEACHER_LOCALIZATION_MAX_TOKENS=${ASCR_TEACHER_LOCALIZATION_MAX_TOKENS:-2048}
+export PATH_MODE=${PATH_MODE:-relative}
 
 if [[ -z "${OFOX_API_KEY:-}" ]]; then
   echo "OFOX_API_KEY is not set. Submit with --export=ALL,OFOX_API_KEY,ASCR_TEACHER_MODEL=bailian/qwen3.7-plus,..." >&2
@@ -49,4 +52,7 @@ PYTHONPATH="$PROJECT_ROOT" "$ASCR_ENV_QWEN/bin/python" -m ascr.distill.teacher \
   --limit "$LIMIT" \
   --workers "$WORKERS" \
   --model "$ASCR_TEACHER_MODEL" \
-  --base-url "$OFOX_BASE_URL"
+  --base-url "$OFOX_BASE_URL" \
+  --quality-max-tokens "$ASCR_TEACHER_QUALITY_MAX_TOKENS" \
+  --localization-max-tokens "$ASCR_TEACHER_LOCALIZATION_MAX_TOKENS" \
+  --path-mode "$PATH_MODE"

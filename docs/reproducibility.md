@@ -26,7 +26,7 @@ revoke it before pushing again and decide whether Git history needs to be purged
 External API judges read `OFOX_API_KEY` from the environment:
 
 ```bash
-export OFOX_API_KEY=your-ofox-api-key
+export OFOX_API_KEY='<your-ofox-api-key>'
 ```
 
 Do not write the value into a script, Slurm file, notebook, or README.

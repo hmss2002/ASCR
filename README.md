@@ -410,7 +410,8 @@ MODE=lumina-qwen-8gpu PROMPT_LIMIT=64 OUT_ROOT=outputs/lumina_qwen_hard64 bash s
 
 API teacher distillation is documented in `docs/API_TEACHER_DISTILL.md`. It reads
 completed Stage-1 outputs and writes localization/quality JSONL labels; it does
-not implement Stage-2 training yet.
+not implement the full Stage-2 learned selector. The current training entrypoint
+does support a lightweight `cell-prior` baseline for auditing teacher labels.
 
 The `ascr-preflight` command checks Python/import readiness, CUDA visibility, important runtime
 paths, selected environment variables, and likely committed secrets without printing secret values.

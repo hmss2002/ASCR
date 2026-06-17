@@ -63,9 +63,11 @@ export TOKENIZERS_PARALLELISM=false
 For API judges, set keys only in the shell or scheduler environment:
 
 ```bash
-export OFOX_API_KEY=<your-ofox-api-key>
-export OFOX_BASE_URL=https://api.ofox.ai/v1
-export ASCR_TEACHER_MODEL=bailian/qwen3.7-plus
+export OFOX_API_KEY='<your-ofox-api-key>'
+export OFOX_BASE_URL='https://api.ofox.ai/v1'
+export ASCR_TEACHER_MODEL='bailian/qwen3.7-plus'
+export ASCR_TEACHER_QUALITY_MAX_TOKENS=2048
+export ASCR_TEACHER_LOCALIZATION_MAX_TOKENS=2048
 ```
 
 Never write real keys into tracked files.
@@ -159,6 +161,19 @@ After `outputs/lumina_qwen_hard64` exists, generate teacher labels with:
 ```bash
 python scripts/distill/api_probe.py
 LIMIT=64 OUT_ROOT=outputs/lumina_qwen_hard64 bash scripts/distill/run_teacher_distill.sh
+```
+
+Then audit, export, and run the lightweight baseline:
+
+```bash
+python -m ascr.distill.audit --distill-dir outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact
+python -m ascr.distill.export_dataset \
+  --distill-dir outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact \
+  --output outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl
+python -m ascr.training.train_selector \
+  --task cell-prior \
+  --dataset outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl \
+  --output-dir outputs/stage2_baselines/cell_prior_qwen37
 ```
 
 For Slurm:

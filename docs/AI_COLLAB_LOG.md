@@ -433,3 +433,45 @@ Interpretation:
 - yes, prompt shortening can reduce reasoning length for qwen3.7-plus at 2048 tokens on at least the tested hard quality sample
 - no, this still does not make the route robust enough for the full batch because the model can still emit hidden / visible thinking text, and the JSON-mode empty-content failure path remains unresolved
 - therefore the successful full-run artifact set remains the gpt-4.1-mini structured-runner output already recorded above
+
+## 2026-06-18 17:46 CST - local Codex
+
+Context:
+- Machine: Windows local ASCR checkout
+- Branch before: main
+- Commit before: 5b086699c1028a90fbd54465b59f7a09d9377f38
+- Branch after: main
+- Commit after: pending pushed commit containing Qwen3.7 compact distill continuation code
+
+Files changed:
+- ascr/distill/teacher.py: made compact JSON-only prompting first-class, defaulted token budgets to 2048, improved trailing/fenced JSON extraction, made paths relative by default, and stopped writing raw_text unless explicitly requested
+- ascr/distill/audit.py: added teacher label audit command that writes audit.json
+- ascr/distill/export_dataset.py: added clean dataset export command that writes dataset.jsonl and dataset_manifest.json
+- ascr/training/train_selector.py: added lightweight --task cell-prior baseline while keeping full Stage-2 learned training reserved
+- docs/API_TEACHER_DISTILL.md and docs/SERVER_AI_HANDOFF.md: added server commands for Qwen3.7 compact teacher run, audit/export, cell-prior baseline, and required GitHub pushback
+
+Commands run:
+- git pull --ff-only origin main
+  Result: passed
+  Notes: fast-forwarded to cloud AI result commit 5b08669.
+
+Environment:
+- python: local Windows Python 3.11
+- active env: local validation environment
+- important env vars set/unset, without values: OFOX_API_KEY not used locally
+
+Server jobs:
+- job id: none
+- mode: not run locally
+- status: not submitted
+
+Results:
+- summary: repo now has reproducible code for the next server-side Qwen3.7 compact teacher pass, label audit, dataset export, and cell-prior baseline.
+- files to inspect: docs/API_TEACHER_DISTILL.md, docs/SERVER_AI_HANDOFF.md, ascr/distill/teacher.py, ascr/training/train_selector.py
+
+Problems / blockers:
+- no real API run was performed locally.
+- server AI must verify whether Qwen3.7 compact prompting materially reduces error count compared with the previous partial run.
+
+Next action requested:
+- server AI should pull latest main, set OFOX_API_KEY only in the shell, run the Qwen3.7 compact teacher commands in docs/SERVER_AI_HANDOFF.md, run audit/export/cell-prior, append detailed results to this log, force-add only the small JSON outputs explicitly listed in the docs, commit, and push to GitHub.

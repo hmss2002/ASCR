@@ -65,6 +65,8 @@ setup(
             "ascr-stage1-mmada-self-coarse=ascr.cli.run_stage1_mmada_self_coarse:main",
             "ascr-preflight=ascr.cli.preflight:main",
             "ascr-teacher-distill=ascr.distill.teacher:main",
+            "ascr-teacher-audit=ascr.distill.audit:main",
+            "ascr-teacher-export=ascr.distill.export_dataset:main",
             "ascr-compare-stage1-variants=ascr.cli.compare_stage1_variants:main",
             # Legacy preserved Show-o comparison entrypoint; not the project mainline.
             "ascr-compare-showo=ascr.cli.compare_showo_ascr:main",

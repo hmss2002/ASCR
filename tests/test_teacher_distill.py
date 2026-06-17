@@ -4,7 +4,10 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from ascr.distill.teacher import build_tasks, extract_json_object, normalize_quality, run_task
+from ascr.distill.audit import audit_distill_dir
+from ascr.distill.export_dataset import export_dataset
+from ascr.distill.teacher import build_tasks, extract_json_object, localization_messages, normalize_quality, quality_messages, run_task
+from ascr.training.train_selector import train_cell_prior
 
 
 PNG_1X1 = base64.b64decode(
@@ -30,7 +33,7 @@ class _Response:
 class _Completions:
     def create(self, **kwargs):
         text = json.dumps(kwargs["messages"])
-        if "Image A is the baseline" in text:
+        if "baseline_score" in text:
             return _Response('{"baseline_score": 0.25, "final_score": 0.75, "winner": "B", "reason": "final follows the prompt better"}')
         return _Response('{"has_error": true, "summary": "wrong color", "regions": [{"cells": ["B2"], "reason": "wrong object color", "confidence": 0.9, "error_type": "attribute", "action": "reopen"}], "correction_instruction": "fix the object color"}')
 
@@ -49,6 +52,21 @@ class TeacherDistillTests(unittest.TestCase):
     def test_extract_json_object_handles_markdown(self):
         payload = extract_json_object("```json\n{\"ok\": true}\n```")
         self.assertEqual(payload, {"ok": True})
+
+    def test_extract_json_object_uses_trailing_json(self):
+        payload = extract_json_object("thinking text {\"bad\": true} more text {\"ok\": true}")
+        self.assertEqual(payload, {"ok": True})
+
+    def test_compact_prompt_constraints_are_present(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            image = Path(temp_dir) / "img.png"
+            image.write_bytes(PNG_1X1)
+            text = quality_messages("A red cube", image, image)[1]["content"][0]["text"]
+            self.assertIn("No analysis", text)
+            self.assertIn("No markdown", text)
+            self.assertIn("No thinking text", text)
+            loc_text = localization_messages("A red cube", image)[1]["content"][0]["text"]
+            self.assertIn("Return only one compact JSON object", loc_text)
 
     def test_normalize_quality_maps_b_to_final(self):
         payload = normalize_quality({"baseline_score": 0.2, "final_score": 0.8, "winner": "B"})
@@ -86,6 +104,7 @@ class TeacherDistillTests(unittest.TestCase):
             self.assertEqual([task["kind"] for task in tasks], ["quality", "localization"])
             self.assertEqual(tasks[0]["sample_id"], "p000")
             self.assertEqual(tasks[1]["sample_id"], "p000:i000")
+            self.assertFalse(Path(tasks[0]["baseline_image"]).is_absolute())
 
     def test_run_task_with_fake_client(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -101,6 +120,7 @@ class TeacherDistillTests(unittest.TestCase):
                 1,
             )
             self.assertEqual(quality["quality"]["winner"], "final")
+            self.assertNotIn("raw_text", quality)
             localization = run_task(
                 {"kind": "localization", "sample_id": "p000:i000", "prompt": "A red cube", "grid_image": str(image)},
                 client,
@@ -112,7 +132,41 @@ class TeacherDistillTests(unittest.TestCase):
             self.assertTrue(localization["evaluation"]["has_error"])
             self.assertEqual(localization["evaluation"]["regions"][0]["cells"][0]["label"], "B2")
 
+    def test_audit_export_and_cell_prior(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            distill = root / "distill"
+            distill.mkdir()
+            quality = {
+                "idx": 0,
+                "sample_id": "p000",
+                "prompt": "A red cube",
+                "kind": "quality",
+                "quality": {"baseline_score": 0.2, "final_score": 0.8, "winner": "final", "reason": "better"},
+            }
+            localization = {
+                "idx": 0,
+                "sample_id": "p000:i000",
+                "prompt": "A red cube",
+                "kind": "localization",
+                "iteration": 0,
+                "evaluation": {
+                    "has_error": True,
+                    "regions": [{"cells": [{"label": "B2", "row": 1, "col": 1}]}],
+                },
+            }
+            (distill / "quality_labels.jsonl").write_text(json.dumps(quality) + "\n", encoding="utf-8")
+            (distill / "localization_labels.jsonl").write_text(json.dumps(localization) + "\n", encoding="utf-8")
+            (distill / "errors.jsonl").write_text("", encoding="utf-8")
+            audit = audit_distill_dir(distill)
+            self.assertEqual(audit["counts"]["quality"], 1)
+            self.assertEqual(audit["localization"]["selected_cell_counts"]["1"], 1)
+            manifest = export_dataset(distill, distill / "dataset.jsonl")
+            self.assertEqual(manifest["row_count"], 1)
+            train = train_cell_prior(distill / "dataset.jsonl", root / "baseline")
+            self.assertEqual(train["metrics"]["hit_any_rate"], 1.0)
+            self.assertTrue((root / "baseline" / "selector_prior.json").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
-
