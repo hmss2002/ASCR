@@ -57,6 +57,13 @@ python -m ascr.cli.preflight \
   --scan-secrets
 ```
 
+You can also run the bundled smoke helper:
+
+```bash
+source .venv-qwen36/bin/activate
+python scripts/smoke_test.py --server --skip-dry-run
+```
+
 ## Smoke Jobs
 
 Use tiny prompt limits first:
@@ -77,5 +84,15 @@ PROMPT_LIMIT=64 OUT_ROOT=outputs/lumina_qwen_hard64 \
   sbatch jobs/stage1/lumina/stage1_lumina_qwen_coarse_hard64_8gpu.sbatch
 ```
 
+The same supported jobs can be submitted through a small wrapper:
+
+```bash
+PROMPT_LIMIT=1 OUT_ROOT=outputs/smoke_lumina_qwen bash scripts/run_multigpu.sh
+MODE=mmada-self PROMPT_LIMIT=1 OUT_ROOT=outputs/smoke_mmada_self bash scripts/run_multigpu.sh
+MODE=lumina-qwen-8gpu PROMPT_LIMIT=64 OUT_ROOT=outputs/lumina_qwen_hard64 bash scripts/run_multigpu.sh
+```
+
 For multi-node runs, set `NODE_INDEX` and `NODE_COUNT` per submitted node so the
 global prompt shard assignment remains disjoint.
+
+For a command-oriented checklist, see `docs/REMOTE_RUN.md`.

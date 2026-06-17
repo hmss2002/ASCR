@@ -183,6 +183,18 @@ python -m ascr.cli.run_stage1 \
 For dependency-free smoke checks, use `--dry-run`; that is the only mode that intentionally forces
 mock generator/evaluator defaults.
 
+For a no-model local smoke path that is easier to remember, run:
+
+```bash
+python scripts/smoke_test.py
+```
+
+For a single prompt wrapper around the same CLI:
+
+```bash
+DRY_RUN=1 OUT_ROOT=outputs/local_dry_run bash scripts/run_inference.sh
+```
+
 ### 6.2 Preserved comparison lines
 
 | Track | Purpose | Key paths |
@@ -272,6 +284,10 @@ size**, not a second token grid.
 | `scripts/benchmark/` | Prompt prep, conversion, pairing, merging, and summarization utilities |
 | `scripts/setup/` | Environment and model download helpers |
 | `scripts/maintenance/` | Submission helpers, diagnostics, cleanup, validation-only Git helper |
+| `scripts/smoke_test.py` | Lightweight local/server checks for tests, CLI help, dry-run, preflight, and secret scan |
+| `scripts/run_inference.sh` | Single-process Stage-1 wrapper for dry runs and one-prompt debugging |
+| `scripts/run_multigpu.sh` | Slurm submission wrapper for supported Stage-1 GPU jobs |
+| `scripts/slurm_infer.sbatch` | Generic Slurm wrapper for Lumina/Qwen and MMaDA smoke/full modes |
 
 ### Execution modes
 
@@ -345,7 +361,8 @@ Then prepare model-family-specific environments/checkouts as needed:
 
 After setup, use the validation commands in section 12 before submitting jobs.
 For a fuller server bootstrap, see `docs/server_setup.md`. For validation and Git safety, see
-`docs/reproducibility.md`.
+`docs/reproducibility.md`. For short command-oriented guides, see `docs/REMOTE_RUN.md` and
+`docs/GIT_SYNC.md`.
 
 Do not commit:
 
@@ -365,6 +382,7 @@ be tracked.
 Useful checks:
 
 ```bash
+python scripts/smoke_test.py
 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python -m unittest discover -s tests
 python -m ascr.cli.run_stage1 --help
 python -m ascr.cli.compare_stage1_variants --help
@@ -378,6 +396,13 @@ preparing local model caches:
 python -m ascr.cli.preflight --mode server \
   --config configs/stage1/lumina/stage1_lumina_qwen9b_coarse_hq.yaml \
   --scan-secrets
+```
+
+Then use the command-oriented remote guide:
+
+```bash
+PROMPT_LIMIT=1 OUT_ROOT=outputs/smoke_lumina_qwen bash scripts/run_multigpu.sh
+MODE=lumina-qwen-8gpu PROMPT_LIMIT=64 OUT_ROOT=outputs/lumina_qwen_hard64 bash scripts/run_multigpu.sh
 ```
 
 The `ascr-preflight` command checks Python/import readiness, CUDA visibility, important runtime
@@ -421,6 +446,8 @@ git push -u origin codex/server-ready-cleanup
 
 `scripts/maintenance/sync_github.sh` is now validation-only and intentionally does not stage,
 commit, or push.
+
+The short version of this workflow lives in `docs/GIT_SYNC.md`.
 
 ## 13. Maintenance rule
 
