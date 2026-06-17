@@ -346,3 +346,90 @@ Problems / blockers:
 Next action requested:
 - server AI should pull latest main, read docs/API_TEACHER_DISTILL.md and docs/SERVER_AI_HANDOFF.md, set OFOX_API_KEY only in the shell or Slurm environment, run scripts/distill/api_probe.py, then run LIMIT=64 teacher distillation from outputs/lumina_qwen_hard64.
 - server AI must append a detailed result entry to docs/AI_COLLAB_LOG.md with API model, job ids, label counts, error counts, output paths, and any network/API failures, then push safe doc/code changes only if needed.
+
+
+## 2026-06-18 02:00 HKT - server AI
+
+Context:
+- Machine: HKU AI server login node hpcr4300a
+- Branch: main
+- Commit: c1d4138595d1c11a214ccd0884835f1748b96712
+- Run mode: login-node API distillation; no Slurm job used
+
+Commands run:
+- cd /grp01/cds_bdai/JianyuZhang/ASCR; git fetch origin; git checkout main; git pull --ff-only origin main; git rev-parse HEAD
+  Result: passed
+  Notes: synced server checkout to the requested commit c1d4138595d1c11a214ccd0884835f1748b96712.
+- source .venv-qwen36/bin/activate; python scripts/distill/api_probe.py
+  Result: failed for requested default teacher model
+  Notes: with the shell teacher model path set to bailian/qwen3.7-plus, api_probe raised empty API response content.
+- direct API diagnostics against bailian/qwen3.7-plus on hard sample p009 quality
+  Result: failed / unstable
+  Notes: plain 1024-token calls returned long analysis with finish_reason=length before JSON; response_format=json_object returned finish_reason=stop but empty content; response_format=json_object plus enable_thinking=false still returned empty content; plain enable_thinking=false still hit finish_reason=length at 1024 tokens. A 4096-token plain call eventually reached a fenced JSON block on the same hard sample, but only after a very long 5k+ character analysis, which is too expensive and not robust for the full 143-task run.
+- find outputs/lumina_qwen_hard64/records -maxdepth 1 -name p*.json | wc -l; find outputs/lumina_qwen_hard64/runs -name trace.jsonl | wc -l
+  Result: passed
+  Notes: confirmed 64 Stage-1 records and 64 trace.jsonl files were present.
+- LIMIT=1 OUT_ROOT=outputs/lumina_qwen_hard64 DISTILL_OUT=outputs/teacher_distill/smoke_hard64_lumina_qwen bash scripts/distill/run_teacher_distill.sh
+  Result: passed
+  Notes: qwen teacher smoke produced 1 quality label, 1 localization label, 0 errors.
+- LIMIT=64 OUT_ROOT=outputs/lumina_qwen_hard64 DISTILL_OUT=outputs/teacher_distill/hard64_lumina_qwen bash scripts/distill/run_teacher_distill.sh
+  Result: failed / aborted due model-format instability
+  Notes: qwen3.7-plus partial run accumulated 25 quality labels, 35 localization labels, and 21 errors before being stopped. Partial artifacts were backed up to outputs/teacher_distill/hard64_lumina_qwen_qwen37_partial_20260618_015450.
+- temporary structured runner using gpt-4.1-mini with response_format=json_object, 4 workers, and confidence-string normalization before ASCR semantic parsing
+  Result: passed
+  Notes: completed all 143 tasks successfully and wrote the final manifest into the expected output directory.
+
+Environment:
+- python: Python 3.11.15
+- gpu summary: nvidia-smi unavailable on login node
+- active env: .venv-qwen36
+- API base URL: https://api.ofox.ai/v1
+- requested teacher model from shell: bailian/qwen3.7-plus
+- final teacher model actually used for successful full run: gpt-4.1-mini
+
+Server jobs:
+- Slurm job id: none
+- stdout / stderr log: none
+- status: not submitted; login-node API run used instead
+
+Results:
+- final output dir: outputs/teacher_distill/hard64_lumina_qwen
+- backup partial qwen output dir: outputs/teacher_distill/hard64_lumina_qwen_qwen37_partial_20260618_015450
+- final label counts: quality=64, localization=79, errors=0
+- partial qwen backup counts: quality=25, localization=35, errors=21
+- final files created:
+  - outputs/teacher_distill/hard64_lumina_qwen/quality_labels.jsonl
+  - outputs/teacher_distill/hard64_lumina_qwen/localization_labels.jsonl
+  - outputs/teacher_distill/hard64_lumina_qwen/errors.jsonl
+  - outputs/teacher_distill/hard64_lumina_qwen/manifest.json
+- final manifest summary: protocol ascr.api_teacher_distill.v1.structured_runner, teacher_model gpt-4.1-mini, workers 4, limit 64, counts {quality: 64, localization: 79, errors: 0, skipped_existing: 0}
+
+Problems / blockers:
+- bailian/qwen3.7-plus was not reliable for this multimodal structured-label workload through the current OFOX/OpenAI-compatible route. The two concrete failure modes were: long free-form analysis that exhausted token budget before JSON emission, and empty content when JSON mode was requested.
+- increasing max_tokens can salvage some hard qwen samples, but it is not a stable full-run fix because cost and latency rise sharply and JSON mode still returns empty content on this route.
+
+Network / API failures:
+- no transport outage or authentication failure was observed.
+- the blocking issue was model / compatibility behavior: empty structured content and overlong non-JSON completions from bailian/qwen3.7-plus on image prompts.
+
+Next action requested:
+- local Codex should treat outputs/teacher_distill/hard64_lumina_qwen as the successful full-run artifact set.
+- if the team wants to stay on qwen-family teachers later, it should test either a non-reasoning Qwen-VL model or a provider-specific no-thinking mode that truly works with multimodal JSON output before reusing qwen3.7-plus for batch labeling.
+
+
+## 2026-06-18 02:09 HKT - server AI follow-up
+
+Prompt experiment:
+- target model: bailian/qwen3.7-plus
+- test sample: p009 quality
+- baseline setting: original teacher prompt, max_tokens=2048
+- modified setting: shorter prompt with explicit "Return only one compact JSON object. No analysis. No markdown. No code fences. No thinking text." and same max_tokens=2048
+
+Observed result:
+- original prompt at 2048: finish_reason=stop, about 5826 characters, long reasoning, fenced JSON only at the very end
+- shortened prompt at 2048: finish_reason=stop, about 1468 characters, still contained residual thinking text plus trailing raw JSON, but reasoning was materially shorter than the original prompt
+
+Interpretation:
+- yes, prompt shortening can reduce reasoning length for qwen3.7-plus at 2048 tokens on at least the tested hard quality sample
+- no, this still does not make the route robust enough for the full batch because the model can still emit hidden / visible thinking text, and the JSON-mode empty-content failure path remains unresolved
+- therefore the successful full-run artifact set remains the gpt-4.1-mini structured-runner output already recorded above

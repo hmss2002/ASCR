@@ -1,0 +1,23 @@
+{
+  "base_url": "https://api.ofox.ai/v1",
+  "counts": {
+    "errors": 0,
+    "localization": 79,
+    "quality": 64,
+    "skipped_existing": 0
+  },
+  "created_at_utc": "2026-06-17T17:59:14Z",
+  "files": {
+    "errors": "/grp01/cds_bdai/JianyuZhang/ASCR/outputs/teacher_distill/hard64_lumina_qwen/errors.jsonl",
+    "localization_labels": "/grp01/cds_bdai/JianyuZhang/ASCR/outputs/teacher_distill/hard64_lumina_qwen/localization_labels.jsonl",
+    "quality_labels": "/grp01/cds_bdai/JianyuZhang/ASCR/outputs/teacher_distill/hard64_lumina_qwen/quality_labels.jsonl"
+  },
+  "grid_size": 4,
+  "limit": 64,
+  "max_selected_cells": 6,
+  "out_root": "/grp01/cds_bdai/JianyuZhang/ASCR/outputs/lumina_qwen_hard64",
+  "output_dir": "/grp01/cds_bdai/JianyuZhang/ASCR/outputs/teacher_distill/hard64_lumina_qwen",
+  "protocol": "ascr.api_teacher_distill.v1.structured_runner",
+  "teacher_model": "gpt-4.1-mini",
+  "workers": 4
+}
