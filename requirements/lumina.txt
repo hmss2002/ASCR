@@ -1,0 +1,13 @@
+# Lumina-DiMOO generator environment.
+#
+# Keep this separate from Qwen because the native Lumina checkout currently
+# expects an older Transformers stack than the Qwen3.5 evaluator.
+torch>=2.4
+torchvision>=0.19
+transformers==4.46.2
+diffusers>=0.30.0
+accelerate>=0.30.0
+safetensors>=0.4.5
+sentencepiece>=0.2.0
+pillow>=10.0.0
+numpy>=1.24

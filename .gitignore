@@ -37,6 +37,7 @@ Thumbs.db
 .env
 .env.*
 *.env
+!.env.template
 secrets/
 credentials/
 *.pem

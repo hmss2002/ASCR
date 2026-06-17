@@ -1,0 +1,14 @@
+# Qwen3.5/Qwen-VL evaluator environment.
+#
+# Install torch/torchvision from the CUDA wheel index that matches the server
+# before or along with this file.
+transformers @ git+https://github.com/huggingface/transformers.git@fc91372258
+torch>=2.4
+torchvision>=0.19
+accelerate>=1.1.0
+qwen-vl-utils>=0.0.14
+safetensors>=0.4.5
+sentencepiece>=0.2.0
+pillow>=10.0.0
+av>=15.0.0
+openai>=1.50.0

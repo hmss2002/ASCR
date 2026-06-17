@@ -1,3 +1,7 @@
-# Optional developer tools. The current tests run with stdlib unittest.
-# pytest>=7
-# ruff>=0.4
+# Developer/test dependencies for local validation.
+#
+# The test suite uses unittest, but pytest is useful for CI and local selection.
+-r base.txt
+numpy>=1.24
+pillow>=10.0.0
+pytest>=7

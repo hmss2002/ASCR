@@ -1,5 +1,3 @@
-# Optional local VLM or LLM backend dependencies will be added after backend selection.
-# transformers
-# accelerate
-# torch
-# pillow
+# Heuristic local evaluator dependencies.
+numpy>=1.24
+pillow>=10.0.0

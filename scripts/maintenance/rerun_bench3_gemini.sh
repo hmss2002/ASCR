@@ -1,18 +1,22 @@
 #!/usr/bin/env bash
 # Re-run all 9 bench3 eval tasks using google/gemini-3-flash-preview.
 # Runs on the login node (requires outbound internet).
-# Usage: bash scripts/maintenance/rerun_bench3_gemini.sh
+# Usage: OFOX_API_KEY=your-key bash scripts/maintenance/rerun_bench3_gemini.sh
 # Run from any checkout; the script resolves the repository root automatically.
 
-set -e
+set -euo pipefail
 PROJECT_ROOT=${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.."; pwd)}
 cd "$PROJECT_ROOT"
 
-export OFOX_API_KEY="sk-of-bTORRveHyXdWZyGqRbgddEJDJuAPVPpnIlTPNMKCxJiygQDvvtWlhjJBZglXzihp"
-MODEL="google/gemini-3-flash-preview"
-WORKERS=30
-IMAGE_MAP="outputs/bench3_eval/image_map.json"
-LOG_DIR="logs"
+if [[ -z "${OFOX_API_KEY:-}" ]]; then
+  echo "ERROR: OFOX_API_KEY is not set. Export it in your shell or scheduler environment; never write it into this file." >&2
+  exit 2
+fi
+
+MODEL=${MODEL:-google/gemini-3-flash-preview}
+WORKERS=${WORKERS:-30}
+IMAGE_MAP=${IMAGE_MAP:-outputs/bench3_eval/image_map.json}
+LOG_DIR=${LOG_DIR:-logs}
 mkdir -p "$LOG_DIR"
 
 echo "=== Launching 9 eval processes with $MODEL ==="

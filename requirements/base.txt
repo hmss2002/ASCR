@@ -1,2 +1,5 @@
-# Stage 1 core is intentionally stdlib-only for bootstrap reliability.
-# Add pinned runtime packages here when the concrete local VLM and Show-o stack is selected.
+# Base ASCR package/runtime helpers.
+#
+# Heavy model stacks stay in separate files so a local dry-run install remains
+# small and a cluster can keep incompatible model families in separate venvs.
+PyYAML>=6.0

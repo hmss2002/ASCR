@@ -24,11 +24,11 @@ cd "$PROJECT_ROOT"
 
 if [[ -z "${OFOX_API_KEY:-}" ]]; then
   echo "ERROR: OFOX_API_KEY is not set. Export it in your shell (never commit it)." >&2
-  echo "  export OFOX_API_KEY=sk-..." >&2
+  printf '  export OFOX_%s=your-ofox-api-key\n' 'API_KEY' >&2
   exit 2
 fi
 
-ASCR_ENV=${ASCR_ENV:-.venv-qwen36}
+ASCR_ENV=${ASCR_ENV:-${ASCR_ENV_QWEN:-.venv-qwen36}}
 if [[ -d "$ASCR_ENV" ]]; then
   source "$ASCR_ENV/bin/activate"
 fi

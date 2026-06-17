@@ -11,8 +11,8 @@
 # Single-node, 8-GPU Hard64 generation for the Lumina-DiMOO generator + Qwen3.5-9B
 # coarse selector pipeline. Lumina (transformers 4.46.2) and Qwen (transformers
 # 5.2.dev) need incompatible versions, so each pair uses TWO GPUs: an even GPU runs a
-# resident Lumina worker (.venv-lumina) and the sibling odd GPU runs a resident Qwen
-# eval server (.venv-qwen36); they talk over an IPC dir. With NUM_PAIRS=4 that is 4
+# resident Lumina worker and the sibling odd GPU runs a resident Qwen eval server;
+# they talk over an IPC dir. With NUM_PAIRS=4 that is 4
 # Lumina workers + 4 Qwen servers = 8 GPU per node. For multi-node runs pass
 # NODE_INDEX / NODE_COUNT for global prompt sharding.
 
@@ -22,6 +22,8 @@ cd "$PROJECT_ROOT"
 mkdir -p logs
 
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 TOKENIZERS_PARALLELISM=false
+export ASCR_ENV_QWEN=${ASCR_ENV_QWEN:-.venv-qwen36}
+export ASCR_ENV_LUMINA=${ASCR_ENV_LUMINA:-.venv-lumina}
 export CONFIG=${CONFIG:-configs/stage1/lumina/stage1_lumina_qwen9b_coarse_hq.yaml}
 export PROMPTS_FILE=${PROMPTS_FILE:-configs/benchmarks/prompts/t2i_compbench_hard64.txt}
 export OUT_ROOT=${OUT_ROOT:-outputs/lumina_qwen_coarse_hard64}
@@ -37,6 +39,15 @@ JOBTAG="${SLURM_JOB_NAME:-lumina-qwen}-${SLURM_JOB_ID:-local}-n${NODE_INDEX}"
 server_pids=()
 worker_pids=()
 
+if [[ ! -x "$ASCR_ENV_QWEN/bin/python" ]]; then
+  echo "Missing ASCR_ENV_QWEN python at $ASCR_ENV_QWEN/bin/python" >&2
+  exit 2
+fi
+if [[ ! -x "$ASCR_ENV_LUMINA/bin/python" ]]; then
+  echo "Missing ASCR_ENV_LUMINA python at $ASCR_ENV_LUMINA/bin/python" >&2
+  exit 2
+fi
+
 for p in $(seq 0 $((NUM_PAIRS - 1))); do
   gpu_lumina=$((2 * p))
   gpu_qwen=$((2 * p + 1))
@@ -46,14 +57,14 @@ for p in $(seq 0 $((NUM_PAIRS - 1))); do
 
   ( unset PYTHONPATH; export PYTHONPATH="."; \
     CUDA_VISIBLE_DEVICES=$gpu_qwen IPC_DIR="$ipc" CONFIG="$CONFIG" SERVER_IDLE_TIMEOUT="$SERVER_IDLE_TIMEOUT" \
-    .venv-qwen36/bin/python scripts/judge/qwen_eval_server.py ) > "logs/${JOBTAG}-p${p}-qwen.log" 2>&1 &
+    "$ASCR_ENV_QWEN/bin/python" scripts/judge/qwen_eval_server.py ) > "logs/${JOBTAG}-p${p}-qwen.log" 2>&1 &
   server_pids+=($!)
 
   ( unset PYTHONPATH; export PYTHONPATH="."; export LUMINA_REPO="$LUMINA_REPO"; \
     CUDA_VISIBLE_DEVICES=$gpu_lumina IPC_DIR="$ipc" CONFIG="$CONFIG" OUT_ROOT="$OUT_ROOT" \
     PROMPTS_FILE="$PROMPTS_FILE" MAX_ITERS="$MAX_ITERS" PROMPT_LIMIT="$PROMPT_LIMIT" \
     PAIR_ID=$p NUM_PAIRS=$NUM_PAIRS NODE_INDEX=$NODE_INDEX NODE_COUNT=$NODE_COUNT \
-    .venv-lumina/bin/python scripts/run/run_lumina_qwen_coarse_hard64.py ) > "logs/${JOBTAG}-p${p}-lumina.log" 2>&1 &
+    "$ASCR_ENV_LUMINA/bin/python" scripts/run/run_lumina_qwen_coarse_hard64.py ) > "logs/${JOBTAG}-p${p}-lumina.log" 2>&1 &
   worker_pids+=($!)
 done
 

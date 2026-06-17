@@ -10,8 +10,8 @@
 
 # Single-node, 8-GPU Hard64 generation for the MMaDA-8B generator + Qwen3.5-9B coarse
 # selector pipeline. Because the two models need incompatible transformers versions,
-# each pair uses TWO GPUs: an even GPU runs a resident MMaDA worker (.venv-mmada) and
-# the sibling odd GPU runs a resident Qwen eval server (.venv-qwen36); they talk over an
+# each pair uses TWO GPUs: an even GPU runs a resident MMaDA worker and the sibling
+# odd GPU runs a resident Qwen eval server; they talk over an
 # IPC dir. With NUM_PAIRS=4 that is 4 MMaDA workers + 4 Qwen servers = 8 GPU per node.
 # For multi-node runs pass NODE_INDEX / NODE_COUNT for global prompt sharding.
 
@@ -21,6 +21,8 @@ cd "$PROJECT_ROOT"
 mkdir -p logs
 
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 TOKENIZERS_PARALLELISM=false
+export ASCR_ENV_QWEN=${ASCR_ENV_QWEN:-.venv-qwen36}
+export ASCR_ENV_MMADA=${ASCR_ENV_MMADA:-.venv-mmada}
 export CONFIG=${CONFIG:-configs/stage1/mmada/stage1_mmada8b_qwen9b_coarse.yaml}
 export PROMPTS_FILE=${PROMPTS_FILE:-configs/benchmarks/prompts/t2i_compbench_hard64.txt}
 export OUT_ROOT=${OUT_ROOT:-outputs/mmada_qwen_coarse_hard64}
@@ -35,6 +37,15 @@ JOBTAG="${SLURM_JOB_NAME:-mmada-qwen}-${SLURM_JOB_ID:-local}-n${NODE_INDEX}"
 server_pids=()
 worker_pids=()
 
+if [[ ! -x "$ASCR_ENV_QWEN/bin/python" ]]; then
+  echo "Missing ASCR_ENV_QWEN python at $ASCR_ENV_QWEN/bin/python" >&2
+  exit 2
+fi
+if [[ ! -x "$ASCR_ENV_MMADA/bin/python" ]]; then
+  echo "Missing ASCR_ENV_MMADA python at $ASCR_ENV_MMADA/bin/python" >&2
+  exit 2
+fi
+
 for p in $(seq 0 $((NUM_PAIRS - 1))); do
   gpu_mmada=$((2 * p))
   gpu_qwen=$((2 * p + 1))
@@ -44,14 +55,14 @@ for p in $(seq 0 $((NUM_PAIRS - 1))); do
 
   ( unset PYTHONPATH; export PYTHONPATH="."; \
     CUDA_VISIBLE_DEVICES=$gpu_qwen IPC_DIR="$ipc" CONFIG="$CONFIG" SERVER_IDLE_TIMEOUT="$SERVER_IDLE_TIMEOUT" \
-    .venv-qwen36/bin/python scripts/judge/qwen_eval_server.py ) > "logs/${JOBTAG}-p${p}-qwen.log" 2>&1 &
+    "$ASCR_ENV_QWEN/bin/python" scripts/judge/qwen_eval_server.py ) > "logs/${JOBTAG}-p${p}-qwen.log" 2>&1 &
   server_pids+=($!)
 
   ( unset PYTHONPATH; export PYTHONPATH="."; \
     CUDA_VISIBLE_DEVICES=$gpu_mmada IPC_DIR="$ipc" CONFIG="$CONFIG" OUT_ROOT="$OUT_ROOT" \
     PROMPTS_FILE="$PROMPTS_FILE" MAX_ITERS="$MAX_ITERS" PROMPT_LIMIT="$PROMPT_LIMIT" \
     PAIR_ID=$p NUM_PAIRS=$NUM_PAIRS NODE_INDEX=$NODE_INDEX NODE_COUNT=$NODE_COUNT \
-    .venv-mmada/bin/python scripts/run/run_mmada_qwen_coarse_hard64.py ) > "logs/${JOBTAG}-p${p}-mmada.log" 2>&1 &
+    "$ASCR_ENV_MMADA/bin/python" scripts/run/run_mmada_qwen_coarse_hard64.py ) > "logs/${JOBTAG}-p${p}-mmada.log" 2>&1 &
   worker_pids+=($!)
 done
 

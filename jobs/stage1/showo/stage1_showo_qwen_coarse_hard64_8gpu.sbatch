@@ -9,7 +9,7 @@
 #SBATCH --error=logs/%x-%j.err
 
 # Single-node, 8-GPU Hard64 generation for the Show-o + Qwen3.5-9B coarse ASCR control.
-# Show-o (~1.5B) and Qwen-9B co-load in ONE process per GPU (.venv-qwen36), so each GPU
+# Show-o (~1.5B) and Qwen-9B co-load in ONE process per GPU, so each GPU
 # runs one resident worker. For multi-node runs pass NODE_INDEX / NODE_COUNT for global
 # prompt sharding. Produces baseline + revised PNGs per prompt (same format as MMaDA runs).
 
@@ -18,10 +18,15 @@ PROJECT_ROOT=${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.."; pwd
 cd "$PROJECT_ROOT"
 mkdir -p logs
 
-export ASCR_ENV=${ASCR_ENV:-.venv-qwen36}
-export PYTHON_BIN="$ASCR_ENV/bin/python"
+export ASCR_ENV_SHOWO=${ASCR_ENV_SHOWO:-${ASCR_ENV_QWEN:-${ASCR_ENV:-.venv-qwen36}}}
+export PYTHON_BIN="$ASCR_ENV_SHOWO/bin/python"
 unset PYTHONPATH; export PYTHONPATH="."
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 TOKENIZERS_PARALLELISM=false
+
+if [[ ! -x "$PYTHON_BIN" ]]; then
+  echo "Missing ASCR_ENV_SHOWO python at $PYTHON_BIN" >&2
+  exit 2
+fi
 
 export CONFIG=${CONFIG:-configs/stage1/showo/stage1_showo_qwen35_9b.yaml}
 export PROMPTS_FILE=${PROMPTS_FILE:-configs/benchmarks/prompts/t2i_compbench_hard64.txt}

@@ -19,10 +19,15 @@ PROJECT_ROOT=${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.."; pwd
 cd "$PROJECT_ROOT"
 mkdir -p logs
 
-export ASCR_ENV=${ASCR_ENV:-.venv-mmada}
-export PYTHON_BIN="$ASCR_ENV/bin/python"
+export ASCR_ENV_MMADA=${ASCR_ENV_MMADA:-${ASCR_ENV:-.venv-mmada}}
+export PYTHON_BIN="$ASCR_ENV_MMADA/bin/python"
 unset PYTHONPATH; export PYTHONPATH="."
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 TOKENIZERS_PARALLELISM=false
+
+if [[ ! -x "$PYTHON_BIN" ]]; then
+  echo "Missing ASCR_ENV_MMADA python at $PYTHON_BIN" >&2
+  exit 2
+fi
 
 export CONFIG=${CONFIG:-configs/stage1/mmada/stage1_mmada8b_self_coarse.yaml}
 export PROMPTS_FILE=${PROMPTS_FILE:-configs/benchmarks/prompts/t2i_compbench_hard64.txt}

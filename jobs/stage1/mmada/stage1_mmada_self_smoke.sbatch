@@ -17,7 +17,7 @@ PROJECT_ROOT=${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.."; pwd
 cd "$PROJECT_ROOT"
 mkdir -p logs
 
-export ASCR_ENV=${ASCR_ENV:-.venv-mmada}
+export ASCR_ENV=${ASCR_ENV:-${ASCR_ENV_MMADA:-.venv-mmada}}
 if [[ ! -x "$ASCR_ENV/bin/python" ]]; then
   echo "Missing MMaDA environment at $ASCR_ENV." >&2
   exit 2

@@ -16,7 +16,7 @@ PROJECT_ROOT=${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.."; pwd
 cd "$PROJECT_ROOT"
 mkdir -p logs outputs/benchmarks_t2i_compbench_qwen35_smoke1
 
-export ASCR_ENV=${ASCR_ENV:-.venv-qwen36}
+export ASCR_ENV=${ASCR_ENV:-${ASCR_ENV_QWEN:-.venv-qwen36}}
 if [[ ! -x "$ASCR_ENV/bin/python" ]]; then
   echo "Missing ASCR environment at $ASCR_ENV." >&2
   exit 2

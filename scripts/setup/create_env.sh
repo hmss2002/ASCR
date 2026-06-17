@@ -7,7 +7,8 @@ cd "${PROJECT_ROOT}"
 python3 -m venv .venv
 source .venv/bin/activate
 
-if python setup.py develop; then
+python -m pip install --upgrade pip
+if python -m pip install -e . -r requirements/base.txt; then
   printf "Editable ASCR install completed.\n"
 else
   printf "Editable install failed; continuing with project-root python -m workflow.\n"

@@ -1,0 +1,11 @@
+# MMaDA-8B generator/self-evaluator environment.
+#
+# The MMaDA transferred-selector workflows use IPC with a separate Qwen venv.
+torch>=2.4
+torchvision>=0.19
+transformers==4.46.2
+accelerate>=0.30.0
+safetensors>=0.4.5
+sentencepiece>=0.2.0
+pillow>=10.0.0
+numpy>=1.24

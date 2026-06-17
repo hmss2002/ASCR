@@ -42,22 +42,17 @@ PASS_THRESHOLD = 0.5
 RETRY_ATTEMPTS = 3
 RETRY_DELAY = 5
 
-# Source data paths (relative to cwd = project root)
-SHOWO_ASCR_JUDGE = "outputs/hard64_parallel_20260522_120250/qwen_clean_judge.json"
-BAGEL_JUDGE = "outputs/bagel_t2i_compbench_hard64_8gpu_20260519_202625/qwen_clean_bagel_vs_ascr.json"
-
-
-def load_items(model_key):
+def load_items(model_key, showo_ascr_judge, bagel_judge):
     """Load list of {prompt, image_path} for the given model key."""
     if model_key in ("showo", "ascr"):
-        data = json.loads(Path(SHOWO_ASCR_JUDGE).read_text(encoding="utf-8"))
+        data = json.loads(Path(showo_ascr_judge).read_text(encoding="utf-8"))
         field = "baseline" if model_key == "showo" else "ascr"
         return [
             {"prompt": r["prompt"], "image": r[field]["image"]}
             for r in data["records"]
         ]
     elif model_key == "bagel":
-        data = json.loads(Path(BAGEL_JUDGE).read_text(encoding="utf-8"))
+        data = json.loads(Path(bagel_judge).read_text(encoding="utf-8"))
         # In this file: baseline=BAGEL images, ascr=old ASCR images
         return [
             {"prompt": r["prompt"], "image": r["baseline"]["image"]}
@@ -207,7 +202,7 @@ def run(args):
     model_key = args.model_key
     workers = args.workers
 
-    items = load_items(model_key)
+    items = load_items(model_key, args.showo_ascr_judge, args.bagel_judge)
     if args.limit:
         items = items[:args.limit]
 
@@ -320,6 +315,10 @@ def main(argv=None):
                         help="Concurrent API workers (default: 8)")
     parser.add_argument("--limit", type=int, default=None,
                         help="Limit number of prompts (for testing)")
+    parser.add_argument("--showo-ascr-judge", default="outputs/hard64_parallel/qwen_clean_judge.json",
+                        help="Input Qwen clean judge JSON for showo/ascr records")
+    parser.add_argument("--bagel-judge", default="outputs/bagel_hard64/qwen_clean_bagel_vs_ascr.json",
+                        help="Input Qwen clean judge JSON for bagel records")
     args = parser.parse_args(argv)
     return run(args)
 

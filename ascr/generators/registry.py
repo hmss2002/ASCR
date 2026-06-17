@@ -1,5 +1,4 @@
 from ascr.generators.base import MockGeneratorAdapter
-from ascr.generators.showo import ShowOAdapter
 
 
 def _generator_config(config):
@@ -41,6 +40,8 @@ def build_generator(name, config):
             max_seq_length=int(generator_config.get('max_seq_length', 512)),
         )
     if name == 'showo':
+        from ascr.generators.showo import ShowOAdapter
+
         generator_config = _generator_config(config)
         return ShowOAdapter(
             repo_path=generator_config.get('repo_path'),

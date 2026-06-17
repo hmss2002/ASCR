@@ -18,7 +18,7 @@ Usage:
     --output-dir outputs/bench3_eval/genai_showo \
     --workers 30
 
-  export OFOX_API_KEY=sk-of-...
+  export OFOX_API_KEY=your-ofox-api-key
 """
 
 import argparse

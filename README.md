@@ -271,7 +271,7 @@ size**, not a second token grid.
 | `scripts/judge/` | Gemini, GPT, Qwen, OWL-ViT, and related judging/evaluation scripts |
 | `scripts/benchmark/` | Prompt prep, conversion, pairing, merging, and summarization utilities |
 | `scripts/setup/` | Environment and model download helpers |
-| `scripts/maintenance/` | Submission helpers, diagnostics, cleanup, GitHub sync helper |
+| `scripts/maintenance/` | Submission helpers, diagnostics, cleanup, validation-only Git helper |
 
 ### Execution modes
 
@@ -330,7 +330,7 @@ For a fresh local or cluster checkout, the lowest-friction setup order is:
 ```bash
 python -m pip install -e .
 python -m pip install -r requirements/base.txt
-python -m pip install -r requirements-qwen-vl.txt
+python -m pip install -r requirements/qwen_vl.txt
 bash scripts/setup/download_showo.sh
 ```
 
@@ -344,6 +344,8 @@ Then prepare model-family-specific environments/checkouts as needed:
    relevant configs if the checkout lives elsewhere.
 
 After setup, use the validation commands in section 12 before submitting jobs.
+For a fuller server bootstrap, see `docs/server_setup.md`. For validation and Git safety, see
+`docs/reproducibility.md`.
 
 Do not commit:
 
@@ -366,7 +368,20 @@ Useful checks:
 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python -m unittest discover -s tests
 python -m ascr.cli.run_stage1 --help
 python -m ascr.cli.compare_stage1_variants --help
+python -m ascr.cli.preflight --mode local --config configs/stage1/lumina/stage1_lumina_qwen9b_coarse_hq.yaml --scan-secrets
 ```
+
+On a GPU server, run preflight in server mode after creating model-family environments and
+preparing local model caches:
+
+```bash
+python -m ascr.cli.preflight --mode server \
+  --config configs/stage1/lumina/stage1_lumina_qwen9b_coarse_hq.yaml \
+  --scan-secrets
+```
+
+The `ascr-preflight` command checks Python/import readiness, CUDA visibility, important runtime
+paths, selected environment variables, and likely committed secrets without printing secret values.
 
 Reference checks used after repository reorganizations:
 
@@ -383,6 +398,29 @@ Before committing structural changes:
 2. run available unit tests or import/smoke checks;
 3. keep generated outputs and large artifacts out of Git;
 4. commit related file moves and path updates together so history stays understandable.
+5. run `python -m ascr.cli.preflight --mode local --config configs/stage1/lumina/stage1_lumina_qwen9b_coarse_hq.yaml --scan-secrets`.
+
+### GitHub synchronization safety
+
+The repository previously contained a hard-coded API key in a maintenance script. Treat any exposed
+key as compromised and rotate or revoke it before pushing. Real keys must come from environment
+variables such as `OFOX_API_KEY`, never from tracked scripts or docs.
+
+Use manual staging rather than broad auto-add scripts:
+
+```bash
+git switch -c codex/server-ready-cleanup
+python -m unittest discover -s tests
+python -m ascr.cli.preflight --mode local --config configs/stage1/lumina/stage1_lumina_qwen9b_coarse_hq.yaml --scan-secrets
+git diff --check
+git status --short
+git add <intentional files only>
+git commit -m "Prepare ASCR for reproducible server runs"
+git push -u origin codex/server-ready-cleanup
+```
+
+`scripts/maintenance/sync_github.sh` is now validation-only and intentionally does not stage,
+commit, or push.
 
 ## 13. Maintenance rule
 

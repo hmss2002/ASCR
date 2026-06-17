@@ -4,7 +4,7 @@ set -euo pipefail
 PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.."; pwd)
 cd "${PROJECT_ROOT}"
 
-ASCR_ENV=${ASCR_ENV:-.venv-qwen36}
+ASCR_ENV=${ASCR_ENV:-${ASCR_ENV_QWEN:-.venv-qwen36}}
 if [ -n "${ASCR_ENV}" ] && [ -d "${ASCR_ENV}" ]; then
   source "${ASCR_ENV}/bin/activate"
 fi

@@ -1,4 +1,4 @@
-from ascr.core.artifacts import RunArtifacts, current_git_commit
+from ascr.core.artifacts import RunArtifacts, current_git_commit, runtime_manifest
 from ascr.grids.overlay import create_token_grid_overlay
 from ascr.revision.prompt_composer import compose_correction_prompt
 from ascr.traces.schema import make_trace_record
@@ -36,6 +36,7 @@ class DirectTokenReopenLoop:
             "git_commit": current_git_commit(project_root),
             "started_from_initial_state": initial_state is not None,
         })
+        artifacts.write_json("runtime_manifest.json", runtime_manifest(project_root))
         trace_writer = TraceWriter(artifacts.root / "trace.jsonl")
         state = initial_state if initial_state is not None else self.generator.initialize(prompt, artifacts)
         records = []

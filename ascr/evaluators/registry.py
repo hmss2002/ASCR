@@ -1,10 +1,6 @@
 import os
 
 from ascr.evaluators.mock import MockSemanticEvaluator
-from ascr.evaluators.local_vlm import LocalVLMEvaluator
-from ascr.evaluators.qwen_vl import QwenVLEvaluator
-from ascr.evaluators.qwen_vl_token import QwenVLTokenEvaluator
-from ascr.evaluators.showo_mmu import ShowOMMUEvaluator
 
 
 SHOWO_BACKENDS = {"showo", "showo_mmu", "showo-mmu"}
@@ -63,6 +59,8 @@ def _build_mmada_self_coarse(config):
 
 
 def _build_showo_mmu(config):
+    from ascr.evaluators.showo_mmu import ShowOMMUEvaluator
+
     evaluator_config = config.get("evaluator", config)
     generator_config = config.get("generator", {})
     return ShowOMMUEvaluator(
@@ -79,6 +77,8 @@ def _build_showo_mmu(config):
 
 
 def _build_qwen_vl(config):
+    from ascr.evaluators.qwen_vl import QwenVLEvaluator
+
     evaluator_config = config.get("evaluator", config)
     return QwenVLEvaluator(
         model_path=os.environ.get("QWEN_MODEL_PATH", evaluator_config.get("model_path", "models/qwen3.5-9b")),
@@ -103,6 +103,8 @@ def _build_qwen_vl(config):
 
 
 def _build_qwen_vl_token(config):
+    from ascr.evaluators.qwen_vl_token import QwenVLTokenEvaluator
+
     evaluator_config = config.get("evaluator", config)
     select_grid_size = int(evaluator_config.get("select_grid_size", config.get("select_grid_size", config.get("token_grid_size", 32))))
     return QwenVLTokenEvaluator(
@@ -151,6 +153,8 @@ def build_evaluator(name, config):
             return _build_qwen_vl_token(config)
         if backend in QWEN_BACKENDS:
             return _build_qwen_vl(config)
+        from ascr.evaluators.local_vlm import LocalVLMEvaluator
+
         return LocalVLMEvaluator(
             model_path=evaluator_config.get("model_path"),
             device=evaluator_config.get("device", "cuda"),
