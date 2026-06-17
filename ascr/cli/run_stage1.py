@@ -15,8 +15,8 @@ def build_parser():
     parser.add_argument("--prompt", default="A red cube left of a blue sphere", help="Original text-to-image prompt.")
     parser.add_argument("--output-dir", default=None, help="Override output directory.")
     parser.add_argument("--max-iterations", type=int, default=None, help="Override max ASCR iterations.")
-    parser.add_argument("--generator", default=None, choices=["mock", "showo"], help="Generator adapter.")
-    parser.add_argument("--evaluator", default=None, choices=["mock", "local_vlm", "local-vlm", "showo_mmu", "showo-mmu", "showo_vlm", "showo-vlm", "qwen_vl", "qwen-vl", "qwen3_6", "qwen36"], help="Semantic evaluator adapter.")
+    parser.add_argument("--generator", default=None, choices=["mock", "showo", "mmada", "lumina", "lumina_dimoo", "lumina-dimoo"], help="Generator adapter.")
+    parser.add_argument("--evaluator", default=None, choices=["mock", "local_vlm", "local-vlm", "showo_mmu", "showo-mmu", "showo_vlm", "showo-vlm", "qwen_vl", "qwen-vl", "qwen3_6", "qwen36", "ofox_vlm", "ofox-vlm", "ofox_qwen", "ofox-qwen", "qwen37_api", "bailian_qwen37", "stage2_student", "stage2-student", "learned_selector", "learned-selector", "distilled_selector", "distilled-selector"], help="Semantic evaluator adapter.")
     parser.add_argument("--dry-run", action="store_true", help="Force mock generator and mock evaluator.")
     return parser
 

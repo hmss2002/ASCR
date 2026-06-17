@@ -2,9 +2,11 @@ import os
 
 from ascr.evaluators.mock import MockSemanticEvaluator
 from ascr.evaluators.local_vlm import LocalVLMEvaluator
+from ascr.evaluators.ofox_vlm import OfoxVLMEvaluator
 from ascr.evaluators.qwen_vl import QwenVLEvaluator
 from ascr.evaluators.qwen_vl_token import QwenVLTokenEvaluator
 from ascr.evaluators.showo_mmu import ShowOMMUEvaluator
+from ascr.evaluators.stage2_student import LearnedStage2Evaluator
 
 
 SHOWO_BACKENDS = {"showo_mmu", "showo-mmu", "showo_vlm", "showo-vlm"}
@@ -12,6 +14,8 @@ QWEN_BACKENDS = {"qwen", "qwen_vl", "qwen-vl", "qwen3_6", "qwen3.6", "qwen36", "
 QWEN_TOKEN_BACKENDS = {"qwen_vl_token", "qwen-vl-token", "qwen_token", "qwen-token", "qwen3_6_token", "qwen36_token"}
 MMADA_SELF_BACKENDS = {"mmada_self", "mmada-self", "mmada", "mmada_mmu", "mmada-mmu"}
 MMADA_SELF_COARSE_BACKENDS = {"mmada_self_coarse", "mmada-self-coarse", "mmada_coarse", "mmada-coarse"}
+OFOX_BACKENDS = {"ofox_vlm", "ofox-vlm", "ofox_qwen", "ofox-qwen", "qwen37_api", "bailian_qwen37"}
+LEARNED_STAGE2_BACKENDS = {"stage2_student", "stage2-student", "learned_selector", "learned-selector", "distilled_selector", "distilled-selector"}
 
 
 def _as_bool(value, default=False):
@@ -102,6 +106,31 @@ def _build_qwen_vl(config):
     )
 
 
+def _build_ofox_vlm(config):
+    evaluator_config = config.get("evaluator", config)
+    return OfoxVLMEvaluator(
+        model=evaluator_config.get("model", "bailian/qwen3.7-plus"),
+        base_url=evaluator_config.get("base_url"),
+        api_key=evaluator_config.get("api_key"),
+        base_url_env=evaluator_config.get("base_url_env", "OFOX_BASE_URL"),
+        api_key_env=evaluator_config.get("api_key_env", "OFOX_API_KEY"),
+        strict_json=_as_bool(evaluator_config.get("strict_json", True), True),
+        grid_size=int(config.get("coarse_grid_size", evaluator_config.get("grid_size", 4))),
+        image_size=int(config.get("image_size", evaluator_config.get("image_size", 1024))),
+        max_input_tokens=int(evaluator_config.get("max_input_tokens", 32768)),
+        max_new_tokens=int(evaluator_config.get("max_new_tokens", 2048)),
+        repair_max_new_tokens=evaluator_config.get("repair_max_new_tokens"),
+        max_selected_cells=int(evaluator_config.get("max_selected_cells", config.get("selector", {}).get("max_selected_cells", 8))),
+        temperature=float(evaluator_config.get("temperature", 0.0)),
+        top_p=float(evaluator_config.get("top_p", 1.0)),
+        enable_thinking=_as_bool(evaluator_config.get("enable_thinking", True), True),
+        api_concurrency=int(evaluator_config.get("api_concurrency", 1)),
+        api_retry=int(evaluator_config.get("api_retry", 2)),
+        api_timeout=float(evaluator_config.get("api_timeout", 120.0)),
+        api_backoff=float(evaluator_config.get("api_backoff", 2.0)),
+    )
+
+
 def _build_qwen_vl_token(config):
     evaluator_config = config.get("evaluator", config)
     select_grid_size = int(evaluator_config.get("select_grid_size", config.get("select_grid_size", config.get("token_grid_size", 32))))
@@ -127,6 +156,21 @@ def _build_qwen_vl_token(config):
     )
 
 
+def _build_learned_stage2(config):
+    evaluator_config = config.get("evaluator", config)
+    checkpoint_path = evaluator_config.get("checkpoint_path") or evaluator_config.get("selector_checkpoint")
+    if not checkpoint_path:
+        raise ValueError("Learned Stage 2 evaluator requires evaluator.checkpoint_path or evaluator.selector_checkpoint")
+    return LearnedStage2Evaluator(
+        checkpoint_path=checkpoint_path,
+        device=evaluator_config.get("device", "cpu"),
+        grid_size=int(config.get("coarse_grid_size", evaluator_config.get("grid_size", 4))),
+        max_selected_cells=int(evaluator_config.get("max_selected_cells", config.get("selector", {}).get("max_selected_cells", 8))),
+        error_threshold=float(evaluator_config.get("error_threshold", 0.5)),
+        cell_threshold=float(evaluator_config.get("cell_threshold", 0.5)),
+    )
+
+
 def build_evaluator(name, config):
     name = (name or "mock").lower()
     config = config or {}
@@ -138,6 +182,10 @@ def build_evaluator(name, config):
         return _build_mmada_self_coarse(config)
     if name in MMADA_SELF_BACKENDS:
         return _build_mmada_self(config)
+    if name in OFOX_BACKENDS:
+        return _build_ofox_vlm(config)
+    if name in LEARNED_STAGE2_BACKENDS:
+        return _build_learned_stage2(config)
     if name in QWEN_TOKEN_BACKENDS:
         return _build_qwen_vl_token(config)
     if name in QWEN_BACKENDS:
@@ -147,6 +195,10 @@ def build_evaluator(name, config):
         backend = str(evaluator_config.get("backend", "heuristic")).lower()
         if backend in SHOWO_BACKENDS:
             return _build_showo_mmu(config)
+        if backend in OFOX_BACKENDS:
+            return _build_ofox_vlm(config)
+        if backend in LEARNED_STAGE2_BACKENDS:
+            return _build_learned_stage2(config)
         if backend in QWEN_TOKEN_BACKENDS:
             return _build_qwen_vl_token(config)
         if backend in QWEN_BACKENDS:

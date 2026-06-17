@@ -39,4 +39,18 @@ def build_generator(name, config):
             native_token_loop=bool(generator_config.get('native_token_loop', True)),
             confidence_steps=int(generator_config.get('confidence_steps', 50)),
         )
+    if name in {'lumina', 'lumina_dimoo', 'lumina-dimoo'}:
+        from ascr.generators.lumina_dimoo import LuminaAdapter
+        generator_config = config.get('generator', config)
+        return LuminaAdapter(
+            checkpoint_path=generator_config.get('checkpoint_path'),
+            repo_path=generator_config.get('repo_path'),
+            device=generator_config.get('device', 'cuda'),
+            token_grid_size=int(config.get('token_grid_size', generator_config.get('token_grid_size', 64))),
+            image_size=int(config.get('image_size', generator_config.get('image_size', 1024))),
+            guidance_scale=float(generator_config.get('guidance_scale', 4.0)),
+            generation_timesteps=int(generator_config.get('generation_timesteps', 64)),
+            temperature=float(generator_config.get('temperature', 1.0)),
+            seed=int(config.get('seed', generator_config.get('seed', 1234))),
+        )
     raise ValueError(f'Unknown generator: {name}')

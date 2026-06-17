@@ -1,0 +1,55 @@
+stage: 2
+run_name: stage2_lumina_qwen37_teacher_hq
+seed: 1234
+max_iterations: 3
+ascr_start_mode: baseline
+return_initial_on_max_error: true
+image_size: 1024
+coarse_grid_size: 4
+token_grid_size: 64
+dilation: 1
+output_dir: outputs/stage2_lumina_qwen37_teacher_hq
+
+generator:
+  name: lumina
+  checkpoint_path: models/lumina-dimoo
+  repo_path: third_party/Lumina-DiMOO
+  device: cuda
+  guidance_scale: 4.0
+  generation_timesteps: 64
+  temperature: 1.0
+  seed: 1234
+
+evaluator:
+  name: ofox_vlm
+  backend: ofox_vlm
+  model: bailian/qwen3.7-plus
+  base_url_env: OFOX_BASE_URL
+  api_key_env: OFOX_API_KEY
+  strict_json: true
+  enable_thinking: true
+  max_input_tokens: 32768
+  max_new_tokens: 2048
+  repair_max_new_tokens: 4096
+  max_selected_cells: 8
+  temperature: 0.0
+  top_p: 1.0
+  api_concurrency: 1
+  api_retry: 3
+  api_timeout: 120
+  api_backoff: 2.0
+
+selector:
+  name: grid_semantic
+  coarse_grid_size: 4
+  token_grid_size: 64
+  dilation: 1
+  max_selected_cells: 8
+  min_confidence: 0.0
+
+tracing:
+  enabled: true
+  save_hidden_states: false
+  save_confidence_maps: true
+  save_teacher_raw: true
+  save_api_usage: true

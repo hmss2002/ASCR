@@ -450,7 +450,40 @@ export OFOX_API_KEY=sk-...   # 切勿提交；建议轮换已暴露的 key
 .venv-qwen36/bin/python scripts/judge_variants_gemini.py clean \
   --items-file outputs/mmada_qwen_coarse_hard64/self_manifest.json --image-field final_image \
   --arm-label mmada_qwen_coarse --output results/mmada_qwen/clean_mmada_qwen_coarse.json
+
+# Stage 2 teacher-only smoke run (Lumina-DiMOO + oFox bailian/qwen3.7-plus)
+export OFOX_API_KEY=sk-...
+python -m ascr.cli.run_stage1 \
+  --config configs/stage2/lumina/stage2_lumina_qwen37_teacher_hq.yaml \
+  --prompt "A red cube left of a blue sphere"
+
+# Build the Stage 2 dataset from collected traces
+python -m ascr.training.build_stage2_dataset \
+  outputs/stage2_lumina_qwen37_teacher_hq \
+  --output outputs/stage2_lumina_qwen37_teacher_hq/stage2_teacher_dataset.jsonl \
+  --skipped-report outputs/stage2_lumina_qwen37_teacher_hq/stage2_teacher_skipped.jsonl
+
+# Train the replay selector baseline
+python -m ascr.training.train_selector \
+  --dataset outputs/stage2_lumina_qwen37_teacher_hq/stage2_teacher_dataset.jsonl \
+  --output-dir checkpoints/stage2_selector_replay
+
+# Train the lightweight learned Stage 2 selector baseline
+python -m ascr.training.train_selector \
+  --dataset outputs/stage2_lumina_qwen37_teacher_hq/stage2_teacher_dataset.jsonl \
+  --output-dir checkpoints/stage2_selector_learned \
+  --mode learned_coarse
+
+# Run Stage 2 with the learned selector checkpoint
+python -m ascr.cli.run_stage1 \
+  --config configs/stage2/lumina/stage2_lumina_learned_selector_hq.yaml \
+  --prompt "A red cube left of a blue sphere"
 ```
+
+See also:
+
+- `docs/stage2_vlm_distilled_understanding.md`
+- `docs/stage2_cluster_execution.md`
 
 
 ## Stage 1 Status Log (2026-05-22, fair-comparison rerun complete)
@@ -752,7 +785,7 @@ The project is built from two planning documents placed in the project root:
 The documents define ASCR as a three-stage project:
 
 1. Stage 1: validate the principle with a zero-training interface.
-2. Stage 2: replace the coarse interface with a learned semantic reopening selector.
+2. Stage 2: distill external VLM semantic understanding into a learned reopening selector / self-check module.
 3. Stage 3: show cross-model transfer across unified masked multimodal generators.
 
 <a id="research-thesis"></a>
@@ -784,17 +817,26 @@ Default choices confirmed for this project:
 
 Stage 1 should produce a runnable, logged, reproducible research prototype. It should not require training, but it must collect traces in a form that can later train Stage 2.
 
-### Stage 2: Learned Semantic Reopening Selector
+### Stage 2: VLM-Distilled Semantic Understanding / Learned Reopening Selector
 
-Goal: replace the coarse visible-grid interface with a lightweight learned selector or decision head that predicts token-level semantic reopening scores.
+Goal: improve Lumina-DiMOO's semantic self-understanding by using a stronger external VLM teacher to diagnose prompt-image mismatch, localize wrong regions on the 4x4 grid, generate correction instructions, and distill that behavior into a learned reopening selector / self-check module.
 
-Stage 1 must leave these interfaces ready:
+The first Stage 2 step is **not** to fine-tune Lumina-DiMOO itself. It is to keep the current Stage 1 control path:
 
-- Trace writer for `(prompt, intermediate state, grid localization, token mask, correction outcome)` examples.
-- `SemanticReopeningSelector` abstraction that can be implemented by rule-based Stage 1 logic or a learned Stage 2 model.
-- Training entry points designed for long-running multi-GPU jobs.
-- Checkpoint and resume conventions.
-- Evaluation hooks for comparing grid-based, learned, and ablated selectors.
+- decoded image -> 4x4 grid localization,
+- selected cells -> project to the 64x64 Lumina token grid,
+- fixed dilation=1,
+- Lumina native masked-diffusion reopening,
+
+while replacing the local selector with an external VLM teacher and then training a replay/distilled selector against those traces.
+
+Stage 1 / Stage 2 interfaces now need to support:
+
+- Trace writer for `(prompt, grid image, teacher diagnosis, token mask, correction outcome)` examples.
+- `SemanticReopeningSelector` abstraction that can be implemented by rule-based Stage 1 logic, teacher replay, or a future learned Stage 2 model.
+- OpenAI-compatible external VLM evaluation backends.
+- Dataset building, checkpoint/resume conventions, and evaluation hooks for teacher-only, replay, and learned selectors.
+- A lightweight learned coarse-selector baseline that can be trained from teacher traces and used as a runtime evaluator.
 
 ### Stage 3: Cross-Model Transfer
 
@@ -1055,9 +1097,11 @@ ASCR/
 │   │   ├── metrics.py                           ← score_image, compare_scores (heuristic)
 │   │   └── runner.py                            ← result_to_markdown helper
 │   └── training/
-│       ├── selector_model.py                    ← Stage 2 placeholder: learned selector
-│       │                                           interface (image + prompt → token scores)
-│       ├── train_selector.py                    ← Stage 2 placeholder: training entry point
+│       ├── selector_model.py                    ← Stage 2 replay + learned
+│       │                                           selector checkpoint interfaces
+│       ├── build_stage2_dataset.py              ← Stage 2 trace -> dataset builder
+│       ├── train_selector.py                    ← Stage 2 replay / learned
+│       │                                           training entry point
 │       └── ddp.py                               ← distributed training helpers (DDP setup)
 │
 ├── scripts/
@@ -1130,7 +1174,7 @@ ASCR/
 │   │                                               (1-GPU gpu_shared, --offset/--limit)
 │   ├── bench3_eval_pipeline.sbatch              ← bench3 GPT-5.5 eval pipeline (CPU-only)
 │   │                                               DPG+DSG+GenAI × 3 models → bench3_summary.json
-│   └── stage2_train_selector_gpu.sbatch         ← Stage 2 placeholder
+│   └── stage2_train_selector_gpu.sbatch         ← Stage 2 replay / learned torchrun job
 │
 ├── tests/
 │   ├── test_grid_projection.py                  ← 4×4→32×32 projection + dilation
@@ -1485,6 +1529,17 @@ Policy:
 
 The canonical Stage 1 workflow uses the Qwen3.5-9B evaluator + ShowO generator on the
 T2I-CompBench hard64 prompt set, with 8-way GPU sharding and runtime image reuse.
+
+### Stage 2 teacher-only smoke run
+
+```bash
+export OFOX_API_KEY=sk-...
+python -m ascr.cli.run_stage1 \
+    --config configs/stage2/lumina/stage2_lumina_qwen37_teacher_hq.yaml \
+    --prompt "A red cube left of a blue sphere"
+```
+
+`OFOX_BASE_URL` is optional; if unset, the Stage 2 evaluator defaults to the oFox OpenAI-compatible API base. For cluster-scale Stage 2 runs, use the scripts under `jobs/stage2/lumina/` and the execution notes in `docs/stage2_cluster_execution.md`.
 
 ### Local dry-run (no GPU required)
 
