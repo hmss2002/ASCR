@@ -184,3 +184,92 @@ Next action requested:
 - local Codex should inspect why the repository/logs path is not writable on compute nodes and decide whether batch scripts should write logs/output under a different writable location such as a user scratch path.
 - local Codex should decide whether the Qwen evaluator test should accept an overridden local model path.
 - after fixing the writable path / relative env issue, rerun the same three Slurm submissions and capture fresh job ids.
+
+## 2026-06-17 23:58 HKT - server AI
+
+Context:
+- Machine: HKU AI server login node hpcr4300a; Slurm compute nodes SPGL-1-12 and SPGL-1-17 involved in this repair cycle
+- Branch before: main
+- Commit before: 1c1e174e2575ad5a5dfddc8c8ca75536cf611d79
+- Branch after: main
+- Commit after: 4867837fc1133cbd287f0ea74de81bb6b732ce75 for code fixes; a follow-up docs commit will carry this log entry
+
+Files changed:
+- scripts/run_multigpu.sh: pass PROJECT_ROOT through sbatch, normalize OUT_ROOT to an absolute path, and submit with --chdir so compute nodes start in the real repository root
+- scripts/slurm_infer.sbatch: prefer PROJECT_ROOT / SLURM_SUBMIT_DIR when available instead of recomputing from BASH_SOURCE only
+- jobs/smoke/stage1_lumina_qwen_2gpu.sbatch: resolve PROJECT_ROOT robustly on compute nodes, convert venv/config/prompt/output/repo paths to absolute paths, and enable strict shell failure handling
+- jobs/smoke/stage1_mmada_self_1gpu.sbatch: same PROJECT_ROOT and absolute-path repair for the mmada smoke path
+- jobs/stage1/lumina/stage1_lumina_qwen_coarse_hard64_8gpu.sbatch: same PROJECT_ROOT and absolute-path repair for the 8-GPU Lumina/Qwen job
+- ascr/cli/preflight.py: downgrade login-node CUDA absence to a warning unless the check is already inside a GPU context or a node with nvidia-smi available
+- tests/test_qwen_vl_evaluator.py: isolate QWEN_MODEL_PATH from the registry test and add an explicit env-override test so server-local model paths do not break smoke checks
+
+Commands run:
+- sed -n reads of ascr/cli/preflight.py, tests/test_qwen_vl_evaluator.py, scripts/run_multigpu.sh, scripts/slurm_infer.sbatch, jobs/smoke/stage1_lumina_qwen_2gpu.sbatch, jobs/smoke/stage1_mmada_self_1gpu.sbatch, jobs/stage1/lumina/stage1_lumina_qwen_coarse_hard64_8gpu.sbatch
+  Result: passed
+  Notes: used to isolate the controlling code paths for batch submit root resolution, absolute-path handling, preflight CUDA policy, and env-sensitive evaluator tests.
+- source .venv-qwen36/bin/activate; python -m unittest tests.test_qwen_vl_evaluator
+  Result: passed after fixes
+  Notes: 19 tests passed. The previous failure caused by QWEN_MODEL_PATH leaking into the registry test is now covered by two explicit test cases.
+- source .venv-qwen36/bin/activate; python -m ascr.cli.preflight --mode server --config configs/stage1/lumina/stage1_lumina_qwen9b_coarse_hq.yaml --scan-secrets
+  Result: passed after fixes
+  Notes: login-node CUDA absence is now reported as a warning with guidance to run inside a GPU allocation for device validation; imports, paths, env checks, and secret scan all passed.
+- source .venv-qwen36/bin/activate; python scripts/smoke_test.py --server --skip-dry-run
+  Result: passed after fixes
+  Notes: 102 tests passed; run_stage1 help check passed; preflight passed with a login-node CUDA warning; overall smoke returned 0.
+- PROMPT_LIMIT=1 OUT_ROOT=outputs/smoke_lumina_qwen bash scripts/run_multigpu.sh
+  Result: passed after fixes
+  Notes: submitted job 70673; completed successfully in 00:02:39 on SPGL-1-12.
+- MODE=mmada-self PROMPT_LIMIT=1 OUT_ROOT=outputs/smoke_mmada_self bash scripts/run_multigpu.sh
+  Result: passed after fixes
+  Notes: submitted job 70674; completed successfully in 00:01:06 on SPGL-1-12.
+- MODE=lumina-qwen-8gpu PROMPT_LIMIT=64 OUT_ROOT=outputs/lumina_qwen_hard64 bash scripts/run_multigpu.sh
+  Result: submission passed and job is running
+  Notes: submitted job 70675; currently RUNNING on SPGL-1-17 at the time of this log entry.
+- squeue / sacct / tail checks for jobs 70673, 70674, 70675
+  Result: passed
+  Notes: confirmed the previous immediate permission/venv-path failures are gone; smoke jobs completed successfully and the 8-GPU job has begun producing outputs.
+
+Environment:
+- python: Python 3.11.15
+- torch: import succeeded in .venv-qwen36
+- cuda: still unavailable on the login shell itself; now treated as a warning outside GPU context
+- gpu summary: earlier batch probe recorded NVIDIA L40S, 46068 MiB, driver 580.159.04
+- active env: .venv-qwen36 for validation and smoke checks
+- important env vars set/unset, without values: set QWEN_MODEL_PATH, HF_HUB_OFFLINE, TRANSFORMERS_OFFLINE, TOKENIZERS_PARALLELISM during smoke/validation; batch jobs rely on PROJECT_ROOT propagation and absolute derived paths
+
+Server jobs:
+- job id: 70673
+- mode: lumina-qwen smoke
+- command: PROMPT_LIMIT=1 OUT_ROOT=outputs/smoke_lumina_qwen bash scripts/run_multigpu.sh
+- output dir: outputs/smoke_lumina_qwen
+- stdout log: logs/ascr-smoke-lumina-qwen-70673.out
+- stderr log: logs/ascr-smoke-lumina-qwen-70673.err
+- status: COMPLETED
+- job id: 70674
+- mode: mmada-self smoke
+- command: MODE=mmada-self PROMPT_LIMIT=1 OUT_ROOT=outputs/smoke_mmada_self bash scripts/run_multigpu.sh
+- output dir: outputs/smoke_mmada_self
+- stdout log: logs/ascr-smoke-mmada-self-70674.out
+- stderr log: logs/ascr-smoke-mmada-self-70674.err
+- status: COMPLETED
+- job id: 70675
+- mode: lumina-qwen 8gpu main
+- command: MODE=lumina-qwen-8gpu PROMPT_LIMIT=64 OUT_ROOT=outputs/lumina_qwen_hard64 bash scripts/run_multigpu.sh
+- output dir: outputs/lumina_qwen_hard64
+- stdout log: logs/ascr-lumina-qwen-coarse-70675.out
+- stderr log: logs/ascr-lumina-qwen-coarse-70675.err
+- status: RUNNING at log time
+
+Results:
+- summary: the original server blockers have been materially repaired. The env-sensitive Qwen smoke failure is fixed; login-node preflight no longer hard-fails merely because CUDA is absent outside a GPU allocation; and the Slurm wrapper/job scripts now launch from the correct repository root with absolute runtime paths.
+- files to inspect: logs/ascr-smoke-lumina-qwen-70673-qwen.log, logs/ascr-smoke-mmada-self-70674.out, logs/ascr-lumina-qwen-coarse-70675.out, logs/ascr-lumina-qwen-coarse-70675-p0-qwen.log
+- output artifacts already created: outputs/smoke_lumina_qwen/baseline/p000.png, outputs/smoke_lumina_qwen/self/p000.png, outputs/smoke_lumina_qwen/records/p000.json, outputs/smoke_mmada_self/baseline/p000.png, outputs/smoke_mmada_self/self/p000.png, outputs/smoke_mmada_self/records/p000.json, outputs/lumina_qwen_hard64/baseline/p000.png through p003.png, outputs/lumina_qwen_hard64/self/p000.png through p003.png, outputs/lumina_qwen_hard64/records/p000.json through p003.json
+
+Problems / blockers:
+- the 8-GPU main job 70675 was still running when this entry was written, so final success/failure and full output counts are not yet known.
+- logs from live Qwen server processes are very verbose during model materialization; future status probes should avoid broad tailing of active logs unless a specific worker needs debugging.
+- mmada smoke still emits non-fatal warnings about trust_remote_code being ignored and a llada-to-mmada model type mismatch; the job completed, but local Codex may still want to inspect whether these warnings are expected for the current checkpoint stack.
+
+Next action requested:
+- local Codex should watch job 70675 to completion and capture the final output count plus any worker-specific failures if they appear.
+- if 70675 later fails, inspect logs/ascr-lumina-qwen-coarse-70675-*.log first; the previous permission/path root cause should no longer be the culprit.
