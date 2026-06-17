@@ -693,3 +693,49 @@ Problems / blockers:
 
 Next action requested:
 - if the batch wrapper result matters, inspect `logs/ascr-api-teacher-70680.out` and `logs/ascr-api-teacher-70680.err` after job `70680` completes.
+
+## 2026-06-18 04:44 HKT - server AI
+
+Context:
+- Machine: HKU AI server login node hpcr4300a
+- Branch before: main
+- Commit before: d58b952c5cdaf0148611fe3c6246e94cdc54cb31
+- Branch after: main
+- Commit after: pending pushed follow-up log commit for the finalized Slurm wrapper status
+
+Files changed:
+- docs/AI_COLLAB_LOG.md: appended final status for Slurm job `70680` after it exited
+
+Commands run:
+- sacct -j 70680 --format=JobID,State,ExitCode -n -P
+  Result: passed
+  Notes: reported `70680|FAILED|2:0` and `70680.batch|FAILED|2:0`.
+- cat/tail of logs/ascr-api-teacher-70680.out and logs/ascr-api-teacher-70680.err
+  Result: passed
+  Notes: stdout log was empty; stderr log contains the API probe failure JSON.
+
+Environment:
+- python: unchanged from the preceding entry
+- torch: unchanged from the preceding entry
+- cuda: unchanged from the preceding entry
+- active env: not applicable for the log-only follow-up
+
+Server jobs:
+- job id: 70680
+- mode: slurm api teacher wrapper
+- command: `sbatch --parsable --export=ALL,OFOX_API_KEY,OFOX_BASE_URL=https://api.ofox.ai/v1,ASCR_TEACHER_MODEL=bailian/qwen3.7-plus,ASCR_TEACHER_QUALITY_MAX_TOKENS=2048,ASCR_TEACHER_LOCALIZATION_MAX_TOKENS=2048,ASCR_TEACHER_JSON_REPAIR_RETRIES=1,LIMIT=64,OUT_ROOT=outputs/lumina_qwen_hard64,DISTILL_OUT=outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact jobs/distill/api_teacher_distill.sbatch`
+- output dir: outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact
+- stdout log: logs/ascr-api-teacher-70680.out
+- stderr log: logs/ascr-api-teacher-70680.err
+- status: FAILED exit `2:0`
+
+Results:
+- summary: the Slurm wrapper path submitted correctly but failed at the compute-side `api_probe.py --allow-empty-content` step with `APIConnectionError: Connection error.` before distillation started.
+- files to inspect: `logs/ascr-api-teacher-70680.err`
+
+Problems / blockers:
+- this failure differs from the successful login-node teacher rerun: the login node could reach the OFOX endpoint well enough to complete the repaired distill run, but the Slurm batch context hit a network/API connection failure immediately.
+- `logs/ascr-api-teacher-70680.out` is empty, so `logs/ascr-api-teacher-70680.err` is the only useful failure log for this job.
+
+Next action requested:
+- if the Slurm path is required, inspect compute-node network egress / proxy policy for OFOX access and retry the same wrapper after confirming the batch environment can reach `https://api.ofox.ai/v1`.
