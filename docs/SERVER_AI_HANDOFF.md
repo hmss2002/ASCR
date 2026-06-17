@@ -174,6 +174,29 @@ sbatch --export=ALL,DATASET=outputs/teacher_distill/hard64_lumina_qwen_qwen37_co
   jobs/training/stage2_cell_prior_baseline.sbatch
 ```
 
+## Run Offline Selector Benchmarks
+
+After `cell-prior` writes `selector_prior.json`, run the API-free benchmark
+harness. It evaluates the labeled holdout split as in-domain and writes
+out-domain predictions for DrawBench smoke prompts as an unlabeled readiness
+check:
+
+```bash
+SELECTOR=outputs/stage2_baselines/cell_prior_qwen37_holdout/selector_prior.json \
+IN_DOMAIN_DATASET=outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl \
+IN_DOMAIN_SPLIT=outputs/stage2_baselines/cell_prior_qwen37_holdout/split_manifest.json \
+OUT_DOMAIN_PROMPTS=configs/benchmarks/prompts/drawbench_smoke8.txt \
+OUT_DOMAIN_LIMIT=8 \
+OUTPUT_DIR=outputs/selector_benchmarks/cell_prior_qwen37 \
+TOP_K=3 \
+bash scripts/benchmark/run_selector_benchmark.sh
+```
+
+The out-domain smoke prompts do not have cell-level teacher labels yet, so the
+out-domain section reports `label_status=unlabeled_prompts_only` instead of an
+accuracy metric. Add teacher labels later before treating out-domain accuracy as
+a real benchmark.
+
 `jobs/distill/api_teacher_distill.sbatch` is retained as a template but is
 disabled by default. Do not use it until compute-node DNS/egress or proxy access
 to `api.ofox.ai` is fixed and confirmed.
@@ -186,6 +209,7 @@ keys:
 ```bash
 git add -f outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/*.json*
 git add -f outputs/stage2_baselines/cell_prior_qwen37_holdout/*.json*
+git add -f outputs/selector_benchmarks/cell_prior_qwen37/*.json*
 git add docs/AI_COLLAB_LOG.md
 git commit -m "Run compute-node cell prior baseline"
 git push

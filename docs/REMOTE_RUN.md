@@ -184,4 +184,17 @@ sbatch --export=ALL,DATASET=outputs/teacher_distill/hard64_lumina_qwen_qwen37_co
   jobs/training/stage2_cell_prior_baseline.sbatch
 ```
 
+Offline selector benchmark:
+
+```bash
+SELECTOR=outputs/stage2_baselines/cell_prior_qwen37_holdout/selector_prior.json \
+IN_DOMAIN_DATASET=outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl \
+IN_DOMAIN_SPLIT=outputs/stage2_baselines/cell_prior_qwen37_holdout/split_manifest.json \
+OUT_DOMAIN_PROMPTS=configs/benchmarks/prompts/drawbench_smoke8.txt \
+OUT_DOMAIN_LIMIT=8 \
+OUTPUT_DIR=outputs/selector_benchmarks/cell_prior_qwen37 \
+TOP_K=3 \
+bash scripts/benchmark/run_selector_benchmark.sh
+```
+
 See `docs/API_TEACHER_DISTILL.md` for schema and troubleshooting.

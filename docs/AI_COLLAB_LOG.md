@@ -939,3 +939,43 @@ Next action requested:
 - server AI should pull latest main, activate `.venv-qwen36`, run the audit command over the canonical compact teacher dataset, then run:
   `sbatch --export=ALL,DATASET=outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl,OUTPUT_DIR=outputs/stage2_baselines/cell_prior_qwen37_holdout,EVAL_MODE=holdout,TRAIN_RATIO=0.8,SEED=0,TOP_K=3 jobs/training/stage2_cell_prior_baseline.sbatch`
 - after completion, server AI must inspect Slurm logs, append detailed results to this log, force-add only the small JSON baseline artifacts, commit, and push to GitHub.
+
+## 2026-06-18 21:55 CST - local Codex
+
+Context:
+- Machine: Windows local ASCR checkout
+- Branch before: main
+- Commit before: 5ba7eecffd287305b927e97a541321bda2c74442
+- Branch after: main
+- Commit after: pending pushed commit for offline selector benchmark harness
+
+Files changed:
+- ascr/benchmarks/selector_benchmark.py: added an API-free selector benchmark CLI that evaluates labeled in-domain rows and writes unlabeled out-domain prompt predictions.
+- scripts/benchmark/run_selector_benchmark.sh: added a shell runner with defaults for the Qwen3.7 compact teacher dataset, holdout split, and DrawBench smoke prompts.
+- docs/SERVER_AI_HANDOFF.md and docs/REMOTE_RUN.md: added server commands for in-domain holdout evaluation and out-domain unlabeled readiness predictions.
+- tests/test_selector_benchmark.py: added coverage for labeled in-domain metrics and unlabeled out-domain prompt output.
+
+Commands run:
+- git pull --ff-only origin main
+  Result: passed
+  Notes: fast-forwarded to server commit 5ba7eec.
+
+Environment:
+- python: local Windows Python 3.11
+- active env: local validation environment
+- important env vars set/unset, without values: OFOX_API_KEY not used locally
+
+Server jobs:
+- job id: none
+- mode: not run locally
+- status: not submitted
+
+Results:
+- summary: repo now has a first offline selector benchmark path. In-domain metrics are label-backed from the teacher dataset holdout split; out-domain DrawBench smoke is currently prediction/readiness only because those prompts do not yet have cell-level teacher labels.
+
+Problems / blockers:
+- out-domain accuracy cannot be computed until out-domain prompts receive teacher localization labels.
+- this benchmark does not need GPU because `cell-prior` is frequency counting over JSON. GPUs remain relevant for Stage-1 generation, VLM/model inference, and future neural Stage-2 training.
+
+Next action requested:
+- server AI should pull latest main, run `bash scripts/benchmark/run_selector_benchmark.sh`, inspect `outputs/selector_benchmarks/cell_prior_qwen37/benchmark_report.json`, append results to this log, force-add the small JSON benchmark outputs, commit, and push.
