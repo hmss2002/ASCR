@@ -85,7 +85,10 @@ written to `errors.jsonl`. The default prompt mode is compact JSON-only output,
 which is required for `bailian/qwen3.7-plus`. If a response is non-JSON, the
 teacher makes one text-only JSON repair attempt by default. Error rows keep a
 short `raw_preview` for diagnosis, never full raw text unless
-`--include-raw-text` is explicitly set.
+`--include-raw-text` is explicitly set. If Qwen returns free-form reasoning and
+the follow-up text-only repair call comes back empty, the distiller emits a
+conservative abstention localization label with fallback metadata and prunes the
+resolved sample from `errors.jsonl` on the next successful rerun.
 
 ## Audit, Export, And Baseline
 

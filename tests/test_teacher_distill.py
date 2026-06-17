@@ -14,6 +14,7 @@ from ascr.distill.teacher import (
     extract_json_object_with_repair,
     localization_messages,
     normalize_quality,
+    prune_resolved_errors,
     quality_messages,
     run_task,
 )
@@ -72,6 +73,16 @@ class _RepairClient:
         self.chat = type("Chat", (), {"completions": _RepairCompletions()})()
 
 
+class _EmptyRepairCompletions:
+    def create(self, **kwargs):
+        return _Response("")
+
+
+class _EmptyRepairClient:
+    def __init__(self):
+        self.chat = type("Chat", (), {"completions": _EmptyRepairCompletions()})()
+
+
 class TeacherDistillTests(unittest.TestCase):
     def test_extract_json_object_handles_markdown(self):
         payload = extract_json_object("```json\n{\"ok\": true}\n```")
@@ -90,6 +101,18 @@ class TeacherDistillTests(unittest.TestCase):
             repair_retries=1,
         )
         self.assertEqual(payload["has_error"], False)
+
+    def test_json_repair_uses_local_abstention_when_text_only_repair_is_empty(self):
+        payload = extract_json_object_with_repair(
+            "The image appears correct.",
+            _EmptyRepairClient(),
+            "fake-model",
+            '{"has_error": boolean, "summary": string, "regions": array, "correction_instruction": string}',
+            repair_retries=1,
+        )
+        self.assertEqual(payload["has_error"], False)
+        self.assertTrue(payload["should_abstain"])
+        self.assertEqual(payload["repair_fallback"]["type"], "local-empty-json-repair")
 
     def test_error_payload_keeps_raw_preview_for_parse_failures(self):
         exc = TeacherJsonParseError("bad json", raw_text="natural language answer")
@@ -212,6 +235,23 @@ class TeacherDistillTests(unittest.TestCase):
             train = train_cell_prior(distill / "dataset.jsonl", root / "baseline")
             self.assertEqual(train["metrics"]["hit_any_rate"], 1.0)
             self.assertTrue((root / "baseline" / "selector_prior.json").exists())
+
+    def test_prune_resolved_errors_drops_resolved_rows_and_dedupes(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            errors_path = Path(temp_dir) / "errors.jsonl"
+            errors_path.write_text(
+                "\n".join([
+                    json.dumps({"sample_id": "p000:i000", "error": "old"}),
+                    json.dumps({"sample_id": "p001:i000", "error": "older"}),
+                    json.dumps({"sample_id": "p000:i000", "error": "new"}),
+                    json.dumps({"sample_id": "p001:i000", "error": "newest"}),
+                ]) + "\n",
+                encoding="utf-8",
+            )
+            kept = prune_resolved_errors(errors_path, {"p000:i000"})
+            self.assertEqual(kept, 1)
+            rows = [json.loads(line) for line in errors_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+            self.assertEqual(rows, [{"sample_id": "p001:i000", "error": "newest"}])
 
 
 if __name__ == "__main__":

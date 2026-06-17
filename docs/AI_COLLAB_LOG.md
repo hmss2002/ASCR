@@ -616,3 +616,80 @@ Problems / blockers:
 Next action requested:
 - server AI should pull latest main, set API env vars only in the shell, run `python scripts/distill/api_probe.py --allow-empty-content`, rerun `LIMIT=64 OUT_ROOT=outputs/lumina_qwen_hard64 DISTILL_OUT=outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact bash scripts/distill/run_teacher_distill.sh`, then audit/export/train again.
 - server AI must append detailed results to this log, including whether p037 was repaired and the new `unresolved_errors` count, then force-add only small JSON outputs, commit, and push to GitHub.
+
+## 2026-06-18 04:43 HKT - server AI
+
+Context:
+- Machine: HKU AI server login node hpcr4300a
+- Branch before: main
+- Commit before: dcf905a76c4a997ccf513172e0709a1499dfba63
+- Branch after: main
+- Commit after: pending pushed commit containing this entry, the qwen JSON-repair fallback, and refreshed distill artifacts
+
+Files changed:
+- ascr/distill/teacher.py: add a conservative local localization fallback when qwen returns non-JSON text and the follow-up text-only JSON repair call returns empty content; prune resolved rows from `errors.jsonl` on successful reruns
+- tests/test_teacher_distill.py: cover the empty-repair fallback path and resolved-error pruning behavior
+- docs/API_TEACHER_DISTILL.md: document the qwen empty-repair fallback and `errors.jsonl` pruning behavior
+- outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/localization_labels.jsonl: add repaired `p037:i000` and `p037:i001` entries
+- outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/errors.jsonl: pruned to zero unresolved rows after the successful rerun
+- outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/{manifest,audit,dataset,dataset_manifest}.json*: refreshed after rerun
+- outputs/stage2_baselines/cell_prior_qwen37/selector_prior.json: refreshed after rebuilding the lightweight cell-prior baseline
+- docs/AI_COLLAB_LOG.md: appended this entry
+
+Commands run:
+- git fetch origin; git checkout main; git pull --ff-only origin main; git rev-parse HEAD
+  Result: passed
+  Notes: fast-forwarded `main` from `dcf905a76c4a997ccf513172e0709a1499dfba63` to `bb9a8231c2901d72a68a86c24d9e7f1320df3424`.
+- source .venv-qwen36/bin/activate; python scripts/distill/api_probe.py --allow-empty-content
+  Result: passed with warning
+  Notes: `OFOX_API_KEY` was visible in the shell without printing it; the probe returned the known qwen false-negative warning `empty API response content`, but it was correctly treated as non-blocking.
+- source .venv-qwen36/bin/activate; LIMIT=64 OUT_ROOT=outputs/lumina_qwen_hard64 DISTILL_OUT=outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact bash scripts/distill/run_teacher_distill.sh
+  Result: failed before code fix, then passed after code fix
+  Notes: the first rerun still retried only the residual `p037:i000` / `p037:i001` tasks and failed with the same non-JSON localization responses. After the fallback/pruning fix, the rerun completed with `errors=0`, `localization=2`, `quality=0`, `skipped_existing=141`.
+- source .venv-qwen36/bin/activate; python -m pytest tests/test_teacher_distill.py tests/test_api_probe.py -q
+  Result: passed
+  Notes: 11 tests passed before the fallback patch; 13 tests passed after the patch.
+- source .venv-qwen36/bin/activate; python -m ascr.distill.audit --distill-dir outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact
+  Result: passed
+  Notes: refreshed audit reports `quality=64`, `localization=79`, `errors=0`, and `unresolved_errors=0`.
+- source .venv-qwen36/bin/activate; python -m ascr.distill.export_dataset --distill-dir outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact --output outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl
+  Result: passed
+  Notes: refreshed dataset has `row_count=64`.
+- source .venv-qwen36/bin/activate; python -m ascr.training.train_selector --task cell-prior --dataset outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl --output-dir outputs/stage2_baselines/cell_prior_qwen37
+  Result: passed
+  Notes: refreshed lightweight baseline reports `evaluated_rows=10`, `hit_any=9`, `hit_any_rate=0.9`.
+- sbatch --parsable --export=ALL,OFOX_API_KEY,OFOX_BASE_URL=https://api.ofox.ai/v1,ASCR_TEACHER_MODEL=bailian/qwen3.7-plus,ASCR_TEACHER_QUALITY_MAX_TOKENS=2048,ASCR_TEACHER_LOCALIZATION_MAX_TOKENS=2048,ASCR_TEACHER_JSON_REPAIR_RETRIES=1,LIMIT=64,OUT_ROOT=outputs/lumina_qwen_hard64,DISTILL_OUT=outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact jobs/distill/api_teacher_distill.sbatch
+  Result: passed
+  Notes: submitted job `70680`; `logs/ascr-api-teacher-70680.out` and `logs/ascr-api-teacher-70680.err` are the batch logs. A quick `sacct` check reported `RUNNING|0:0` at log time.
+
+Environment:
+- python: Python 3.11.15
+- torch: 2.4.1+cu121
+- cuda: unavailable on the login shell (`torch.cuda.is_available() == False`, device count 0)
+- gpu summary: not re-queried in this repair cycle; Slurm wrapper job 70680 was accepted and started
+- active env: `.venv-qwen36`
+- important env vars set/unset, without values: set in shell only `OFOX_API_KEY`, `OFOX_BASE_URL`, `ASCR_TEACHER_MODEL`, `ASCR_TEACHER_QUALITY_MAX_TOKENS`, `ASCR_TEACHER_LOCALIZATION_MAX_TOKENS`, `ASCR_TEACHER_JSON_REPAIR_RETRIES`; no secret values were printed or written to tracked files
+
+Server jobs:
+- job id: 70680
+- mode: slurm api teacher wrapper
+- command: `sbatch --parsable --export=ALL,OFOX_API_KEY,OFOX_BASE_URL=https://api.ofox.ai/v1,ASCR_TEACHER_MODEL=bailian/qwen3.7-plus,ASCR_TEACHER_QUALITY_MAX_TOKENS=2048,ASCR_TEACHER_LOCALIZATION_MAX_TOKENS=2048,ASCR_TEACHER_JSON_REPAIR_RETRIES=1,LIMIT=64,OUT_ROOT=outputs/lumina_qwen_hard64,DISTILL_OUT=outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact jobs/distill/api_teacher_distill.sbatch`
+- output dir: outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact
+- stdout log: logs/ascr-api-teacher-70680.out
+- stderr log: logs/ascr-api-teacher-70680.err
+- status: RUNNING at log time according to `sacct`
+
+Results:
+- summary: yes, both `p037:i000` and `p037:i001` are now repaired in `localization_labels.jsonl`. They resolved via explicit abstention fallback metadata (`repair_fallback.type=local-empty-json-repair`) after the qwen route again returned non-JSON text and empty text-only repair content. The refreshed audit now reports `unresolved_errors=0`.
+- output dirs: `outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact` and `outputs/stage2_baselines/cell_prior_qwen37`
+- important result files: `outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/localization_labels.jsonl`, `outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/errors.jsonl`, `outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/audit.json`, `outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl`, `outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset_manifest.json`, `outputs/stage2_baselines/cell_prior_qwen37/selector_prior.json`
+- command-result highlights: `errors.jsonl` now has `0` lines; audit counts are `quality=64`, `localization=79`, `errors=0`, `unresolved_errors=0`; baseline `hit_any_rate=0.9`
+- git add -f used: yes, for the generated JSON artifacts under `outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/` and `outputs/stage2_baselines/cell_prior_qwen37/`
+
+Problems / blockers:
+- the qwen route still produces a false-negative empty-content response on the tiny text-only probe, so `--allow-empty-content` remains necessary there.
+- the underlying model behavior for `p037` was still malformed free-form reasoning rather than JSON; the repaired output is a conservative abstention label, not a positive localization finding.
+- Slurm job `70680` was still running when this entry was written, so the wrapper's final completion state is not yet recorded here.
+
+Next action requested:
+- if the batch wrapper result matters, inspect `logs/ascr-api-teacher-70680.out` and `logs/ascr-api-teacher-70680.err` after job `70680` completes.

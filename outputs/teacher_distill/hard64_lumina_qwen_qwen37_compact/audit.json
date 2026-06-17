@@ -1,33 +1,26 @@
 {
   "counts": {
-    "errors": 2,
-    "localization": 77,
+    "errors": 0,
+    "localization": 79,
     "localization_parse_errors": 0,
     "missing_path_fields": 0,
     "quality": 64,
     "quality_parse_errors": 0,
-    "unresolved_errors": 2
+    "unresolved_errors": 0
   },
   "distill_dir": "outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact",
   "errors": {
-    "by_kind": {
-      "localization": 2
-    },
-    "unresolved_by_kind": {
-      "localization": 2
-    },
-    "unresolved_sample_ids": [
-      "p037:i000",
-      "p037:i001"
-    ]
+    "by_kind": {},
+    "unresolved_by_kind": {},
+    "unresolved_sample_ids": []
   },
   "localization": {
     "has_error_counts": {
-      "False": 60,
+      "False": 62,
       "True": 17
     },
     "selected_cell_counts": {
-      "0": 60,
+      "0": 62,
       "2": 6,
       "4": 4,
       "6": 7

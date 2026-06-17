@@ -33,10 +33,10 @@
     "D3": 0.11428571428571428,
     "D4": 0.08571428571428572
   },
-  "created_at_utc": "2026-06-17T19:14:58Z",
+  "created_at_utc": "2026-06-17T20:39:49Z",
   "dataset": "outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl",
   "positive_rows": 10,
   "row_count": 64,
   "schema_version": "ascr.cell_prior_selector.v1",
-  "total_localizations": 77
+  "total_localizations": 79
 }

@@ -101,6 +101,27 @@ def json_repair_messages(raw_text, schema_text):
     ]
 
 
+def conservative_repair_fallback(raw_text, schema_text, error):
+    text = str(raw_text or "").strip()
+    if not text:
+        return None
+    if "empty api response content" not in str(error).lower():
+        return None
+    if schema_text == LOCALIZATION_SCHEMA_TEXT:
+        return {
+            "has_error": False,
+            "summary": "Teacher JSON repair returned empty content after a non-JSON localization response.",
+            "regions": [],
+            "correction_instruction": "",
+            "should_abstain": True,
+            "repair_fallback": {
+                "type": "local-empty-json-repair",
+                "error": str(error),
+            },
+        }
+    return None
+
+
 def extract_json_object_with_repair(raw_text, client, model, schema_text, repair_retries=1):
     try:
         return extract_json_object(raw_text)
@@ -118,6 +139,9 @@ def extract_json_object_with_repair(raw_text, client, model, schema_text, repair
                 return extract_json_object(repaired)
             except Exception as exc:
                 last_error = exc
+        fallback = conservative_repair_fallback(raw_text, schema_text, last_error)
+        if fallback is not None:
+            return fallback
         raise TeacherJsonParseError(f"{original_exc}; JSON repair failed: {last_error}", raw_text=raw_text) from original_exc
 
 
@@ -286,6 +310,39 @@ def completed_ids(jsonl_path):
         if sample_id:
             done.add(sample_id)
     return done
+
+
+def prune_resolved_errors(errors_path, resolved_ids):
+    path = Path(errors_path)
+    if not path.exists():
+        return 0
+    rows = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            payload = json.loads(line)
+        except Exception:
+            continue
+        sample_id = payload.get("sample_id")
+        if sample_id and sample_id in resolved_ids:
+            continue
+        rows.append(payload)
+    deduped = []
+    seen = set()
+    for payload in reversed(rows):
+        sample_id = payload.get("sample_id")
+        key = sample_id or json.dumps(payload, sort_keys=True)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(payload)
+    deduped.reverse()
+    with path.open("w", encoding="utf-8") as handle:
+        for payload in deduped:
+            json.dump(payload, handle, sort_keys=True)
+            handle.write("\n")
+    return len(deduped)
 
 
 class JsonlWriter:
@@ -467,6 +524,9 @@ def run_distill(args):
                 else:
                     localization_writer.write(result)
                     counts["localization"] += 1
+
+    resolved_ids = completed_ids(localization_path) | completed_ids(quality_path)
+    prune_resolved_errors(errors_path, resolved_ids)
 
     manifest = {
         "protocol": PROTOCOL,
