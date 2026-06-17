@@ -12,8 +12,15 @@
 
 set -euo pipefail
 
-PROJECT_ROOT=${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.."; pwd)}
+if [[ -z "${PROJECT_ROOT:-}" ]]; then
+  if [[ -n "${SLURM_SUBMIT_DIR:-}" && ( -e "$SLURM_SUBMIT_DIR/pyproject.toml" || -e "$SLURM_SUBMIT_DIR/.git" ) ]]; then
+    PROJECT_ROOT="$SLURM_SUBMIT_DIR"
+  else
+    PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.."; pwd)
+  fi
+fi
 cd "$PROJECT_ROOT"
+export PROJECT_ROOT
 mkdir -p logs
 
 ASCR_ENV=${ASCR_ENV:-.venv-qwen36}

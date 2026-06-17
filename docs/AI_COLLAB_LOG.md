@@ -824,6 +824,77 @@ Next action requested:
 - use the login node for future OFOX teacher-data repairs / refreshes.
 - if Slurm is needed, submit only compute-local downstream jobs that read the already exported dataset, or first get cluster admins to provide compute-node egress / proxy access for `api.ofox.ai`.
 
+## 2026-06-18 05:40 HKT - server AI
+
+Context:
+- Machine: HKU AI server login node hpcr4300a; compute-node batch run completed on `SPGL-1-12`
+- Branch before: main
+- Commit before: ceae3142aa6ae4e749aa6f6a680f7ac4cf882a88
+- Branch after: main
+- Commit after: pending pushed commit containing this entry, the holdout baseline outputs, and a compute-node root-resolution fix for `jobs/training/stage2_cell_prior_baseline.sbatch`
+
+Files changed:
+- jobs/training/stage2_cell_prior_baseline.sbatch: prefer `PROJECT_ROOT` / `SLURM_SUBMIT_DIR` before falling back to `BASH_SOURCE`, so the batch job starts from the real repository root instead of a Slurm spool path
+- outputs/stage2_baselines/cell_prior_qwen37_holdout/metrics.json: holdout baseline metrics for the exported qwen3.7 compact teacher dataset
+- outputs/stage2_baselines/cell_prior_qwen37_holdout/predictions.jsonl: per-sample holdout predictions
+- outputs/stage2_baselines/cell_prior_qwen37_holdout/selector_prior.json: learned cell-frequency prior from the 80% training split
+- outputs/stage2_baselines/cell_prior_qwen37_holdout/split_manifest.json: deterministic holdout split manifest for `SEED=0` and `TRAIN_RATIO=0.8`
+- docs/AI_COLLAB_LOG.md: appended this run record
+
+Commands run:
+- `cd /grp01/cds_bdai/JianyuZhang/ASCR && git checkout main && git pull --ff-only origin main && git rev-parse HEAD`
+  Result: passed
+  Notes: fast-forwarded `main` from `ceae3142aa6ae4e749aa6f6a680f7ac4cf882a88` to `9ce953aac82ccd9e1b20dc4da90ebc89971878a8`.
+- `source .venv-qwen36/bin/activate && DATASET=outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl OUTPUT_DIR=outputs/stage2_baselines/cell_prior_qwen37_holdout EVAL_MODE=holdout TRAIN_RATIO=0.8 SEED=0 TOP_K=3 bash scripts/training/run_cell_prior.sh`
+  Result: passed
+  Notes: login-node direct API-free baseline completed and wrote the holdout output directory.
+- `sbatch --export=ALL,DATASET=outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl,OUTPUT_DIR=outputs/stage2_baselines/cell_prior_qwen37_holdout,EVAL_MODE=holdout,TRAIN_RATIO=0.8,SEED=0,TOP_K=3 jobs/training/stage2_cell_prior_baseline.sbatch`
+  Result: first attempt failed, second attempt passed
+  Notes: job `70686` failed on `SPGL-1-12` with `mkdir: cannot create directory 'logs': Permission denied`, which came from the job resolving `PROJECT_ROOT` via `BASH_SOURCE` into a Slurm spool location. After updating the sbatch script to prefer `SLURM_SUBMIT_DIR` / `PROJECT_ROOT`, rerun job `70687` completed successfully on `SPGL-1-12`.
+- `bash -n jobs/training/stage2_cell_prior_baseline.sbatch scripts/training/run_cell_prior.sh`
+  Result: passed
+  Notes: used after the root-resolution fix before resubmitting the compute-node run.
+
+Environment:
+- python: Python 3.11.15
+- torch: not explicitly used by this baseline path
+- cuda: not required by the API-free baseline logic; not revalidated here
+- gpu summary: `nvidia-smi` is unavailable on the login node shell; compute job `70687` completed on `SPGL-1-12`, but this task did not submit a separate GPU summary probe
+- active env: `.venv-qwen36` for the direct login-node run; the Slurm script activates the same environment on compute nodes
+- important env vars set/unset, without values: set `DATASET`, `OUTPUT_DIR`, `EVAL_MODE`, `TRAIN_RATIO`, `SEED`, `TOP_K`; no OFOX/API env vars were needed for this task
+
+Server jobs:
+- job id: 70686
+- mode: compute-node API-free cell-prior holdout baseline
+- command: `sbatch --export=ALL,DATASET=outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl,OUTPUT_DIR=outputs/stage2_baselines/cell_prior_qwen37_holdout,EVAL_MODE=holdout,TRAIN_RATIO=0.8,SEED=0,TOP_K=3 jobs/training/stage2_cell_prior_baseline.sbatch`
+- output dir: `outputs/stage2_baselines/cell_prior_qwen37_holdout`
+- stdout log: `logs/ascr-cell-prior-70686.out`
+- stderr log: `logs/ascr-cell-prior-70686.err`
+- status: FAILED exit `1:0`
+- job id: 70687
+- mode: compute-node API-free cell-prior holdout baseline
+- command: `sbatch --export=ALL,DATASET=outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl,OUTPUT_DIR=outputs/stage2_baselines/cell_prior_qwen37_holdout,EVAL_MODE=holdout,TRAIN_RATIO=0.8,SEED=0,TOP_K=3 jobs/training/stage2_cell_prior_baseline.sbatch`
+- output dir: `outputs/stage2_baselines/cell_prior_qwen37_holdout`
+- stdout log: `logs/ascr-cell-prior-70687.out`
+- stderr log: `logs/ascr-cell-prior-70687.err`
+- status: COMPLETED
+
+Results:
+- summary: the requested API-free holdout baseline now runs by both supported paths: direct on the login node and on a Slurm compute node after fixing the new training sbatch script's project-root resolution. The final output directory is `outputs/stage2_baselines/cell_prior_qwen37_holdout`.
+- metrics: `row_count=64`, `train_rows=51`, `eval_rows=13`, `evaluated_rows=2`, `hit_any=1`, `hit_any_rate=0.5`, `top_k=3`.
+- top prior cells: `B2`, `B3`, `B1` (followed by `D3`, `D4`, `A1`, `A2`, `A3` in the metrics summary).
+- files to inspect: `outputs/stage2_baselines/cell_prior_qwen37_holdout/selector_prior.json`, `outputs/stage2_baselines/cell_prior_qwen37_holdout/metrics.json`, `outputs/stage2_baselines/cell_prior_qwen37_holdout/predictions.jsonl`, `outputs/stage2_baselines/cell_prior_qwen37_holdout/split_manifest.json`, `logs/ascr-cell-prior-70686.err`, `logs/ascr-cell-prior-70687.out`
+- `jobs/distill/api_teacher_distill.sbatch` usage: **not used**, per the current policy that compute-node API distill remains disabled until admins repair DNS/egress/proxy and the workflow explicitly enables `ASCR_ALLOW_COMPUTE_API_DISTILL=1`.
+- `git add -f` usage: required for `outputs/stage2_baselines/cell_prior_qwen37_holdout/*.json*`
+
+Problems / blockers:
+- the first compute-node submission (`70686`) exposed the same Slurm spool-path root-resolution issue that had affected earlier batch wrappers; that is now repaired for `jobs/training/stage2_cell_prior_baseline.sbatch`.
+- the current downstream training path remains the lightweight `cell-prior` baseline only; this run does not implement the full Stage-2 neural/DDP trainer.
+
+Next action requested:
+- future compute-node holdout baseline submissions should use the updated `jobs/training/stage2_cell_prior_baseline.sbatch`.
+- if the team wants richer Stage-2 training than `cell-prior`, that still needs separate implementation on top of the already exported teacher dataset.
+
 ## 2026-06-18 20:05 CST - local Codex
 
 Context:

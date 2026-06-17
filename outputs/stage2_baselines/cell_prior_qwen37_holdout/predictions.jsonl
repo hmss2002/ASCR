@@ -1,0 +1,13 @@
+{"hit_any": null, "idx": 6, "predicted_cells": ["B2", "B3", "B1"], "prompt": "The red hat was on top of the brown coat rack.", "sample_id": "p006", "target_cells": []}
+{"hit_any": null, "idx": 8, "predicted_cells": ["B2", "B3", "B1"], "prompt": "a blue bench and a green bowl", "sample_id": "p008", "target_cells": []}
+{"hit_any": null, "idx": 15, "predicted_cells": ["B2", "B3", "B1"], "prompt": "The fluffy cat is on the left of the soft pillow.", "sample_id": "p015", "target_cells": []}
+{"hit_any": null, "idx": 19, "predicted_cells": ["B2", "B3", "B1"], "prompt": "a mouse on side of a key", "sample_id": "p019", "target_cells": []}
+{"hit_any": null, "idx": 21, "predicted_cells": ["B2", "B3", "B1"], "prompt": "five drums", "sample_id": "p021", "target_cells": []}
+{"hit_any": null, "idx": 25, "predicted_cells": ["B2", "B3", "B1"], "prompt": "an oblong eggplant and a teardrop melon", "sample_id": "p025", "target_cells": []}
+{"hit_any": null, "idx": 38, "predicted_cells": ["B2", "B3", "B1"], "prompt": "The brown dog was lying on the green mat.", "sample_id": "p038", "target_cells": []}
+{"hit_any": null, "idx": 40, "predicted_cells": ["B2", "B3", "B1"], "prompt": "a blue horse and a brown vase", "sample_id": "p040", "target_cells": []}
+{"hit_any": null, "idx": 43, "predicted_cells": ["B2", "B3", "B1"], "prompt": "a cat on the top of a sofa", "sample_id": "p043", "target_cells": []}
+{"hit_any": false, "idx": 45, "predicted_cells": ["B2", "B3", "B1"], "prompt": "eight cars", "sample_id": "p045", "target_cells": ["C1", "C2", "C3", "C4", "D1", "D2", "D3", "D4"]}
+{"hit_any": null, "idx": 46, "predicted_cells": ["B2", "B3", "B1"], "prompt": "The rectangular mirror was hung above the white sink.", "sample_id": "p046", "target_cells": []}
+{"hit_any": null, "idx": 57, "predicted_cells": ["B2", "B3", "B1"], "prompt": "a teardrop pendant and a cubic bracelet charm", "sample_id": "p057", "target_cells": []}
+{"hit_any": true, "idx": 60, "predicted_cells": ["B2", "B3", "B1"], "prompt": "a vase hidden by a candle", "sample_id": "p060", "target_cells": ["B2", "B3", "C2", "C3", "D2", "D3"]}

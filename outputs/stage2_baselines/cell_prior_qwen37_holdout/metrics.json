@@ -1,0 +1,46 @@
+{
+  "dataset": "outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl",
+  "eval_mode": "holdout",
+  "eval_rows": 13,
+  "evaluated_rows": 2,
+  "hit_any": 1,
+  "hit_any_rate": 0.5,
+  "row_count": 64,
+  "schema_version": "ascr.cell_prior_metrics.v1",
+  "top_cells": [
+    [
+      "B2",
+      7
+    ],
+    [
+      "B3",
+      6
+    ],
+    [
+      "B1",
+      5
+    ],
+    [
+      "D3",
+      5
+    ],
+    [
+      "D4",
+      5
+    ],
+    [
+      "A1",
+      4
+    ],
+    [
+      "A2",
+      4
+    ],
+    [
+      "A3",
+      3
+    ]
+  ],
+  "top_k": 3,
+  "train_rows": 51
+}

@@ -1,0 +1,43 @@
+{
+  "cell_counts": {
+    "A1": 4,
+    "A2": 4,
+    "A3": 3,
+    "B1": 5,
+    "B2": 7,
+    "B3": 6,
+    "B4": 1,
+    "C1": 2,
+    "C2": 3,
+    "C3": 2,
+    "C4": 2,
+    "D2": 1,
+    "D3": 5,
+    "D4": 5
+  },
+  "cell_probabilities": {
+    "A1": 0.08,
+    "A2": 0.08,
+    "A3": 0.06,
+    "B1": 0.1,
+    "B2": 0.14,
+    "B3": 0.12,
+    "B4": 0.02,
+    "C1": 0.04,
+    "C2": 0.06,
+    "C3": 0.04,
+    "C4": 0.04,
+    "D2": 0.02,
+    "D3": 0.1,
+    "D4": 0.1
+  },
+  "created_at_utc": "2026-06-17T21:32:52Z",
+  "dataset": "outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl",
+  "eval_mode": "holdout",
+  "positive_rows": 8,
+  "row_count": 51,
+  "schema_version": "ascr.cell_prior_selector.v1",
+  "source_row_count": 64,
+  "top_k": 3,
+  "total_localizations": 62
+}
