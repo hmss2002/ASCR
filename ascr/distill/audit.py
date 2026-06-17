@@ -44,10 +44,13 @@ def audit_distill_dir(distill_dir):
     baseline_buckets = Counter()
     final_buckets = Counter()
     quality_parse_errors = 0
+    successful_quality_ids = set()
     for record in quality:
         if record.get("_parse_error"):
             quality_parse_errors += 1
             continue
+        if record.get("sample_id"):
+            successful_quality_ids.add(record["sample_id"])
         payload = record.get("quality", {})
         winner_counts[str(payload.get("winner", "missing"))] += 1
         baseline_buckets[score_bucket(payload.get("baseline_score"))] += 1
@@ -56,10 +59,13 @@ def audit_distill_dir(distill_dir):
     has_error_counts = Counter()
     selected_cell_counts = Counter()
     missing_path_count = 0
+    successful_localization_ids = set()
     for record in localization:
         if record.get("_parse_error"):
             localization_parse_errors += 1
             continue
+        if record.get("sample_id"):
+            successful_localization_ids.add(record["sample_id"])
         evaluation = record.get("evaluation", {})
         has_error_counts[str(bool(evaluation.get("has_error")))] += 1
         selected = 0
@@ -69,13 +75,25 @@ def audit_distill_dir(distill_dir):
         for key in ("grid_image", "trace_path", "record_path"):
             if not record.get(key):
                 missing_path_count += 1
-    error_by_kind = Counter(str(record.get("kind", "unknown")) for record in errors if not record.get("_parse_error"))
+    valid_errors = [record for record in errors if not record.get("_parse_error")]
+    error_by_kind = Counter(str(record.get("kind", "unknown")) for record in valid_errors)
+    unresolved_errors = []
+    for record in valid_errors:
+        kind = str(record.get("kind", "unknown"))
+        sample_id = record.get("sample_id")
+        if kind == "quality" and sample_id in successful_quality_ids:
+            continue
+        if kind == "localization" and sample_id in successful_localization_ids:
+            continue
+        unresolved_errors.append(record)
+    unresolved_by_kind = Counter(str(record.get("kind", "unknown")) for record in unresolved_errors)
     report = {
-        "distill_dir": str(root),
+        "distill_dir": root.as_posix(),
         "counts": {
             "quality": len(quality),
             "localization": len(localization),
             "errors": len(errors),
+            "unresolved_errors": len(unresolved_errors),
             "quality_parse_errors": quality_parse_errors,
             "localization_parse_errors": localization_parse_errors,
             "missing_path_fields": missing_path_count,
@@ -91,6 +109,8 @@ def audit_distill_dir(distill_dir):
         },
         "errors": {
             "by_kind": dict(sorted(error_by_kind.items())),
+            "unresolved_by_kind": dict(sorted(unresolved_by_kind.items())),
+            "unresolved_sample_ids": sorted(str(record.get("sample_id", "")) for record in unresolved_errors if record.get("sample_id")),
         },
     }
     return report

@@ -81,6 +81,7 @@ export OFOX_BASE_URL=${OFOX_BASE_URL:-https://api.ofox.ai/v1}
 export ASCR_TEACHER_MODEL=${ASCR_TEACHER_MODEL:-bailian/qwen3.7-plus}
 export ASCR_TEACHER_QUALITY_MAX_TOKENS=${ASCR_TEACHER_QUALITY_MAX_TOKENS:-2048}
 export ASCR_TEACHER_LOCALIZATION_MAX_TOKENS=${ASCR_TEACHER_LOCALIZATION_MAX_TOKENS:-2048}
+export ASCR_TEACHER_JSON_REPAIR_RETRIES=${ASCR_TEACHER_JSON_REPAIR_RETRIES:-1}
 ```
 
 ## Validate
@@ -121,11 +122,16 @@ Probe the API:
 export OFOX_API_KEY='<your-ofox-api-key>'
 export OFOX_BASE_URL='https://api.ofox.ai/v1'
 export ASCR_TEACHER_MODEL='bailian/qwen3.7-plus'
+export ASCR_TEACHER_QUALITY_MAX_TOKENS=2048
+export ASCR_TEACHER_LOCALIZATION_MAX_TOKENS=2048
+export ASCR_TEACHER_JSON_REPAIR_RETRIES=1
 source .venv-qwen36/bin/activate
-python scripts/distill/api_probe.py
+python scripts/distill/api_probe.py --allow-empty-content
 ```
 
-Run the first 64-sample teacher pass:
+Run or resume the 64-sample teacher pass. If this directory already contains
+the previous compact run, the command skips successful labels and retries only
+unresolved tasks such as p037 localization:
 
 ```bash
 LIMIT=64 OUT_ROOT=outputs/lumina_qwen_hard64 \
@@ -152,10 +158,12 @@ python -m ascr.training.train_selector \
 If policy requires batch execution, submit:
 
 ```bash
-sbatch --export=ALL,OFOX_API_KEY,ASCR_TEACHER_MODEL=bailian/qwen3.7-plus,LIMIT=64,OUT_ROOT=outputs/lumina_qwen_hard64 \
+sbatch --export=ALL,OFOX_API_KEY,ASCR_TEACHER_MODEL=bailian/qwen3.7-plus,ASCR_TEACHER_JSON_REPAIR_RETRIES=1,LIMIT=64,OUT_ROOT=outputs/lumina_qwen_hard64,DISTILL_OUT=outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact \
   jobs/distill/api_teacher_distill.sbatch
 ```
 
+The Slurm wrapper treats Qwen empty-content probe responses as non-blocking
+warnings, but still fails for missing keys, auth errors, and transport errors.
 If the compute node cannot reach the API, record the failure in
 `docs/AI_COLLAB_LOG.md` and rerun the non-Slurm command on the login node if
 that is permitted by server policy.
@@ -169,7 +177,7 @@ keys:
 git add -f outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/*.json*
 git add -f outputs/stage2_baselines/cell_prior_qwen37/*.json*
 git add docs/AI_COLLAB_LOG.md
-git commit -m "Add qwen3.7 compact teacher distill results"
+git commit -m "Repair qwen3.7 compact teacher distill residuals"
 git push
 ```
 

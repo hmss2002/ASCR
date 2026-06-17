@@ -6,7 +6,17 @@ import unittest
 
 from ascr.distill.audit import audit_distill_dir
 from ascr.distill.export_dataset import export_dataset
-from ascr.distill.teacher import build_tasks, extract_json_object, localization_messages, normalize_quality, quality_messages, run_task
+from ascr.distill.teacher import (
+    TeacherJsonParseError,
+    build_tasks,
+    error_payload,
+    extract_json_object,
+    extract_json_object_with_repair,
+    localization_messages,
+    normalize_quality,
+    quality_messages,
+    run_task,
+)
 from ascr.training.train_selector import train_cell_prior
 
 
@@ -48,6 +58,20 @@ class _Client:
         self.chat = _Chat()
 
 
+class _RepairCompletions:
+    def __init__(self):
+        self.calls = 0
+
+    def create(self, **kwargs):
+        self.calls += 1
+        return _Response('{"has_error": false, "summary": "abstain", "regions": [], "correction_instruction": ""}')
+
+
+class _RepairClient:
+    def __init__(self):
+        self.chat = type("Chat", (), {"completions": _RepairCompletions()})()
+
+
 class TeacherDistillTests(unittest.TestCase):
     def test_extract_json_object_handles_markdown(self):
         payload = extract_json_object("```json\n{\"ok\": true}\n```")
@@ -56,6 +80,23 @@ class TeacherDistillTests(unittest.TestCase):
     def test_extract_json_object_uses_trailing_json(self):
         payload = extract_json_object("thinking text {\"bad\": true} more text {\"ok\": true}")
         self.assertEqual(payload, {"ok": True})
+
+    def test_json_repair_falls_back_to_valid_object(self):
+        payload = extract_json_object_with_repair(
+            "The image appears correct.",
+            _RepairClient(),
+            "fake-model",
+            '{"has_error": boolean, "summary": string, "regions": array, "correction_instruction": string}',
+            repair_retries=1,
+        )
+        self.assertEqual(payload["has_error"], False)
+
+    def test_error_payload_keeps_raw_preview_for_parse_failures(self):
+        exc = TeacherJsonParseError("bad json", raw_text="natural language answer")
+        payload = error_payload({"kind": "localization", "sample_id": "p001:i000"}, exc, "fake")
+        self.assertEqual(payload["error_type"], "TeacherJsonParseError")
+        self.assertEqual(payload["raw_preview"], "natural language answer")
+        self.assertNotIn("raw_text", payload)
 
     def test_compact_prompt_constraints_are_present(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -157,9 +198,14 @@ class TeacherDistillTests(unittest.TestCase):
             }
             (distill / "quality_labels.jsonl").write_text(json.dumps(quality) + "\n", encoding="utf-8")
             (distill / "localization_labels.jsonl").write_text(json.dumps(localization) + "\n", encoding="utf-8")
-            (distill / "errors.jsonl").write_text("", encoding="utf-8")
+            old_error = {"kind": "localization", "sample_id": "p000:i000", "error": "old parse failure"}
+            unresolved_error = {"kind": "localization", "sample_id": "p000:i001", "error": "still missing"}
+            (distill / "errors.jsonl").write_text(json.dumps(old_error) + "\n" + json.dumps(unresolved_error) + "\n", encoding="utf-8")
             audit = audit_distill_dir(distill)
             self.assertEqual(audit["counts"]["quality"], 1)
+            self.assertEqual(audit["counts"]["errors"], 2)
+            self.assertEqual(audit["counts"]["unresolved_errors"], 1)
+            self.assertEqual(audit["errors"]["unresolved_sample_ids"], ["p000:i001"])
             self.assertEqual(audit["localization"]["selected_cell_counts"]["1"], 1)
             manifest = export_dataset(distill, distill / "dataset.jsonl")
             self.assertEqual(manifest["row_count"], 1)

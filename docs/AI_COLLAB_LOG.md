@@ -573,3 +573,46 @@ Network / API failures:
 Next action requested:
 - local Codex or the server shell should now commit and push docs/AI_COLLAB_LOG.md plus the small JSON result artifacts already force-staged.
 - if the team wants the Slurm wrapper path for this qwen route, it should either relax or replace the current api_probe gate, or switch to a probe/model combination that does not empty-fail before the main run.
+
+## 2026-06-18 18:45 CST - local Codex
+
+Context:
+- Machine: Windows local ASCR checkout
+- Branch before: main
+- Commit before: dcf905aac9e8b1ef0d29f3d2743e39c261686574
+- Branch after: main
+- Commit after: pending pushed commit for probe relaxation and p037 repair support
+
+Files changed:
+- scripts/distill/api_probe.py: added `--allow-empty-content` so empty Qwen probe responses can be treated as non-blocking warnings while missing keys/auth/transport failures still block.
+- jobs/distill/api_teacher_distill.sbatch and scripts/distill/run_teacher_distill.sh: pass `ASCR_TEACHER_JSON_REPAIR_RETRIES` through to teacher distillation; Slurm wrapper uses the softer probe gate.
+- ascr/distill/teacher.py: strengthened compact localization prompting, added one JSON repair attempt by default, and preserves short `raw_preview` in error rows for parse failures without storing full raw text.
+- ascr/distill/audit.py: separates historical error rows from currently unresolved errors so reruns can repair old failures without deleting `errors.jsonl`.
+- docs/API_TEACHER_DISTILL.md, docs/SERVER_AI_HANDOFF.md, docs/REMOTE_RUN.md: updated server commands for Qwen probe false-negative handling, repair retries, and resume/retry behavior.
+
+Commands run:
+- git pull --ff-only origin main
+  Result: passed
+  Notes: fast-forwarded to server result commit dcf905a.
+
+Environment:
+- python: local Windows Python 3.11
+- active env: local validation environment
+- important env vars set/unset, without values: OFOX_API_KEY not used locally
+
+Server jobs:
+- job id: none
+- mode: not run locally
+- status: not submitted
+
+Results:
+- summary: code is prepared for a server-side rerun that should skip completed Qwen3.7 compact labels and retry only unresolved p037 localization tasks, with better parse repair and diagnostic previews.
+- expected output after server rerun: `audit.json` should keep historical error rows but ideally report `unresolved_errors=0` if p037 iterations 000 and 001 are repaired.
+
+Problems / blockers:
+- no real API rerun was performed locally.
+- raw p037 non-JSON responses from the previous server run were not available because old code did not record raw previews on parse errors.
+
+Next action requested:
+- server AI should pull latest main, set API env vars only in the shell, run `python scripts/distill/api_probe.py --allow-empty-content`, rerun `LIMIT=64 OUT_ROOT=outputs/lumina_qwen_hard64 DISTILL_OUT=outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact bash scripts/distill/run_teacher_distill.sh`, then audit/export/train again.
+- server AI must append detailed results to this log, including whether p037 was repaired and the new `unresolved_errors` count, then force-add only small JSON outputs, commit, and push to GitHub.

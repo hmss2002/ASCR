@@ -15,8 +15,19 @@ from ascr.distill.api_client import DEFAULT_BASE_URL, DEFAULT_MODEL, api_setting
 PROTOCOL = "ascr.api_teacher_distill.v2"
 COMPACT_JSON_INSTRUCTION = (
     "Return only one compact JSON object. No analysis. No markdown. No code fences. "
-    "No thinking text. Start with { and end with }."
+    "No thinking text. No prose before or after JSON. Start with { and end with }."
 )
+LOCALIZATION_SCHEMA_TEXT = (
+    '{"has_error": boolean, "summary": string, "regions": array, '
+    '"correction_instruction": string}'
+)
+QUALITY_SCHEMA_TEXT = '{"baseline_score": number, "final_score": number, "winner": string, "reason": string}'
+
+
+class TeacherJsonParseError(ValueError):
+    def __init__(self, message, raw_text=None):
+        super().__init__(message)
+        self.raw_text = raw_text
 
 
 def _json_candidates(text):
@@ -73,6 +84,41 @@ def extract_json_object(text):
     if last_error is not None:
         raise ValueError(f"response contained JSON-like text but no valid object: {last_error}")
     raise ValueError("response did not contain a JSON object")
+
+
+def json_repair_messages(raw_text, schema_text):
+    preview = str(raw_text or "")[:4000]
+    text = (
+        f"{COMPACT_JSON_INSTRUCTION}\n"
+        "Convert the raw teacher response into one valid JSON object matching this schema: "
+        f"{schema_text}. Preserve the teacher decision when it is clear. "
+        "If the raw response is empty or unusable, return a conservative valid abstention object for that schema.\n"
+        f"Raw response:\n{preview}"
+    )
+    return [
+        {"role": "system", "content": "You repair malformed ASCR teacher JSON responses."},
+        {"role": "user", "content": text},
+    ]
+
+
+def extract_json_object_with_repair(raw_text, client, model, schema_text, repair_retries=1):
+    try:
+        return extract_json_object(raw_text)
+    except Exception as original_exc:
+        last_error = original_exc
+        for _ in range(max(0, int(repair_retries))):
+            try:
+                repaired = chat_completion_text(
+                    client,
+                    json_repair_messages(raw_text, schema_text),
+                    model=model,
+                    max_tokens=512,
+                    retries=1,
+                )
+                return extract_json_object(repaired)
+            except Exception as exc:
+                last_error = exc
+        raise TeacherJsonParseError(f"{original_exc}; JSON repair failed: {last_error}", raw_text=raw_text) from original_exc
 
 
 def encode_image_data_url(path):
@@ -164,11 +210,11 @@ def localization_messages(prompt, grid_image_path, grid_size=4, max_selected_cel
         f"Original prompt: {prompt}\n"
         f"Grid cells: {labels}. Rows go top to bottom; columns go left to right. "
         "Grid lines and labels are aids, not scene content. "
-        "Judge material prompt-image errors. Schema: "
-        '{"has_error": boolean, "summary": string, "regions": array, "correction_instruction": string}. '
+        "Judge material prompt-image errors. Counting errors are material. Schema: "
+        f"{LOCALIZATION_SCHEMA_TEXT}. "
         f"If error exists, choose at most {int(max_selected_cells)} cells total. "
         'Each region needs cells, reason, confidence, error_type, action="reopen". '
-        "If no error, use has_error=false and regions=[]."
+        "If no error or you are uncertain, return a valid abstention JSON with has_error=false and regions=[]."
     )
     if not compact:
         text += " Explain nothing outside JSON."
@@ -187,7 +233,7 @@ def quality_messages(prompt, baseline_image, final_image, compact=True):
         f"Prompt: {prompt}\n"
         "Image A is baseline. Image B is ASCR final. Score prompt following from 0.0 to 1.0. "
         "Choose winner as baseline, final, or tie. Schema: "
-        '{"baseline_score": number, "final_score": number, "winner": string, "reason": string}.'
+        f"{QUALITY_SCHEMA_TEXT}."
     )
     if not compact:
         text += " Explain nothing outside JSON."
@@ -301,12 +347,14 @@ def public_task(task):
 
 def error_payload(task, exc, model, raw_text=None):
     payload = {**public_task(task), "error": str(exc), "teacher_model": model}
-    if raw_text:
-        payload["raw_preview"] = str(raw_text)[:1000]
+    payload["error_type"] = exc.__class__.__name__
+    preview = raw_text if raw_text is not None else getattr(exc, "raw_text", None)
+    if preview:
+        payload["raw_preview"] = str(preview)[:1000]
     return payload
 
 
-def run_task(task, client, model, grid_size, max_selected_cells, retries, quality_max_tokens=2048, localization_max_tokens=2048, include_raw_text=False, compact_prompt=True):
+def run_task(task, client, model, grid_size, max_selected_cells, retries, quality_max_tokens=2048, localization_max_tokens=2048, include_raw_text=False, compact_prompt=True, json_repair_retries=1):
     if task["kind"] == "quality":
         baseline_image = task.get("_baseline_image_abs") or task.get("baseline_image")
         final_image = task.get("_final_image_abs") or task.get("final_image")
@@ -320,7 +368,7 @@ def run_task(task, client, model, grid_size, max_selected_cells, retries, qualit
             max_tokens=quality_max_tokens,
             retries=retries,
         )
-        parsed = normalize_quality(extract_json_object(raw))
+        parsed = normalize_quality(extract_json_object_with_repair(raw, client, model, QUALITY_SCHEMA_TEXT, repair_retries=json_repair_retries))
         result = {**public_task(task), "teacher_model": model, "quality": parsed}
         if include_raw_text:
             result["raw_text"] = raw
@@ -335,7 +383,7 @@ def run_task(task, client, model, grid_size, max_selected_cells, retries, qualit
         max_tokens=localization_max_tokens,
         retries=retries,
     )
-    payload = extract_json_object(raw)
+    payload = extract_json_object_with_repair(raw, client, model, LOCALIZATION_SCHEMA_TEXT, repair_retries=json_repair_retries)
     evaluation = safe_parse_semantic_evaluation(payload, grid_size=grid_size, max_selected_cells=max_selected_cells)
     result = {**public_task(task), "teacher_model": model, "evaluation": evaluation.to_dict()}
     if include_raw_text:
@@ -385,6 +433,7 @@ def run_distill(args):
             localization_max_tokens=args.localization_max_tokens,
             include_raw_text=args.include_raw_text,
             compact_prompt=not args.no_compact_prompt,
+            json_repair_retries=args.json_repair_retries,
         )
 
     if args.workers <= 1:
@@ -435,6 +484,7 @@ def run_distill(args):
         "path_mode": args.path_mode,
         "include_raw_text": bool(args.include_raw_text),
         "compact_prompt": not args.no_compact_prompt,
+        "json_repair_retries": args.json_repair_retries,
         "counts": counts,
         "files": {
             "localization_labels": portable_path(localization_path, project_root, out_root, args.path_mode),
@@ -463,6 +513,7 @@ def build_parser():
     parser.add_argument("--include-raw-text", action="store_true")
     parser.add_argument("--no-compact-prompt", action="store_true")
     parser.add_argument("--retries", type=int, default=3)
+    parser.add_argument("--json-repair-retries", type=int, default=int(os.environ.get("ASCR_TEACHER_JSON_REPAIR_RETRIES", "1")))
     return parser
 
 

@@ -38,6 +38,7 @@ export LIMIT=${LIMIT:-64}
 export WORKERS=${WORKERS:-1}
 export ASCR_TEACHER_QUALITY_MAX_TOKENS=${ASCR_TEACHER_QUALITY_MAX_TOKENS:-2048}
 export ASCR_TEACHER_LOCALIZATION_MAX_TOKENS=${ASCR_TEACHER_LOCALIZATION_MAX_TOKENS:-2048}
+export ASCR_TEACHER_JSON_REPAIR_RETRIES=${ASCR_TEACHER_JSON_REPAIR_RETRIES:-1}
 export PATH_MODE=${PATH_MODE:-relative}
 
 if [[ -z "${OFOX_API_KEY:-}" ]]; then
@@ -45,7 +46,7 @@ if [[ -z "${OFOX_API_KEY:-}" ]]; then
   exit 2
 fi
 
-PYTHONPATH="$PROJECT_ROOT" "$ASCR_ENV_QWEN/bin/python" scripts/distill/api_probe.py --model "$ASCR_TEACHER_MODEL" --base-url "$OFOX_BASE_URL"
+PYTHONPATH="$PROJECT_ROOT" "$ASCR_ENV_QWEN/bin/python" scripts/distill/api_probe.py --model "$ASCR_TEACHER_MODEL" --base-url "$OFOX_BASE_URL" --allow-empty-content
 PYTHONPATH="$PROJECT_ROOT" "$ASCR_ENV_QWEN/bin/python" -m ascr.distill.teacher \
   --out-root "$OUT_ROOT" \
   --output-dir "$DISTILL_OUT" \
@@ -55,4 +56,5 @@ PYTHONPATH="$PROJECT_ROOT" "$ASCR_ENV_QWEN/bin/python" -m ascr.distill.teacher \
   --base-url "$OFOX_BASE_URL" \
   --quality-max-tokens "$ASCR_TEACHER_QUALITY_MAX_TOKENS" \
   --localization-max-tokens "$ASCR_TEACHER_LOCALIZATION_MAX_TOKENS" \
+  --json-repair-retries "$ASCR_TEACHER_JSON_REPAIR_RETRIES" \
   --path-mode "$PATH_MODE"

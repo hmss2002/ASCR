@@ -5,13 +5,21 @@
     "localization_parse_errors": 0,
     "missing_path_fields": 0,
     "quality": 64,
-    "quality_parse_errors": 0
+    "quality_parse_errors": 0,
+    "unresolved_errors": 2
   },
   "distill_dir": "outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact",
   "errors": {
     "by_kind": {
       "localization": 2
-    }
+    },
+    "unresolved_by_kind": {
+      "localization": 2
+    },
+    "unresolved_sample_ids": [
+      "p037:i000",
+      "p037:i001"
+    ]
   },
   "localization": {
     "has_error_counts": {

@@ -15,6 +15,7 @@ export OFOX_BASE_URL='https://api.ofox.ai/v1'
 export ASCR_TEACHER_MODEL='bailian/qwen3.7-plus'
 export ASCR_TEACHER_QUALITY_MAX_TOKENS=2048
 export ASCR_TEACHER_LOCALIZATION_MAX_TOKENS=2048
+export ASCR_TEACHER_JSON_REPAIR_RETRIES=1
 ```
 
 PowerShell:
@@ -25,6 +26,7 @@ $env:OFOX_BASE_URL="https://api.ofox.ai/v1"
 $env:ASCR_TEACHER_MODEL="bailian/qwen3.7-plus"
 $env:ASCR_TEACHER_QUALITY_MAX_TOKENS="2048"
 $env:ASCR_TEACHER_LOCALIZATION_MAX_TOKENS="2048"
+$env:ASCR_TEACHER_JSON_REPAIR_RETRIES="1"
 ```
 
 ## Inputs
@@ -61,11 +63,14 @@ scores and winner labels.
 ## Local API Probe
 
 ```bash
-python scripts/distill/api_probe.py
+python scripts/distill/api_probe.py --allow-empty-content
 ```
 
 This sends one tiny request and prints the model/base URL plus a short response
-preview. It never prints the API key.
+preview. It never prints the API key. For `bailian/qwen3.7-plus`, a tiny
+text-only probe can return empty content even when the main teacher run works;
+Slurm uses `--allow-empty-content` so that this false negative is only a
+warning.
 
 ## Run Teacher Distillation
 
@@ -77,7 +82,10 @@ bash scripts/distill/run_teacher_distill.sh
 
 The command resumes existing JSONL outputs by `sample_id`. Failed samples are
 written to `errors.jsonl`. The default prompt mode is compact JSON-only output,
-which is required for `bailian/qwen3.7-plus`.
+which is required for `bailian/qwen3.7-plus`. If a response is non-JSON, the
+teacher makes one text-only JSON repair attempt by default. Error rows keep a
+short `raw_preview` for diagnosis, never full raw text unless
+`--include-raw-text` is explicitly set.
 
 ## Audit, Export, And Baseline
 
@@ -103,13 +111,15 @@ learned selector model or DDP training.
 Use `--export` so the key reaches the job without being written to a file:
 
 ```bash
-sbatch --export=ALL,OFOX_API_KEY,ASCR_TEACHER_MODEL=bailian/qwen3.7-plus,LIMIT=64,OUT_ROOT=outputs/lumina_qwen_hard64 \
+sbatch --export=ALL,OFOX_API_KEY,ASCR_TEACHER_MODEL=bailian/qwen3.7-plus,ASCR_TEACHER_JSON_REPAIR_RETRIES=1,LIMIT=64,OUT_ROOT=outputs/lumina_qwen_hard64,DISTILL_OUT=outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact \
   jobs/distill/api_teacher_distill.sbatch
 ```
 
-The Slurm job runs `scripts/distill/api_probe.py` first. If the compute node
-cannot reach the API, the job fails before main labeling. If compute nodes have
-no network, run `scripts/distill/run_teacher_distill.sh` on the login node
+The Slurm job runs `scripts/distill/api_probe.py --allow-empty-content` first.
+Missing keys, auth errors, and transport errors still fail early. Empty-content
+probe responses from Qwen routes are treated as warnings so the wrapper does not
+block a teacher run that can succeed with task-level prompts. If compute nodes
+have no network, run `scripts/distill/run_teacher_distill.sh` on the login node
 instead, assuming policy allows login-node API calls.
 
 Small JSON teacher artifacts may be intentionally committed with `git add -f`.

@@ -68,6 +68,7 @@ export OFOX_BASE_URL='https://api.ofox.ai/v1'
 export ASCR_TEACHER_MODEL='bailian/qwen3.7-plus'
 export ASCR_TEACHER_QUALITY_MAX_TOKENS=2048
 export ASCR_TEACHER_LOCALIZATION_MAX_TOKENS=2048
+export ASCR_TEACHER_JSON_REPAIR_RETRIES=1
 ```
 
 Never write real keys into tracked files.
@@ -159,7 +160,7 @@ training until `ascr.training.train_selector` is filled in.
 After `outputs/lumina_qwen_hard64` exists, generate teacher labels with:
 
 ```bash
-python scripts/distill/api_probe.py
+python scripts/distill/api_probe.py --allow-empty-content
 LIMIT=64 OUT_ROOT=outputs/lumina_qwen_hard64 bash scripts/distill/run_teacher_distill.sh
 ```
 
@@ -179,7 +180,7 @@ python -m ascr.training.train_selector \
 For Slurm:
 
 ```bash
-sbatch --export=ALL,OFOX_API_KEY,ASCR_TEACHER_MODEL=bailian/qwen3.7-plus,LIMIT=64,OUT_ROOT=outputs/lumina_qwen_hard64 \
+sbatch --export=ALL,OFOX_API_KEY,ASCR_TEACHER_MODEL=bailian/qwen3.7-plus,ASCR_TEACHER_JSON_REPAIR_RETRIES=1,LIMIT=64,OUT_ROOT=outputs/lumina_qwen_hard64,DISTILL_OUT=outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact \
   jobs/distill/api_teacher_distill.sbatch
 ```
 
