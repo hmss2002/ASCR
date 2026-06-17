@@ -8,20 +8,38 @@
 #SBATCH --output=logs/%x-%j.out
 #SBATCH --error=logs/%x-%j.err
 
-set -uo pipefail
-PROJECT_ROOT=${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.."; pwd)}
+set -euo pipefail
+if [[ -z "${PROJECT_ROOT:-}" ]]; then
+  if [[ -n "${SLURM_SUBMIT_DIR:-}" && ( -e "$SLURM_SUBMIT_DIR/pyproject.toml" || -e "$SLURM_SUBMIT_DIR/.git" ) ]]; then
+    PROJECT_ROOT="$SLURM_SUBMIT_DIR"
+  else
+    PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.."; pwd)
+  fi
+fi
 cd "$PROJECT_ROOT"
+export PROJECT_ROOT
 mkdir -p logs
 
-export ASCR_ENV_QWEN=${ASCR_ENV_QWEN:-.venv-qwen36}
-export ASCR_ENV_LUMINA=${ASCR_ENV_LUMINA:-.venv-lumina}
+abs_path() {
+  local path="$1"
+  if [[ "$path" = /* ]]; then
+    printf '%s
+' "$path"
+  else
+    printf '%s/%s
+' "$PROJECT_ROOT" "$path"
+  fi
+}
+
+export ASCR_ENV_QWEN=$(abs_path "${ASCR_ENV_QWEN:-.venv-qwen36}")
+export ASCR_ENV_LUMINA=$(abs_path "${ASCR_ENV_LUMINA:-.venv-lumina}")
 export HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-1}
 export TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-1}
 export TOKENIZERS_PARALLELISM=${TOKENIZERS_PARALLELISM:-false}
-export CONFIG=${CONFIG:-configs/stage1/lumina/stage1_lumina_qwen9b_coarse_hq.yaml}
-export PROMPTS_FILE=${PROMPTS_FILE:-configs/benchmarks/prompts/t2i_compbench_hard64.txt}
-export OUT_ROOT=${OUT_ROOT:-outputs/smoke_lumina_qwen}
-export LUMINA_REPO=${LUMINA_REPO:-third_party/Lumina-DiMOO}
+export CONFIG=$(abs_path "${CONFIG:-configs/stage1/lumina/stage1_lumina_qwen9b_coarse_hq.yaml}")
+export PROMPTS_FILE=$(abs_path "${PROMPTS_FILE:-configs/benchmarks/prompts/t2i_compbench_hard64.txt}")
+export OUT_ROOT=$(abs_path "${OUT_ROOT:-outputs/smoke_lumina_qwen}")
+export LUMINA_REPO=$(abs_path "${LUMINA_REPO:-third_party/Lumina-DiMOO}")
 export MAX_ITERS=${MAX_ITERS:-1}
 export NUM_PAIRS=1
 export NODE_INDEX=${NODE_INDEX:-0}

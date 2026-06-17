@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -151,11 +152,19 @@ class QwenVLEvaluatorHelpersTest(unittest.TestCase):
         self.assertEqual(evaluator.max_memory, "39GiB")
 
     def test_registry_accepts_qwen_backend(self):
-        evaluator = build_evaluator("local_vlm", {"coarse_grid_size": 4, "image_size": 512, "evaluator": {"backend": "qwen_vl", "model_path": "Qwen/Qwen3.5-9B"}})
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("QWEN_MODEL_PATH", None)
+            evaluator = build_evaluator("local_vlm", {"coarse_grid_size": 4, "image_size": 512, "evaluator": {"backend": "qwen_vl", "model_path": "Qwen/Qwen3.5-9B"}})
         self.assertIsInstance(evaluator, QwenVLEvaluator)
         self.assertEqual(evaluator.model_path, "Qwen/Qwen3.5-9B")
         self.assertFalse(evaluator.processor_use_fast)
         self.assertTrue(evaluator.enable_thinking)
+
+    def test_registry_prefers_qwen_env_override(self):
+        with patch.dict(os.environ, {"QWEN_MODEL_PATH": "/tmp/qwen-local"}, clear=False):
+            evaluator = build_evaluator("local_vlm", {"coarse_grid_size": 4, "image_size": 512, "evaluator": {"backend": "qwen_vl", "model_path": "Qwen/Qwen3.5-9B"}})
+        self.assertIsInstance(evaluator, QwenVLEvaluator)
+        self.assertEqual(evaluator.model_path, "/tmp/qwen-local")
 
     def test_registry_can_disable_qwen_thinking(self):
         evaluator = build_evaluator("local_vlm", {"coarse_grid_size": 4, "image_size": 512, "evaluator": {"backend": "qwen_vl", "model_path": "Qwen/Qwen3.5-9B", "enable_thinking": False, "repair_max_new_tokens": 512}})

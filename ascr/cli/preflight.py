@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 
@@ -125,8 +126,11 @@ def check_cuda(mode):
         level = "error" if mode == "server" else "warn"
         return [_record(level, "torch is not importable; CUDA could not be checked", str(exc))]
     if not hasattr(torch, "cuda") or not torch.cuda.is_available():
-        level = "error" if mode == "server" else "warn"
-        return [_record(level, "CUDA is not available to torch")]
+        in_gpu_context = bool(os.environ.get("CUDA_VISIBLE_DEVICES") or os.environ.get("SLURM_JOB_GPUS"))
+        nvidia_smi_available = shutil.which("nvidia-smi") is not None
+        if mode == "server" and (in_gpu_context or nvidia_smi_available):
+            return [_record("error", "CUDA is not available to torch")]
+        return [_record("warn", "CUDA is not available to torch in this shell", "Run this check inside a GPU allocation for device validation.")]
     return [_record("ok", "CUDA is available", {"gpu_count": int(torch.cuda.device_count())})]
 
 

@@ -28,8 +28,12 @@ case "$MODE" in
     ;;
 esac
 
-export PROMPT_LIMIT OUT_ROOT
-mkdir -p logs
+if [[ "$OUT_ROOT" != /* ]]; then
+  OUT_ROOT="$PROJECT_ROOT/$OUT_ROOT"
+fi
 
-echo "+ PROMPT_LIMIT=$PROMPT_LIMIT OUT_ROOT=$OUT_ROOT sbatch $JOB"
-exec sbatch "$JOB"
+export PROJECT_ROOT PROMPT_LIMIT OUT_ROOT
+mkdir -p "$PROJECT_ROOT/logs"
+
+echo "+ PROJECT_ROOT=$PROJECT_ROOT PROMPT_LIMIT=$PROMPT_LIMIT OUT_ROOT=$OUT_ROOT sbatch --chdir=$PROJECT_ROOT $JOB"
+exec sbatch --chdir="$PROJECT_ROOT" "$JOB"

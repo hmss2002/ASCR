@@ -16,18 +16,36 @@
 # Lumina workers + 4 Qwen servers = 8 GPU per node. For multi-node runs pass
 # NODE_INDEX / NODE_COUNT for global prompt sharding.
 
-set -uo pipefail
-PROJECT_ROOT=${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.."; pwd)}
+set -euo pipefail
+if [[ -z "${PROJECT_ROOT:-}" ]]; then
+  if [[ -n "${SLURM_SUBMIT_DIR:-}" && ( -e "$SLURM_SUBMIT_DIR/pyproject.toml" || -e "$SLURM_SUBMIT_DIR/.git" ) ]]; then
+    PROJECT_ROOT="$SLURM_SUBMIT_DIR"
+  else
+    PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.."; pwd)
+  fi
+fi
 cd "$PROJECT_ROOT"
+export PROJECT_ROOT
 mkdir -p logs
 
+abs_path() {
+  local path="$1"
+  if [[ "$path" = /* ]]; then
+    printf '%s
+' "$path"
+  else
+    printf '%s/%s
+' "$PROJECT_ROOT" "$path"
+  fi
+}
+
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 TOKENIZERS_PARALLELISM=false
-export ASCR_ENV_QWEN=${ASCR_ENV_QWEN:-.venv-qwen36}
-export ASCR_ENV_LUMINA=${ASCR_ENV_LUMINA:-.venv-lumina}
-export CONFIG=${CONFIG:-configs/stage1/lumina/stage1_lumina_qwen9b_coarse_hq.yaml}
-export PROMPTS_FILE=${PROMPTS_FILE:-configs/benchmarks/prompts/t2i_compbench_hard64.txt}
-export OUT_ROOT=${OUT_ROOT:-outputs/lumina_qwen_coarse_hard64}
-export LUMINA_REPO=${LUMINA_REPO:-third_party/Lumina-DiMOO}
+export ASCR_ENV_QWEN=$(abs_path "${ASCR_ENV_QWEN:-.venv-qwen36}")
+export ASCR_ENV_LUMINA=$(abs_path "${ASCR_ENV_LUMINA:-.venv-lumina}")
+export CONFIG=$(abs_path "${CONFIG:-configs/stage1/lumina/stage1_lumina_qwen9b_coarse_hq.yaml}")
+export PROMPTS_FILE=$(abs_path "${PROMPTS_FILE:-configs/benchmarks/prompts/t2i_compbench_hard64.txt}")
+export OUT_ROOT=$(abs_path "${OUT_ROOT:-outputs/lumina_qwen_coarse_hard64}")
+export LUMINA_REPO=$(abs_path "${LUMINA_REPO:-third_party/Lumina-DiMOO}")
 export MAX_ITERS=${MAX_ITERS:-3}
 export NUM_PAIRS=${NUM_PAIRS:-4}
 export NODE_INDEX=${NODE_INDEX:-0}

@@ -9,17 +9,35 @@
 #SBATCH --error=logs/%x-%j.err
 
 set -euo pipefail
-PROJECT_ROOT=${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.."; pwd)}
+if [[ -z "${PROJECT_ROOT:-}" ]]; then
+  if [[ -n "${SLURM_SUBMIT_DIR:-}" && ( -e "$SLURM_SUBMIT_DIR/pyproject.toml" || -e "$SLURM_SUBMIT_DIR/.git" ) ]]; then
+    PROJECT_ROOT="$SLURM_SUBMIT_DIR"
+  else
+    PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.."; pwd)
+  fi
+fi
 cd "$PROJECT_ROOT"
+export PROJECT_ROOT
 mkdir -p logs
 
-export ASCR_ENV_MMADA=${ASCR_ENV_MMADA:-.venv-mmada}
+abs_path() {
+  local path="$1"
+  if [[ "$path" = /* ]]; then
+    printf '%s
+' "$path"
+  else
+    printf '%s/%s
+' "$PROJECT_ROOT" "$path"
+  fi
+}
+
+export ASCR_ENV_MMADA=$(abs_path "${ASCR_ENV_MMADA:-.venv-mmada}")
 export HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-1}
 export TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-1}
 export TOKENIZERS_PARALLELISM=${TOKENIZERS_PARALLELISM:-false}
-export CONFIG=${CONFIG:-configs/stage1/mmada/stage1_mmada8b_self_coarse.yaml}
-export PROMPTS_FILE=${PROMPTS_FILE:-configs/benchmarks/prompts/t2i_compbench_hard64.txt}
-export OUT_ROOT=${OUT_ROOT:-outputs/smoke_mmada_self}
+export CONFIG=$(abs_path "${CONFIG:-configs/stage1/mmada/stage1_mmada8b_self_coarse.yaml}")
+export PROMPTS_FILE=$(abs_path "${PROMPTS_FILE:-configs/benchmarks/prompts/t2i_compbench_hard64.txt}")
+export OUT_ROOT=$(abs_path "${OUT_ROOT:-outputs/smoke_mmada_self}")
 export MAX_ITERS=${MAX_ITERS:-1}
 export NUM_WORKERS=1
 export NODE_INDEX=${NODE_INDEX:-0}
