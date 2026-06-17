@@ -10,6 +10,25 @@ This is my ASCR research codebase. The standard workflow is:
 4. Push the completed changes to GitHub automatically.
 5. Tell me exactly how to continue on the university server.
 
+## Local Python environment
+
+Prefer a project-local virtual environment over installing dependencies into
+Anaconda `base` or the system Python. On Windows, create it with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/setup/bootstrap_local.ps1
+```
+
+Activate it with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/setup/activate_local.ps1
+```
+
+When practical, run local validation through `.venv` or the currently active
+project environment. Heavy CUDA/model dependencies should usually stay on the
+remote Linux GPU server rather than this Windows laptop.
+
 ## GitHub auto-sync policy
 
 At the end of every substantial task, Codex must automatically sync the result to GitHub.
