@@ -823,3 +823,48 @@ Problems / blockers:
 Next action requested:
 - use the login node for future OFOX teacher-data repairs / refreshes.
 - if Slurm is needed, submit only compute-local downstream jobs that read the already exported dataset, or first get cluster admins to provide compute-node egress / proxy access for `api.ofox.ai`.
+
+## 2026-06-18 20:05 CST - local Codex
+
+Context:
+- Machine: Windows local ASCR checkout
+- Branch before: main
+- Commit before: ceae3142aa6ae4e749aa6f6a680f7ac4cf882a88
+- Branch after: main
+- Commit after: pending pushed commit for compute-node dataset-consuming baseline support
+
+Files changed:
+- ascr/training/train_selector.py: extended `--task cell-prior` with `--eval-mode`, `--train-ratio`, `--seed`, and `--top-k`; default remains resubstitution for compatibility.
+- ascr/cli/preflight.py: fixed Windows `git ls-files` decoding by forcing UTF-8 with replacement so secret scans do not crash on non-GBK paths.
+- scripts/training/run_cell_prior.sh: added API-free baseline runner that consumes an exported teacher `dataset.jsonl`.
+- jobs/training/stage2_cell_prior_baseline.sbatch: added compute-node Slurm job for the dataset-consuming baseline.
+- jobs/distill/api_teacher_distill.sbatch: disabled by default for the current cluster network posture; requires explicit `ASCR_ALLOW_COMPUTE_API_DISTILL=1` after compute-node API access is fixed.
+- docs/API_TEACHER_DISTILL.md, docs/SERVER_AI_HANDOFF.md, docs/REMOTE_RUN.md: documented the accepted split: login node creates/repairs teacher data; compute nodes consume exported datasets for downstream training/baselines.
+
+Commands run:
+- git pull --ff-only origin main
+  Result: passed
+  Notes: fast-forwarded to server log commit ceae314.
+
+Environment:
+- python: local Windows Python 3.11
+- active env: local validation environment
+- important env vars set/unset, without values: OFOX_API_KEY not used locally
+
+Server jobs:
+- job id: none
+- mode: not run locally
+- status: not submitted
+
+Results:
+- summary: repo is prepared for the next server-side step: submit an API-free compute-node `cell-prior` holdout baseline using `outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl`.
+- expected output after server run: `outputs/stage2_baselines/cell_prior_qwen37_holdout/{selector_prior.json,metrics.json,predictions.jsonl,split_manifest.json}`.
+
+Problems / blockers:
+- full Stage-2 neural/DDP selector training remains unimplemented.
+- compute nodes still should not run OFOX/API teacher distillation unless cluster DNS/egress/proxy is fixed.
+
+Next action requested:
+- server AI should pull latest main, activate `.venv-qwen36`, run the audit command over the canonical compact teacher dataset, then run:
+  `sbatch --export=ALL,DATASET=outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl,OUTPUT_DIR=outputs/stage2_baselines/cell_prior_qwen37_holdout,EVAL_MODE=holdout,TRAIN_RATIO=0.8,SEED=0,TOP_K=3 jobs/training/stage2_cell_prior_baseline.sbatch`
+- after completion, server AI must inspect Slurm logs, append detailed results to this log, force-add only the small JSON baseline artifacts, commit, and push to GitHub.

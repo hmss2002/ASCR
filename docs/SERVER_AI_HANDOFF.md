@@ -110,11 +110,13 @@ MODE=lumina-qwen-8gpu PROMPT_LIMIT=64 OUT_ROOT=outputs/lumina_qwen_hard64 \
   bash scripts/run_multigpu.sh
 ```
 
-## Run API Teacher Distillation
+## Run API Teacher Distillation On The Login Node
 
 First read `docs/API_TEACHER_DISTILL.md`. Then confirm that
 `outputs/lumina_qwen_hard64/records` and matching `runs/pXXX/*/trace.jsonl`
-exist. Use the real API key only through the shell or Slurm environment.
+exist. Use the real API key only through the login-node shell environment.
+Do not submit OFOX/API teacher distillation to compute nodes on the current
+cluster network posture; compute nodes cannot reach `api.ofox.ai`.
 
 Probe the API:
 
@@ -139,7 +141,7 @@ DISTILL_OUT=outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact \
 bash scripts/distill/run_teacher_distill.sh
 ```
 
-Audit, export, and run the baseline:
+Audit and export the dataset:
 
 ```bash
 python -m ascr.distill.audit \
@@ -148,25 +150,33 @@ python -m ascr.distill.audit \
 python -m ascr.distill.export_dataset \
   --distill-dir outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact \
   --output outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl
-
-python -m ascr.training.train_selector \
-  --task cell-prior \
-  --dataset outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl \
-  --output-dir outputs/stage2_baselines/cell_prior_qwen37
 ```
 
-If policy requires batch execution, submit:
+## Run Dataset-Consuming Baselines On Compute Nodes
+
+The current in-tree downstream training path is the API-free `cell-prior`
+baseline. It consumes the exported `dataset.jsonl` and can run on compute nodes:
 
 ```bash
-sbatch --export=ALL,OFOX_API_KEY,ASCR_TEACHER_MODEL=bailian/qwen3.7-plus,ASCR_TEACHER_JSON_REPAIR_RETRIES=1,LIMIT=64,OUT_ROOT=outputs/lumina_qwen_hard64,DISTILL_OUT=outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact \
-  jobs/distill/api_teacher_distill.sbatch
+DATASET=outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl \
+OUTPUT_DIR=outputs/stage2_baselines/cell_prior_qwen37_holdout \
+EVAL_MODE=holdout \
+TRAIN_RATIO=0.8 \
+SEED=0 \
+TOP_K=3 \
+bash scripts/training/run_cell_prior.sh
 ```
 
-The Slurm wrapper treats Qwen empty-content probe responses as non-blocking
-warnings, but still fails for missing keys, auth errors, and transport errors.
-If the compute node cannot reach the API, record the failure in
-`docs/AI_COLLAB_LOG.md` and rerun the non-Slurm command on the login node if
-that is permitted by server policy.
+For batch execution, submit:
+
+```bash
+sbatch --export=ALL,DATASET=outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl,OUTPUT_DIR=outputs/stage2_baselines/cell_prior_qwen37_holdout,EVAL_MODE=holdout,TRAIN_RATIO=0.8,SEED=0,TOP_K=3 \
+  jobs/training/stage2_cell_prior_baseline.sbatch
+```
+
+`jobs/distill/api_teacher_distill.sbatch` is retained as a template but is
+disabled by default. Do not use it until compute-node DNS/egress or proxy access
+to `api.ofox.ai` is fixed and confirmed.
 
 For this teacher/distill handoff, push the detailed update to GitHub after
 validation. It is acceptable to force-add the small JSON outputs listed below,
@@ -175,9 +185,9 @@ keys:
 
 ```bash
 git add -f outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/*.json*
-git add -f outputs/stage2_baselines/cell_prior_qwen37/*.json*
+git add -f outputs/stage2_baselines/cell_prior_qwen37_holdout/*.json*
 git add docs/AI_COLLAB_LOG.md
-git commit -m "Repair qwen3.7 compact teacher distill residuals"
+git commit -m "Run compute-node cell prior baseline"
 git push
 ```
 

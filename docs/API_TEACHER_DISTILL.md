@@ -109,21 +109,24 @@ python -m ascr.training.train_selector \
 `cell-prior` is a lightweight baseline only. It does not implement the Stage-2
 learned selector model or DDP training.
 
-## Slurm
+## Cluster Split
 
-Use `--export` so the key reaches the job without being written to a file:
+On the current HKU cluster, login nodes can reach the OFOX endpoint but compute
+nodes cannot resolve or route to `api.ofox.ai`. Run API teacher distillation on
+the login node, then use compute nodes only for downstream jobs that read the
+exported `dataset.jsonl`.
+
+Do not use `jobs/distill/api_teacher_distill.sbatch` on this cluster until
+compute-node DNS/egress or proxy access is fixed. The job is retained as a
+template, but it is disabled by default and requires
+`ASCR_ALLOW_COMPUTE_API_DISTILL=1` to run.
+
+For compute-node baseline training after export:
 
 ```bash
-sbatch --export=ALL,OFOX_API_KEY,ASCR_TEACHER_MODEL=bailian/qwen3.7-plus,ASCR_TEACHER_JSON_REPAIR_RETRIES=1,LIMIT=64,OUT_ROOT=outputs/lumina_qwen_hard64,DISTILL_OUT=outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact \
-  jobs/distill/api_teacher_distill.sbatch
+sbatch --export=ALL,DATASET=outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl,OUTPUT_DIR=outputs/stage2_baselines/cell_prior_qwen37_holdout,EVAL_MODE=holdout,TRAIN_RATIO=0.8,SEED=0,TOP_K=3 \
+  jobs/training/stage2_cell_prior_baseline.sbatch
 ```
-
-The Slurm job runs `scripts/distill/api_probe.py --allow-empty-content` first.
-Missing keys, auth errors, and transport errors still fail early. Empty-content
-probe responses from Qwen routes are treated as warnings so the wrapper does not
-block a teacher run that can succeed with task-level prompts. If compute nodes
-have no network, run `scripts/distill/run_teacher_distill.sh` on the login node
-instead, assuming policy allows login-node API calls.
 
 Small JSON teacher artifacts may be intentionally committed with `git add -f`.
 Do not commit images, logs, model weights, caches, `.env`, or API keys.

@@ -236,6 +236,53 @@ class TeacherDistillTests(unittest.TestCase):
             self.assertEqual(train["metrics"]["hit_any_rate"], 1.0)
             self.assertTrue((root / "baseline" / "selector_prior.json").exists())
 
+    def test_cell_prior_holdout_is_seeded_and_top_k_configurable(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            dataset = root / "dataset.jsonl"
+            rows = []
+            labels = ["A1", "B2", "C3", "D4", "B2"]
+            for idx, label in enumerate(labels):
+                rows.append({
+                    "idx": idx,
+                    "sample_id": f"p{idx:03d}",
+                    "prompt": f"prompt {idx}",
+                    "localizations": [{
+                        "evaluation": {
+                            "has_error": True,
+                            "regions": [{"cells": [{"label": label}]}],
+                        }
+                    }],
+                })
+            dataset.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+            result = train_cell_prior(dataset, root / "holdout", eval_mode="holdout", train_ratio=0.6, seed=7, top_k=2)
+            self.assertEqual(result["metrics"]["eval_mode"], "holdout")
+            self.assertEqual(result["metrics"]["top_k"], 2)
+            self.assertTrue((root / "holdout" / "split_manifest.json").exists())
+            predictions = [json.loads(line) for line in (root / "holdout" / "predictions.jsonl").read_text(encoding="utf-8").splitlines()]
+            self.assertTrue(predictions)
+            self.assertTrue(all(len(row["predicted_cells"]) <= 2 for row in predictions))
+            repeat = train_cell_prior(dataset, root / "holdout_repeat", eval_mode="holdout", train_ratio=0.6, seed=7, top_k=2)
+            split = json.loads((root / "holdout" / "split_manifest.json").read_text(encoding="utf-8"))
+            split_repeat = json.loads((root / "holdout_repeat" / "split_manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(split["eval_indices"], split_repeat["eval_indices"])
+            self.assertEqual(result["metrics"]["eval_rows"], repeat["metrics"]["eval_rows"])
+
+    def test_cell_prior_missing_dataset_fails_before_output(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            with self.assertRaises(FileNotFoundError):
+                train_cell_prior(root / "missing.jsonl", root / "should_not_exist")
+            self.assertFalse((root / "should_not_exist").exists())
+
+    def test_compute_training_scripts_do_not_reference_ofox(self):
+        repo = Path(__file__).resolve().parents[1]
+        script = (repo / "scripts" / "training" / "run_cell_prior.sh").read_text(encoding="utf-8")
+        sbatch = (repo / "jobs" / "training" / "stage2_cell_prior_baseline.sbatch").read_text(encoding="utf-8")
+        self.assertNotIn("OFOX", script)
+        self.assertNotIn("OFOX", sbatch)
+        self.assertIn("--task cell-prior", script)
+
     def test_prune_resolved_errors_drops_resolved_rows_and_dedupes(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             errors_path = Path(temp_dir) / "errors.jsonl"

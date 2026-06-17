@@ -10,6 +10,13 @@
 
 set -euo pipefail
 
+if [[ "${ASCR_ALLOW_COMPUTE_API_DISTILL:-0}" != "1" ]]; then
+  echo "Compute-node OFOX/API distillation is disabled for the current cluster network posture." >&2
+  echo "Use the login node for API teacher distill, then submit OFOX-free training jobs such as jobs/training/stage2_cell_prior_baseline.sbatch." >&2
+  echo "Set ASCR_ALLOW_COMPUTE_API_DISTILL=1 only after compute-node DNS/egress/proxy access to api.ofox.ai is confirmed." >&2
+  exit 2
+fi
+
 if [[ -z "${PROJECT_ROOT:-}" ]]; then
   if [[ -n "${SLURM_SUBMIT_DIR:-}" && ( -e "$SLURM_SUBMIT_DIR/pyproject.toml" || -e "$SLURM_SUBMIT_DIR/.git" ) ]]; then
     PROJECT_ROOT="$SLURM_SUBMIT_DIR"

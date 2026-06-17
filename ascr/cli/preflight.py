@@ -176,6 +176,8 @@ def _git_ls_files(project_root):
             check=True,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
     except Exception:
         return [str(p.relative_to(project_root)) for p in project_root.rglob("*") if p.is_file()]
