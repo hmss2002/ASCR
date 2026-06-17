@@ -1,0 +1,49 @@
+{
+  "counts": {
+    "errors": 2,
+    "localization": 77,
+    "localization_parse_errors": 0,
+    "missing_path_fields": 0,
+    "quality": 64,
+    "quality_parse_errors": 0
+  },
+  "distill_dir": "outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact",
+  "errors": {
+    "by_kind": {
+      "localization": 2
+    }
+  },
+  "localization": {
+    "has_error_counts": {
+      "False": 60,
+      "True": 17
+    },
+    "selected_cell_counts": {
+      "0": 60,
+      "2": 6,
+      "4": 4,
+      "6": 7
+    }
+  },
+  "quality": {
+    "baseline_score_buckets": {
+      "0.00-0.24": 3,
+      "0.25-0.49": 1,
+      "0.50-0.74": 5,
+      "0.75-0.99": 8,
+      "1.00": 47
+    },
+    "final_score_buckets": {
+      "0.00-0.24": 2,
+      "0.25-0.49": 1,
+      "0.50-0.74": 5,
+      "0.75-0.99": 9,
+      "1.00": 47
+    },
+    "winner_counts": {
+      "baseline": 1,
+      "final": 2,
+      "tie": 61
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "base_url": "https://api.ofox.ai/v1",
+  "compact_prompt": true,
+  "counts": {
+    "errors": 2,
+    "localization": 77,
+    "quality": 64,
+    "skipped_existing": 0
+  },
+  "created_at_utc": "2026-06-17T19:14:57Z",
+  "files": {
+    "errors": "outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/errors.jsonl",
+    "localization_labels": "outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/localization_labels.jsonl",
+    "quality_labels": "outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/quality_labels.jsonl"
+  },
+  "grid_size": 4,
+  "include_raw_text": false,
+  "limit": 64,
+  "localization_max_tokens": 2048,
+  "max_selected_cells": 6,
+  "out_root": ".",
+  "output_dir": "outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact",
+  "path_mode": "relative",
+  "protocol": "ascr.api_teacher_distill.v2",
+  "quality_max_tokens": 2048,
+  "teacher_model": "bailian/qwen3.7-plus",
+  "workers": 1
+}

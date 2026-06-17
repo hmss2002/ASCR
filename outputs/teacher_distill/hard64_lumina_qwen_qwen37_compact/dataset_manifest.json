@@ -1,0 +1,9 @@
+{
+  "created_at_utc": "2026-06-17T19:14:58Z",
+  "distill_dir": "outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact",
+  "include_raw_text": false,
+  "localization_count": 77,
+  "output": "outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl",
+  "quality_count": 64,
+  "row_count": 64
+}

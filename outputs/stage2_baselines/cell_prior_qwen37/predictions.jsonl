@@ -1,0 +1,64 @@
+{"hit_any": null, "idx": 0, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a green bench and a blue bowl", "sample_id": "p000", "target_cells": []}
+{"hit_any": null, "idx": 1, "predicted_cells": ["B2", "B3", "D3"], "prompt": "an oblong cucumber and a teardrop plum", "sample_id": "p001", "target_cells": []}
+{"hit_any": null, "idx": 2, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a plastic toy and a glass bottle", "sample_id": "p002", "target_cells": []}
+{"hit_any": null, "idx": 3, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a giraffe next to a lamp", "sample_id": "p003", "target_cells": []}
+{"hit_any": null, "idx": 4, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a dog in front of a desk", "sample_id": "p004", "target_cells": []}
+{"hit_any": null, "idx": 5, "predicted_cells": ["B2", "B3", "D3"], "prompt": "two boys", "sample_id": "p005", "target_cells": []}
+{"hit_any": null, "idx": 6, "predicted_cells": ["B2", "B3", "D3"], "prompt": "The red hat was on top of the brown coat rack.", "sample_id": "p006", "target_cells": []}
+{"hit_any": null, "idx": 7, "predicted_cells": ["B2", "B3", "D3"], "prompt": "The blue water bottle was on top of the red backpack.", "sample_id": "p007", "target_cells": []}
+{"hit_any": null, "idx": 8, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a blue bench and a green bowl", "sample_id": "p008", "target_cells": []}
+{"hit_any": true, "idx": 9, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a pentagonal stop sign and a spherical traffic light", "sample_id": "p009", "target_cells": ["A1", "A2", "A3", "B1", "B2", "B3"]}
+{"hit_any": null, "idx": 10, "predicted_cells": ["B2", "B3", "D3"], "prompt": "rubber sole shoes and fluffy clouds", "sample_id": "p010", "target_cells": []}
+{"hit_any": null, "idx": 11, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a girl on the top of a frog", "sample_id": "p011", "target_cells": []}
+{"hit_any": null, "idx": 12, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a car in front of a mouse", "sample_id": "p012", "target_cells": []}
+{"hit_any": true, "idx": 13, "predicted_cells": ["B2", "B3", "D3"], "prompt": "six airplanes", "sample_id": "p013", "target_cells": ["D3", "D4"]}
+{"hit_any": null, "idx": 14, "predicted_cells": ["B2", "B3", "D3"], "prompt": "The black phone was resting on the brown charger.", "sample_id": "p014", "target_cells": []}
+{"hit_any": null, "idx": 15, "predicted_cells": ["B2", "B3", "D3"], "prompt": "The fluffy cat is on the left of the soft pillow.", "sample_id": "p015", "target_cells": []}
+{"hit_any": null, "idx": 16, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a green bench and a blue cake", "sample_id": "p016", "target_cells": []}
+{"hit_any": true, "idx": 17, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a cubic ice cube and a spherical ice bucket", "sample_id": "p017", "target_cells": ["B3", "B4", "C3", "C4", "D3", "D4"]}
+{"hit_any": null, "idx": 18, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a metallic desk lamp and a fluffy sweater", "sample_id": "p018", "target_cells": []}
+{"hit_any": null, "idx": 19, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a mouse on side of a key", "sample_id": "p019", "target_cells": []}
+{"hit_any": null, "idx": 20, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a sheep in front of a key", "sample_id": "p020", "target_cells": []}
+{"hit_any": null, "idx": 21, "predicted_cells": ["B2", "B3", "D3"], "prompt": "five drums", "sample_id": "p021", "target_cells": []}
+{"hit_any": null, "idx": 22, "predicted_cells": ["B2", "B3", "D3"], "prompt": "The leather wallet was inside the brown purse.", "sample_id": "p022", "target_cells": []}
+{"hit_any": null, "idx": 23, "predicted_cells": ["B2", "B3", "D3"], "prompt": "The soft pillow was on top of the hard rocking chair.", "sample_id": "p023", "target_cells": []}
+{"hit_any": null, "idx": 24, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a blue bench and a green cake", "sample_id": "p024", "target_cells": []}
+{"hit_any": null, "idx": 25, "predicted_cells": ["B2", "B3", "D3"], "prompt": "an oblong eggplant and a teardrop melon", "sample_id": "p025", "target_cells": []}
+{"hit_any": null, "idx": 26, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a rubber band and a wooden floor", "sample_id": "p026", "target_cells": []}
+{"hit_any": null, "idx": 27, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a bee on the right of a refrigerator", "sample_id": "p027", "target_cells": []}
+{"hit_any": true, "idx": 28, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a cat behind a boy", "sample_id": "p028", "target_cells": ["A1", "A2", "B1", "B2", "C1", "C2"]}
+{"hit_any": null, "idx": 29, "predicted_cells": ["B2", "B3", "D3"], "prompt": "one turtle", "sample_id": "p029", "target_cells": []}
+{"hit_any": null, "idx": 30, "predicted_cells": ["B2", "B3", "D3"], "prompt": "The rectangular picture frame was hung above the beige couch.", "sample_id": "p030", "target_cells": []}
+{"hit_any": null, "idx": 31, "predicted_cells": ["B2", "B3", "D3"], "prompt": "The green plant was on the right of the white wall.", "sample_id": "p031", "target_cells": []}
+{"hit_any": null, "idx": 32, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a brown horse and a blue vase", "sample_id": "p032", "target_cells": []}
+{"hit_any": null, "idx": 33, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a cubic block and a cylindrical bottle", "sample_id": "p033", "target_cells": []}
+{"hit_any": null, "idx": 34, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a fabric towel and a glass table", "sample_id": "p034", "target_cells": []}
+{"hit_any": null, "idx": 35, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a balloon on the right of a person", "sample_id": "p035", "target_cells": []}
+{"hit_any": true, "idx": 36, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a chair hidden by a mouse", "sample_id": "p036", "target_cells": ["B2", "B3", "D3", "D4"]}
+{"hit_any": false, "idx": 37, "predicted_cells": ["B2", "B3", "D3"], "prompt": "seven women", "sample_id": "p037", "target_cells": ["C4", "D4"]}
+{"hit_any": null, "idx": 38, "predicted_cells": ["B2", "B3", "D3"], "prompt": "The brown dog was lying on the green mat.", "sample_id": "p038", "target_cells": []}
+{"hit_any": null, "idx": 39, "predicted_cells": ["B2", "B3", "D3"], "prompt": "The blue bowl was on top of the white placemat.", "sample_id": "p039", "target_cells": []}
+{"hit_any": null, "idx": 40, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a blue horse and a brown vase", "sample_id": "p040", "target_cells": []}
+{"hit_any": null, "idx": 41, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a cubic block and a cylindrical canister", "sample_id": "p041", "target_cells": []}
+{"hit_any": null, "idx": 42, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a metallic car and a fabric dress", "sample_id": "p042", "target_cells": []}
+{"hit_any": null, "idx": 43, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a cat on the top of a sofa", "sample_id": "p043", "target_cells": []}
+{"hit_any": null, "idx": 44, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a girl behind a cow", "sample_id": "p044", "target_cells": []}
+{"hit_any": true, "idx": 45, "predicted_cells": ["B2", "B3", "D3"], "prompt": "eight cars", "sample_id": "p045", "target_cells": ["C1", "C2", "C3", "C4", "D1", "D2", "D3", "D4"]}
+{"hit_any": null, "idx": 46, "predicted_cells": ["B2", "B3", "D3"], "prompt": "The rectangular mirror was hung above the white sink.", "sample_id": "p046", "target_cells": []}
+{"hit_any": null, "idx": 47, "predicted_cells": ["B2", "B3", "D3"], "prompt": "The black chair is on top of the blue rug.", "sample_id": "p047", "target_cells": []}
+{"hit_any": null, "idx": 48, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a blue backpack and a brown cow", "sample_id": "p048", "target_cells": []}
+{"hit_any": null, "idx": 49, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a diamond pendant and a round locket", "sample_id": "p049", "target_cells": []}
+{"hit_any": null, "idx": 50, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a rubber ball and a leather wallet", "sample_id": "p050", "target_cells": []}
+{"hit_any": null, "idx": 51, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a desk on the right of a horse", "sample_id": "p051", "target_cells": []}
+{"hit_any": null, "idx": 52, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a girl behind a sheep", "sample_id": "p052", "target_cells": []}
+{"hit_any": null, "idx": 53, "predicted_cells": ["B2", "B3", "D3"], "prompt": "two rabbits", "sample_id": "p053", "target_cells": []}
+{"hit_any": null, "idx": 54, "predicted_cells": ["B2", "B3", "D3"], "prompt": "The black chair was on the left of the white table.", "sample_id": "p054", "target_cells": []}
+{"hit_any": true, "idx": 55, "predicted_cells": ["B2", "B3", "D3"], "prompt": "The square book was next to the green notebook.", "sample_id": "p055", "target_cells": ["B1", "B2", "C1", "C2"]}
+{"hit_any": null, "idx": 56, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a brown backpack and a blue cow", "sample_id": "p056", "target_cells": []}
+{"hit_any": null, "idx": 57, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a teardrop pendant and a cubic bracelet charm", "sample_id": "p057", "target_cells": []}
+{"hit_any": null, "idx": 58, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a fabric towel and a leather chair", "sample_id": "p058", "target_cells": []}
+{"hit_any": true, "idx": 59, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a bicycle on the bottom of a girl", "sample_id": "p059", "target_cells": ["C2", "C3", "D2", "D3"]}
+{"hit_any": true, "idx": 60, "predicted_cells": ["B2", "B3", "D3"], "prompt": "a vase hidden by a candle", "sample_id": "p060", "target_cells": ["B2", "B3", "C2", "C3", "D2", "D3"]}
+{"hit_any": null, "idx": 61, "predicted_cells": ["B2", "B3", "D3"], "prompt": "six girls", "sample_id": "p061", "target_cells": []}
+{"hit_any": null, "idx": 62, "predicted_cells": ["B2", "B3", "D3"], "prompt": "The red book was on top of the yellow bookshelf.", "sample_id": "p062", "target_cells": []}
+{"hit_any": null, "idx": 63, "predicted_cells": ["B2", "B3", "D3"], "prompt": "The rough brick was on top of the smooth tile.", "sample_id": "p063", "target_cells": []}

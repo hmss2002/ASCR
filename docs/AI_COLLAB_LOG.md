@@ -475,3 +475,101 @@ Problems / blockers:
 
 Next action requested:
 - server AI should pull latest main, set OFOX_API_KEY only in the shell, run the Qwen3.7 compact teacher commands in docs/SERVER_AI_HANDOFF.md, run audit/export/cell-prior, append detailed results to this log, force-add only the small JSON outputs explicitly listed in the docs, commit, and push to GitHub.
+
+## 2026-06-18 03:30 HKT - server AI
+
+Context:
+- Machine: HKU AI server login node hpcr4300a
+- Branch before: main
+- Commit before: 4a90f3f1a976778010056c6008721851b32d223d
+- Branch after: main
+- Commit after: 4a90f3f1a976778010056c6008721851b32d223d at the time the distill, audit, export, and baseline runs completed; the result commit is created after this entry is appended
+
+Files changed:
+- docs/AI_COLLAB_LOG.md: appended this server run entry with compact Qwen teacher results, audit metrics, baseline metrics, and pushback details
+- outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/*.json*: generated compact teacher labels, manifest, audit, and dataset export; intentionally staged with git add -f
+- outputs/stage2_baselines/cell_prior_qwen37/*.json*: generated lightweight cell-prior baseline artifacts; intentionally staged with git add -f
+
+Commands run:
+- cd /grp01/cds_bdai/JianyuZhang/ASCR; git fetch origin; git checkout main; git pull --ff-only origin main; git rev-parse HEAD
+  Result: passed
+  Notes: synced server checkout to main commit 4a90f3f1a976778010056c6008721851b32d223d.
+- python3.11 -m venv .venv-qwen36; source .venv-qwen36/bin/activate; python -m pip install --upgrade pip; python -m pip install -e ".[dev]" -r requirements/qwen_vl.txt
+  Result: passed
+  Notes: reused .venv-qwen36 successfully; pip warned that fla-core 0.5.0 declares torch>=2.7.0 while this environment uses torch 2.4.1+cu121, but imports and the requested runs still completed.
+- source .venv-qwen36/bin/activate; python scripts/smoke_test.py
+  Result: passed
+  Notes: 109 tests passed; login-node CUDA remained unavailable, as expected.
+- source .venv-qwen36/bin/activate; python scripts/distill/api_probe.py
+  Result: failed for requested teacher model
+  Notes: bailian/qwen3.7-plus returned empty API response content on the tiny probe request.
+- LIMIT=1 OUT_ROOT=outputs/lumina_qwen_hard64 DISTILL_OUT=outputs/teacher_distill/smoke_hard64_lumina_qwen_qwen37_compact bash scripts/distill/run_teacher_distill.sh
+  Result: passed
+  Notes: compact smoke produced quality=1, localization=1, errors=0.
+- LIMIT=64 OUT_ROOT=outputs/lumina_qwen_hard64 DISTILL_OUT=outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact bash scripts/distill/run_teacher_distill.sh
+  Result: passed with residual localization errors
+  Notes: completed the full 64-sample compact pass with quality=64, localization=77, errors=2. Both error rows were localization failures on sample p037 iterations 000 and 001 with response did not contain a JSON object.
+- python -m ascr.distill.audit --distill-dir outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact
+  Result: passed
+  Notes: wrote audit.json with zero quality/localization parse errors and zero missing path fields.
+- python -m ascr.distill.export_dataset --distill-dir outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact --output outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl
+  Result: passed
+  Notes: wrote dataset.jsonl and dataset_manifest.json with row_count=64, quality_count=64, localization_count=77.
+- python -m ascr.training.train_selector --task cell-prior --dataset outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl --output-dir outputs/stage2_baselines/cell_prior_qwen37
+  Result: passed
+  Notes: wrote selector_prior.json, metrics.json, and predictions.jsonl; hit_any_rate=0.9 over 10 evaluated rows.
+- sbatch --export=ALL,OFOX_API_KEY,ASCR_TEACHER_MODEL=bailian/qwen3.7-plus,LIMIT=64,OUT_ROOT=outputs/lumina_qwen_hard64,DISTILL_OUT=outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact jobs/distill/api_teacher_distill.sbatch
+  Result: skipped
+  Notes: not submitted in this cycle because the current qwen route still false-fails api_probe on the login node, and the sbatch wrapper invokes the same probe before labeling.
+- git add -f outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/*.json*; git add -f outputs/stage2_baselines/cell_prior_qwen37/*.json*
+  Result: passed
+  Notes: yes, git add -f was used for the small JSON result artifacts; images, logs, caches, and environment files remain unstaged.
+
+Environment:
+- python: Python 3.11.15
+- torch: 2.4.1+cu121 in .venv-qwen36
+- cuda: unavailable on the login node shell
+- gpu summary: nvidia-smi not available on the login node shell
+- active env: .venv-qwen36
+- important env vars set/unset, without values: set OFOX_API_KEY, OFOX_BASE_URL, ASCR_TEACHER_MODEL, ASCR_TEACHER_QUALITY_MAX_TOKENS, ASCR_TEACHER_LOCALIZATION_MAX_TOKENS, TOKENIZERS_PARALLELISM; no API key value written to disk
+
+Server jobs:
+- job id: none
+- mode: login-node API teacher distillation
+- command: LIMIT=64 OUT_ROOT=outputs/lumina_qwen_hard64 DISTILL_OUT=outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact bash scripts/distill/run_teacher_distill.sh
+- output dir: outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact
+- stdout log: none
+- stderr log: none
+- status: COMPLETED with 2 localization errors recorded in errors.jsonl
+- job id: skipped
+- mode: slurm api teacher wrapper
+- command: sbatch --export=ALL,OFOX_API_KEY,ASCR_TEACHER_MODEL=bailian/qwen3.7-plus,LIMIT=64,OUT_ROOT=outputs/lumina_qwen_hard64,DISTILL_OUT=outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact jobs/distill/api_teacher_distill.sbatch
+- output dir: outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact
+- stdout log: none
+- stderr log: none
+- status: SKIPPED because the wrapper currently probes first and the qwen route still fails that probe
+
+Results:
+- run commit hash: 4a90f3f1a976778010056c6008721851b32d223d
+- teacher model: bailian/qwen3.7-plus
+- token settings: quality_max_tokens=2048, localization_max_tokens=2048
+- task-level teacher call count: 143 planned tasks total = 64 quality + 79 localization tasks; final recorded outputs were 64 quality labels + 77 localization labels + 2 error rows. The exact underlying HTTP request count may be higher because the client retries each task up to 3 times internally.
+- summary: the compact JSON-only qwen3.7-plus path completed the full requested 64-sample pass and was substantially more stable than the earlier partial run, but it still produced 2 non-JSON localization failures on p037.
+- output dirs: outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact and outputs/stage2_baselines/cell_prior_qwen37
+- important result files: outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/manifest.json, outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/quality_labels.jsonl, outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/localization_labels.jsonl, outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/errors.jsonl, outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/audit.json, outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl, outputs/stage2_baselines/cell_prior_qwen37/selector_prior.json, outputs/stage2_baselines/cell_prior_qwen37/metrics.json
+- audit metrics: winner_counts = {tie: 61, final: 2, baseline: 1}; has_error_counts = {False: 60, True: 17}; selected_cell_counts = {0: 60, 2: 6, 4: 4, 6: 7}; baseline_score_buckets = {0.00-0.24: 3, 0.25-0.49: 1, 0.50-0.74: 5, 0.75-0.99: 8, 1.00: 47}; final_score_buckets = {0.00-0.24: 2, 0.25-0.49: 1, 0.50-0.74: 5, 0.75-0.99: 9, 1.00: 47}
+- baseline metrics: row_count = 64, evaluated_rows = 10, hit_any = 9, hit_any_rate = 0.9, top_cells = [B2, B3, D3, D4, C2, B1, C3, A1]
+- git add -f used for small JSON results: yes
+
+Problems / blockers:
+- api_probe still gives a false-negative style failure on the requested qwen route even though the main compact teacher run can complete on the login node.
+- the remaining failures are localized to p037 iterations 000 and 001, both with response did not contain a JSON object.
+- ripgrep installation was attempted for convenience but the shared Anaconda environment is not writable by this user, so no extra system tool was installed.
+
+Network / API failures:
+- no transport or authentication outage was observed during the successful full compact run.
+- the observed model/API failure mode was localized malformed content on two p037 localization calls and empty content on the tiny api_probe request.
+
+Next action requested:
+- local Codex or the server shell should now commit and push docs/AI_COLLAB_LOG.md plus the small JSON result artifacts already force-staged.
+- if the team wants the Slurm wrapper path for this qwen route, it should either relax or replace the current api_probe gate, or switch to a probe/model combination that does not empty-fail before the main run.
