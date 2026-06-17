@@ -17,7 +17,7 @@ class ShowOAdapter(GeneratorAdapter):
         self.checkpoint_path = Path(checkpoint_path or "models/show-o-512x512")
         self.vq_model_path = Path(vq_model_path or "models/magvitv2")
         self.llm_model_path = Path(llm_model_path or "models/phi-1_5")
-        self.showo_config_path = Path(showo_config_path or "configs/showo_local_512x512.yaml")
+        self.showo_config_path = Path(showo_config_path or "configs/stage1/showo/showo_local_512x512.yaml")
         self.device = device
         self.token_grid_size = int(token_grid_size)
         self.image_size = int(image_size)
@@ -83,10 +83,22 @@ class ShowOAdapter(GeneratorAdapter):
         return GenerationState(prompt=correction_prompt, iteration=state.iteration + 1, token_grid=next_grid, image_path=str(output_path), metadata={"generator": "showo", "native_token_loop": False, "reopened_tokens": mask.count(), "mask_path": str(mask_path)})
 
     def generate_t2i(self, prompt, output_path, seed=None):
-        return self._run_script("scripts/run_showo_t2i_local.sh", prompt, output_path, seed=seed)
+        script = os.environ.get("SHOWO_T2I_SCRIPT")
+        if not script:
+            raise RuntimeError(
+                "Non-native Show-o T2I generation requires SHOWO_T2I_SCRIPT to point to a local runner. "
+                "Use native_token_loop=True for the supported in-repo Show-o path."
+            )
+        return self._run_script(script, prompt, output_path, seed=seed)
 
     def generate_inpainting(self, prompt, input_image, mask_image, output_path, seed=None):
-        return self._run_script("scripts/run_showo_inpaint_local.sh", prompt, output_path, seed=seed, extra_env={"INPUT_IMAGE": str(input_image), "MASK_IMAGE": str(mask_image)})
+        script = os.environ.get("SHOWO_INPAINT_SCRIPT")
+        if not script:
+            raise RuntimeError(
+                "Non-native Show-o inpainting requires SHOWO_INPAINT_SCRIPT to point to a local runner. "
+                "Use native_token_loop=True for the supported in-repo token reopening path."
+            )
+        return self._run_script(script, prompt, output_path, seed=seed, extra_env={"INPUT_IMAGE": str(input_image), "MASK_IMAGE": str(mask_image)})
 
     def write_inpainting_mask(self, mask, output_path):
         output_path = Path(output_path)
@@ -203,7 +215,12 @@ class ShowOAdapter(GeneratorAdapter):
         })
         if extra_env:
             env.update(extra_env)
-        command = ["bash", str(self.project_root / script), prompt]
+        script_path = Path(script)
+        if not script_path.is_absolute():
+            script_path = self.project_root / script_path
+        if not script_path.exists():
+            raise FileNotFoundError(f"Show-o runner script does not exist: {script_path}")
+        command = ["bash", str(script_path), prompt]
         completed = subprocess.run(command, cwd=str(self.project_root), env=env, capture_output=True, text=True)
         log_path = output_path.with_suffix(output_path.suffix + ".log")
         log_path.write_text((completed.stdout or "") + (completed.stderr or ""), encoding="utf-8")

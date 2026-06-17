@@ -18,8 +18,6 @@ import os
 import sys
 from pathlib import Path
 
-import torch
-
 
 # Lumina special-token ids (from Lumina-DiMOO/config.py SPECIAL_TOKENS).
 MASK_TOKEN_ID = 126336
@@ -57,6 +55,7 @@ class LuminaNativeEngine:
         self._tokenizer = None
         self._vqvae = None
         self._lumina = None
+        self._torch = None
 
     # ------------------------------------------------------------------ load
     def _ensure_repo_on_path(self):
@@ -68,12 +67,14 @@ class LuminaNativeEngine:
         if self._model is not None:
             return
         self._ensure_repo_on_path()
+        import torch
         from transformers import AutoTokenizer
         from diffusers import VQModel
         from model import LLaDAForMultiModalGeneration
         from utils import image_utils, prompt_utils
         from generators.image_generation_generator import generate_image
 
+        self._torch = torch
         self._lumina = {
             "image_utils": image_utils,
             "prompt_utils": prompt_utils,
@@ -82,7 +83,7 @@ class LuminaNativeEngine:
         }
         self._tokenizer = AutoTokenizer.from_pretrained(self.checkpoint_path, trust_remote_code=True)
         self._model = LLaDAForMultiModalGeneration.from_pretrained(
-            self.checkpoint_path, torch_dtype=torch.bfloat16, device_map="auto",
+            self.checkpoint_path, torch_dtype=self._torch.bfloat16, device_map="auto",
         )
         self._model.eval()
         self._vqvae = VQModel.from_pretrained(self.checkpoint_path, subfolder="vqvae").to(self.device)
@@ -104,8 +105,8 @@ class LuminaNativeEngine:
         img_with_breaks = iu.add_break_line(img_token_list, h, w, new_number=NEWLINE_TOKEN_ID)
         img_pred = [ANSWER_START] + [BOI] + img_with_breaks + [EOI] + [ANSWER_END]
         device = next(self._model.parameters()).device
-        prompt_ids = torch.tensor(con_tokens + img_pred, device=device).unsqueeze(0)
-        uncon_ids = torch.tensor(uncon_tokens, device=device).unsqueeze(0)
+        prompt_ids = self._torch.tensor(con_tokens + img_pred, device=device).unsqueeze(0)
+        uncon_ids = self._torch.tensor(uncon_tokens, device=device).unsqueeze(0)
         code_start = len(con_tokens) + 2
         return prompt_ids, uncon_ids, code_start
 
@@ -154,7 +155,7 @@ class LuminaNativeEngine:
         self._load()
         iu = self._lumina["image_utils"]
         device = next(self._model.parameters()).device
-        codes = torch.tensor(vq_ids, device=device, dtype=torch.long).view(1, -1)
+        codes = self._torch.tensor(vq_ids, device=device, dtype=self._torch.long).view(1, -1)
         img = iu.decode_vq_to_image(
             codes, str(output_path),
             vae_ckpt=self.checkpoint_path,

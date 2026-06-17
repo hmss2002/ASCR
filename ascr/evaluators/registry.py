@@ -9,9 +9,9 @@ from ascr.evaluators.showo_mmu import ShowOMMUEvaluator
 from ascr.evaluators.stage2_student import LearnedStage2Evaluator
 
 
-SHOWO_BACKENDS = {"showo_mmu", "showo-mmu", "showo_vlm", "showo-vlm"}
-QWEN_BACKENDS = {"qwen", "qwen_vl", "qwen-vl", "qwen3_6", "qwen3.6", "qwen36", "qwen3_6_vl", "qwen3.6-vl"}
-QWEN_TOKEN_BACKENDS = {"qwen_vl_token", "qwen-vl-token", "qwen_token", "qwen-token", "qwen3_6_token", "qwen36_token"}
+SHOWO_BACKENDS = {"showo", "showo_mmu", "showo-mmu"}
+QWEN_BACKENDS = {"qwen", "qwen_vl", "qwen-vl"}
+QWEN_TOKEN_BACKENDS = {"qwen_vl_token", "qwen-vl-token", "qwen_token", "qwen-token"}
 MMADA_SELF_BACKENDS = {"mmada_self", "mmada-self", "mmada", "mmada_mmu", "mmada-mmu"}
 MMADA_SELF_COARSE_BACKENDS = {"mmada_self_coarse", "mmada-self-coarse", "mmada_coarse", "mmada-coarse"}
 OFOX_BACKENDS = {"ofox_vlm", "ofox-vlm", "ofox_qwen", "ofox-qwen", "qwen37_api", "bailian_qwen37"}
@@ -74,7 +74,7 @@ def _build_showo_mmu(config):
         checkpoint_path=evaluator_config.get("checkpoint_path", generator_config.get("checkpoint_path", "models/show-o-512x512")),
         vq_model_path=evaluator_config.get("vq_model_path", generator_config.get("vq_model_path", "models/magvitv2")),
         llm_model_path=evaluator_config.get("llm_model_path", generator_config.get("llm_model_path", "models/phi-1_5")),
-        showo_config_path=evaluator_config.get("showo_config_path", generator_config.get("showo_config_path", "configs/showo_local_512x512.yaml")),
+        showo_config_path=evaluator_config.get("showo_config_path", generator_config.get("showo_config_path", "configs/stage1/showo/showo_local_512x512.yaml")),
         device=evaluator_config.get("device", generator_config.get("device", "cuda")),
         grid_size=int(config.get("coarse_grid_size", evaluator_config.get("grid_size", 4))),
         image_size=int(config.get("image_size", evaluator_config.get("image_size", 512))),

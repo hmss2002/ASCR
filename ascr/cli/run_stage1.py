@@ -8,6 +8,35 @@ from ascr.evaluators.registry import build_evaluator
 from ascr.generators.registry import build_generator
 from ascr.revision.selector import GridSemanticReopeningSelector
 
+GENERATOR_CHOICES = ["mock", "showo", "mmada", "lumina", "lumina_dimoo", "lumina-dimoo"]
+EVALUATOR_CHOICES = [
+    "mock",
+    "local_vlm",
+    "local-vlm",
+    "showo_mmu",
+    "showo-mmu",
+    "qwen_vl",
+    "qwen-vl",
+    "qwen_vl_token",
+    "qwen-vl-token",
+    "mmada_self",
+    "mmada-self",
+    "mmada_self_coarse",
+    "mmada-self-coarse",
+    "ofox_vlm",
+    "ofox-vlm",
+    "ofox_qwen",
+    "ofox-qwen",
+    "qwen37_api",
+    "bailian_qwen37",
+    "stage2_student",
+    "stage2-student",
+    "learned_selector",
+    "learned-selector",
+    "distilled_selector",
+    "distilled-selector",
+]
+
 
 def build_parser():
     parser = argparse.ArgumentParser(description="Run ASCR Stage 1 zero-training loop.")
@@ -15,8 +44,8 @@ def build_parser():
     parser.add_argument("--prompt", default="A red cube left of a blue sphere", help="Original text-to-image prompt.")
     parser.add_argument("--output-dir", default=None, help="Override output directory.")
     parser.add_argument("--max-iterations", type=int, default=None, help="Override max ASCR iterations.")
-    parser.add_argument("--generator", default=None, choices=["mock", "showo", "mmada", "lumina", "lumina_dimoo", "lumina-dimoo"], help="Generator adapter.")
-    parser.add_argument("--evaluator", default=None, choices=["mock", "local_vlm", "local-vlm", "showo_mmu", "showo-mmu", "showo_vlm", "showo-vlm", "qwen_vl", "qwen-vl", "qwen3_6", "qwen36", "ofox_vlm", "ofox-vlm", "ofox_qwen", "ofox-qwen", "qwen37_api", "bailian_qwen37", "stage2_student", "stage2-student", "learned_selector", "learned-selector", "distilled_selector", "distilled-selector"], help="Semantic evaluator adapter.")
+    parser.add_argument("--generator", default=None, choices=GENERATOR_CHOICES, help="Generator adapter.")
+    parser.add_argument("--evaluator", default=None, choices=EVALUATOR_CHOICES, help="Semantic evaluator adapter.")
     parser.add_argument("--dry-run", action="store_true", help="Force mock generator and mock evaluator.")
     return parser
 
@@ -32,16 +61,34 @@ def main(argv=None):
         generator_name = "mock"
         evaluator_name = "mock"
     else:
-        generator_name = args.generator or config.get("generator", {}).get("name", "mock")
-        evaluator_name = args.evaluator or config.get("evaluator", {}).get("name", "mock")
+        generator_name = args.generator or config.get("generator", {}).get("name", "lumina")
+        evaluator_name = args.evaluator or config.get("evaluator", {}).get("name", "qwen_vl")
+    default_token_grid_size = {
+        "mock": 16,
+        "showo": 32,
+        "mmada": 32,
+        "lumina": 64,
+        "lumina_dimoo": 64,
+        "lumina-dimoo": 64,
+    }.get(generator_name, 16)
+    default_image_size = {
+        "mock": 256,
+        "showo": 512,
+        "mmada": 512,
+        "lumina": 1024,
+        "lumina_dimoo": 1024,
+        "lumina-dimoo": 1024,
+    }.get(generator_name, 256)
     generator_config = dict(config)
-    generator_config["token_grid_size"] = int(config.get("token_grid_size", 16))
-    generator_config["image_size"] = int(config.get("image_size", 256))
+    generator_config["token_grid_size"] = int(config.get("token_grid_size", default_token_grid_size))
+    generator_config["image_size"] = int(config.get("image_size", default_image_size))
+    config["token_grid_size"] = generator_config["token_grid_size"]
+    config["image_size"] = generator_config["image_size"]
     generator = build_generator(generator_name, generator_config)
     evaluator = build_evaluator(evaluator_name, config)
     selector = GridSemanticReopeningSelector(
         coarse_grid_size=int(config.get("coarse_grid_size", 4)),
-        token_grid_size=int(config.get("token_grid_size", 16)),
+        token_grid_size=int(config.get("token_grid_size", generator_config["token_grid_size"])),
         dilation=int(config.get("dilation", 1)),
     )
     run_config = run_config_from_mapping(config)

@@ -113,7 +113,7 @@ def _fallback_localization_payload(text, grid_size):
 
 
 class ShowOMMUEvaluator(SemanticEvaluator):
-    def __init__(self, repo_path="external/Show-o", checkpoint_path="models/show-o-512x512", vq_model_path="models/magvitv2", llm_model_path="models/phi-1_5", showo_config_path="configs/showo_local_512x512.yaml", device="cuda", grid_size=4, image_size=512, max_new_tokens=192):
+    def __init__(self, repo_path="external/Show-o", checkpoint_path="models/show-o-512x512", vq_model_path="models/magvitv2", llm_model_path="models/phi-1_5", showo_config_path="configs/stage1/showo/showo_local_512x512.yaml", device="cuda", grid_size=4, image_size=512, max_new_tokens=192):
         self.repo_path = repo_path
         self.checkpoint_path = checkpoint_path
         self.vq_model_path = vq_model_path
