@@ -273,3 +273,76 @@ Problems / blockers:
 Next action requested:
 - local Codex should watch job 70675 to completion and capture the final output count plus any worker-specific failures if they appear.
 - if 70675 later fails, inspect logs/ascr-lumina-qwen-coarse-70675-*.log first; the previous permission/path root cause should no longer be the culprit.
+
+## 2026-06-18 17:24 CST - local Codex
+
+Context:
+- Machine: Windows local ASCR checkout
+- Branch before: main
+- Commit before: 8f6f62a06ba4b9849e5ded037f108ed73adad09d
+- Branch after: main
+- Commit after: pending pushed commit containing this entry and API teacher distillation code
+
+Files changed:
+- ascr/distill/: added OFOX/OpenAI-compatible API client and teacher distillation CLI for localization and quality labels
+- scripts/distill/: added API probe and shell wrapper for 64-sample teacher runs
+- jobs/distill/api_teacher_distill.sbatch: added Slurm wrapper that probes API before labeling
+- docs/API_TEACHER_DISTILL.md: added API key, input/output, local, and Slurm usage guide
+- docs/SERVER_AI_HANDOFF.md: added server-side AI instructions for API teacher distillation and required report fields
+- tests/test_teacher_distill.py: added mock-client tests that do not call a real API
+
+Commands run:
+- git pull --ff-only origin main
+  Result: passed
+  Notes: fast-forwarded local main from 1d7298c to 8f6f62a.
+- python -m unittest tests.test_teacher_distill
+  Result: passed
+  Notes: 4 tests passed.
+- python scripts/distill/api_probe.py --help
+  Result: passed
+  Notes: direct script invocation now resolves the project package.
+- bash -n scripts/distill/run_teacher_distill.sh jobs/distill/api_teacher_distill.sbatch
+  Result: passed
+  Notes: shell syntax check passed.
+- python -m unittest discover -s tests
+  Result: passed
+  Notes: 106 tests passed.
+- python scripts/smoke_test.py
+  Result: passed
+  Notes: dry-run generated ignored outputs/local_smoke artifacts; no tracked files affected.
+- python -m ascr.cli.preflight --mode local --config configs/stage1/lumina/stage1_lumina_qwen9b_coarse_hq.yaml --scan-secrets
+  Result: passed
+  Notes: no potential committed secrets found; local torch/model-path warnings are expected on Windows.
+- git diff --check
+  Result: passed
+  Notes: only CRLF conversion warnings from Git on Windows.
+
+Environment:
+- python: Python 3.11.5
+- torch: not installed locally
+- cuda: not checked locally
+- gpu summary: not applicable
+- active env: base Python from local Anaconda for validation
+- important env vars set/unset, without values: OFOX_API_KEY was not set or used locally
+
+Server jobs:
+- job id: none
+- mode: not run locally
+- command: none
+- output dir: none
+- stdout log: none
+- stderr log: none
+- status: not submitted
+
+Results:
+- summary: local code now supports API teacher distillation from existing Stage-1 outputs. It writes localization_labels.jsonl, quality_labels.jsonl, manifest.json, and errors.jsonl under outputs/teacher_distill/hard64_lumina_qwen by default.
+- files to inspect: docs/API_TEACHER_DISTILL.md, docs/SERVER_AI_HANDOFF.md, jobs/distill/api_teacher_distill.sbatch, scripts/distill/run_teacher_distill.sh
+
+Problems / blockers:
+- no real API call was made locally because no API key should be stored in the repository.
+- server AI still needs to check whether compute nodes can reach the OFOX API; if not, it should run the non-Slurm command on the login node if server policy permits.
+- server AI should also record final status for the earlier 8-GPU job 70675 if it has completed.
+
+Next action requested:
+- server AI should pull latest main, read docs/API_TEACHER_DISTILL.md and docs/SERVER_AI_HANDOFF.md, set OFOX_API_KEY only in the shell or Slurm environment, run scripts/distill/api_probe.py, then run LIMIT=64 teacher distillation from outputs/lumina_qwen_hard64.
+- server AI must append a detailed result entry to docs/AI_COLLAB_LOG.md with API model, job ids, label counts, error counts, output paths, and any network/API failures, then push safe doc/code changes only if needed.

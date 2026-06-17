@@ -288,6 +288,7 @@ size**, not a second token grid.
 | `scripts/run_inference.sh` | Single-process Stage-1 wrapper for dry runs and one-prompt debugging |
 | `scripts/run_multigpu.sh` | Slurm submission wrapper for supported Stage-1 GPU jobs |
 | `scripts/slurm_infer.sbatch` | Generic Slurm wrapper for Lumina/Qwen and MMaDA smoke/full modes |
+| `scripts/distill/` | API teacher probe and distillation-label generation from Stage-1 outputs |
 
 ### Execution modes
 
@@ -406,6 +407,10 @@ Then use the command-oriented remote guide:
 PROMPT_LIMIT=1 OUT_ROOT=outputs/smoke_lumina_qwen bash scripts/run_multigpu.sh
 MODE=lumina-qwen-8gpu PROMPT_LIMIT=64 OUT_ROOT=outputs/lumina_qwen_hard64 bash scripts/run_multigpu.sh
 ```
+
+API teacher distillation is documented in `docs/API_TEACHER_DISTILL.md`. It reads
+completed Stage-1 outputs and writes localization/quality JSONL labels; it does
+not implement Stage-2 training yet.
 
 The `ascr-preflight` command checks Python/import readiness, CUDA visibility, important runtime
 paths, selected environment variables, and likely committed secrets without printing secret values.

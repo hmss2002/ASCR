@@ -1,0 +1,89 @@
+# API Teacher Distillation
+
+This guide describes how to use an OFOX/OpenAI-compatible API model as an ASCR
+teacher. The teacher reads existing Stage-1 outputs and writes reusable
+distillation labels. It does not train the Stage-2 selector yet.
+
+## Secret Handling
+
+Never write real API keys into tracked files. Set them only in the current shell
+or scheduler environment:
+
+```bash
+export OFOX_API_KEY='<your-ofox-api-key>'
+export OFOX_BASE_URL='https://api.ofox.ai/v1'
+export ASCR_TEACHER_MODEL='bailian/qwen3.7-plus'
+```
+
+PowerShell:
+
+```powershell
+$env:OFOX_API_KEY="<your-ofox-api-key>"
+$env:OFOX_BASE_URL="https://api.ofox.ai/v1"
+$env:ASCR_TEACHER_MODEL="bailian/qwen3.7-plus"
+```
+
+## Inputs
+
+The teacher expects a completed Stage-1 output root:
+
+```text
+outputs/lumina_qwen_hard64/
+  records/p000.json
+  baseline/p000.png
+  self/p000.png
+  runs/p000/<stage1-run>/trace.jsonl
+```
+
+Each `trace.jsonl` provides grid-image paths for localization labels. Each
+record provides baseline/final image paths for quality labels.
+
+## Outputs
+
+Default output directory:
+
+```text
+outputs/teacher_distill/hard64_lumina_qwen/
+  localization_labels.jsonl
+  quality_labels.jsonl
+  manifest.json
+  errors.jsonl
+```
+
+`localization_labels.jsonl` stores teacher semantic-grid labels compatible with
+`SemanticEvaluation`. `quality_labels.jsonl` stores baseline-vs-final teacher
+scores and winner labels.
+
+## Local API Probe
+
+```bash
+python scripts/distill/api_probe.py
+```
+
+This sends one tiny request and prints the model/base URL plus a short response
+preview. It never prints the API key.
+
+## Run Teacher Distillation
+
+```bash
+LIMIT=64 OUT_ROOT=outputs/lumina_qwen_hard64 \
+DISTILL_OUT=outputs/teacher_distill/hard64_lumina_qwen \
+bash scripts/distill/run_teacher_distill.sh
+```
+
+The command resumes existing JSONL outputs by `sample_id`. Failed samples are
+written to `errors.jsonl`.
+
+## Slurm
+
+Use `--export` so the key reaches the job without being written to a file:
+
+```bash
+sbatch --export=ALL,OFOX_API_KEY,ASCR_TEACHER_MODEL=bailian/qwen3.7-plus,LIMIT=64,OUT_ROOT=outputs/lumina_qwen_hard64 \
+  jobs/distill/api_teacher_distill.sbatch
+```
+
+The Slurm job runs `scripts/distill/api_probe.py` first. If the compute node
+cannot reach the API, the job fails before main labeling. If compute nodes have
+no network, run `scripts/distill/run_teacher_distill.sh` on the login node
+instead, assuming policy allows login-node API calls.

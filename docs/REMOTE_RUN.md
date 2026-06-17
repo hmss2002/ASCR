@@ -63,7 +63,9 @@ export TOKENIZERS_PARALLELISM=false
 For API judges, set keys only in the shell or scheduler environment:
 
 ```bash
-export OFOX_API_KEY=your-real-key-here
+export OFOX_API_KEY=<your-ofox-api-key>
+export OFOX_BASE_URL=https://api.ofox.ai/v1
+export ASCR_TEACHER_MODEL=bailian/qwen3.7-plus
 ```
 
 Never write real keys into tracked files.
@@ -149,3 +151,21 @@ worker processes. It is not `torchrun` DDP. Multi-node can be coordinated by
 setting `NODE_INDEX` and `NODE_COUNT` per node/job so prompt shards are disjoint.
 Stage-2 training code is reserved and should not be treated as implemented DDP
 training until `ascr.training.train_selector` is filled in.
+
+## 7. API Teacher Distillation
+
+After `outputs/lumina_qwen_hard64` exists, generate teacher labels with:
+
+```bash
+python scripts/distill/api_probe.py
+LIMIT=64 OUT_ROOT=outputs/lumina_qwen_hard64 bash scripts/distill/run_teacher_distill.sh
+```
+
+For Slurm:
+
+```bash
+sbatch --export=ALL,OFOX_API_KEY,ASCR_TEACHER_MODEL=bailian/qwen3.7-plus,LIMIT=64,OUT_ROOT=outputs/lumina_qwen_hard64 \
+  jobs/distill/api_teacher_distill.sbatch
+```
+
+See `docs/API_TEACHER_DISTILL.md` for schema and troubleshooting.

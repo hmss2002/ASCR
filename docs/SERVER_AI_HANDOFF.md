@@ -16,7 +16,7 @@ without SSH access.
 
 - Repository: https://github.com/hmss2002/ASCR.git
 - Branch: main
-- Expected minimum commit: 4a12e963911c4bb05a3853da22627288703bfb85
+- Expected minimum commit: latest `origin/main`; must include `docs/API_TEACHER_DISTILL.md` and `jobs/distill/api_teacher_distill.sbatch`
 
 ## Sync The Server Checkout
 
@@ -39,8 +39,8 @@ git checkout main
 git rev-parse HEAD
 ```
 
-Confirm that `git rev-parse HEAD` is `4a12e963911c4bb05a3853da22627288703bfb85`
-or newer.
+Confirm that `git rev-parse HEAD` matches the latest pushed `origin/main` given
+by the local Codex session.
 
 ## Check Server Dependencies
 
@@ -74,6 +74,13 @@ export TOKENIZERS_PARALLELISM=false
 Do not create, print, or commit real API keys. If API judging is needed, read
 `OFOX_API_KEY` from the shell or scheduler environment only.
 
+For API teacher distillation, also set:
+
+```bash
+export OFOX_BASE_URL=${OFOX_BASE_URL:-https://api.ofox.ai/v1}
+export ASCR_TEACHER_MODEL=${ASCR_TEACHER_MODEL:-bailian/qwen3.7-plus}
+```
+
 ## Validate
 
 ```bash
@@ -100,6 +107,41 @@ MODE=lumina-qwen-8gpu PROMPT_LIMIT=64 OUT_ROOT=outputs/lumina_qwen_hard64 \
   bash scripts/run_multigpu.sh
 ```
 
+## Run API Teacher Distillation
+
+First read `docs/API_TEACHER_DISTILL.md`. Then confirm that
+`outputs/lumina_qwen_hard64/records` and matching `runs/pXXX/*/trace.jsonl`
+exist. Use the real API key only through the shell or Slurm environment.
+
+Probe the API:
+
+```bash
+export OFOX_API_KEY='<your-ofox-api-key>'
+export OFOX_BASE_URL='https://api.ofox.ai/v1'
+export ASCR_TEACHER_MODEL='bailian/qwen3.7-plus'
+source .venv-qwen36/bin/activate
+python scripts/distill/api_probe.py
+```
+
+Run the first 64-sample teacher pass:
+
+```bash
+LIMIT=64 OUT_ROOT=outputs/lumina_qwen_hard64 \
+DISTILL_OUT=outputs/teacher_distill/hard64_lumina_qwen \
+bash scripts/distill/run_teacher_distill.sh
+```
+
+If policy requires batch execution, submit:
+
+```bash
+sbatch --export=ALL,OFOX_API_KEY,ASCR_TEACHER_MODEL=bailian/qwen3.7-plus,LIMIT=64,OUT_ROOT=outputs/lumina_qwen_hard64 \
+  jobs/distill/api_teacher_distill.sbatch
+```
+
+If the compute node cannot reach the API, record the failure in
+`docs/AI_COLLAB_LOG.md` and rerun the non-Slurm command on the login node if
+that is permitted by server policy.
+
 Current multi-GPU support is Stage-1 single-node prompt sharding with paired
 worker processes. It is not `torchrun` DDP. Stage-2 training is scaffolded but
 not implemented as a runnable DDP training pipeline.
@@ -119,6 +161,10 @@ information to the human. The report must include:
 8. files changed, if any, and why
 9. output directories and important result files created
 10. warnings/errors that local Codex should inspect next
+11. for API teacher distillation: API model name, number of API calls attempted,
+    number of localization labels, number of quality labels, number of errors,
+    output paths for `manifest.json`, `localization_labels.jsonl`,
+    `quality_labels.jsonl`, and `errors.jsonl`
 
 If you modify files on the server, run validation, commit the changes, and push
 them to GitHub only if they are safe to sync. Never commit secrets, model
