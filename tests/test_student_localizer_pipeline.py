@@ -5,13 +5,16 @@ from unittest import mock
 from pathlib import Path
 
 from ascr.benchmarks.api_image_judge import normalize_judgment, prune_resolved_errors, rewrite_latest_rows
+from ascr.benchmarks.compare_image_judges import compare_summaries
 from ascr.benchmarks.image_quality_benchmark import run_benchmark
 from ascr.core.loop import ASCRLoop, ASCRRunConfig
 from ascr.distill.teacher import extract_json_object
+from ascr.distill.export_localizer_dataset import export_dataset
+from ascr.distill.localize_image_manifest import iter_tasks, parse_image_fields
 from ascr.evaluators.student_localizer import StudentLocalizerEvaluator
 from ascr.generators.base import MockGeneratorAdapter, _write_mock_ppm
 from ascr.revision.selector import GridSemanticReopeningSelector
-from ascr.training.train_localizer import train_grid_localizer_v0
+from ascr.training.train_localizer import train_grid_localizer, train_grid_localizer_v0
 
 
 def write_jsonl(path, rows):
@@ -87,6 +90,24 @@ class StudentLocalizerPipelineTests(unittest.TestCase):
             self.assertTrue((output_dir / "predictions.jsonl").exists())
             self.assertTrue((output_dir / "split_manifest.json").exists())
             self.assertTrue((output_dir / "holdout_prompts.txt").exists())
+
+    def test_train_v1_localizer_writes_weight_model(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dataset, image_root = self.make_dataset(temp_dir)
+            result = train_grid_localizer(
+                "grid-localizer-v1",
+                dataset,
+                image_root,
+                Path(temp_dir) / "student_v1",
+                eval_mode="resubstitution",
+                seed=7,
+                epochs=4,
+                learning_rate=0.05,
+            )
+            model = json.loads(Path(result["model"]).read_text(encoding="utf-8"))
+            self.assertEqual(model["schema_version"], "ascr.grid_localizer_v1")
+            self.assertEqual(model["feature_version"], "v1")
+            self.assertIn("weights", model["cells"]["A1"])
 
     def test_student_evaluator_outputs_semantic_evaluation(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -190,6 +211,56 @@ class StudentLocalizerPipelineTests(unittest.TestCase):
         self.assertEqual(judgment["winner"], "after")
         self.assertEqual(judgment["after_score"], 0.8)
 
+    def test_manifest_localization_tasks_include_before_and_after(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manifest = Path(temp_dir) / "manifest.jsonl"
+            write_jsonl(manifest, [{
+                "sample_id": "s0",
+                "domain": "geneval_smoke16",
+                "prompt": "a photo of a bench",
+                "before_grid_image": "before.ppm",
+                "after_grid_image": "after.ppm",
+            }])
+            tasks = list(iter_tasks(manifest, parse_image_fields("before_grid_image,after_grid_image")))
+            self.assertEqual([task["sample_id"] for task in tasks], ["s0:before_grid_image", "s0:after_grid_image"])
+            self.assertEqual(tasks[0]["domain"], "geneval_smoke16")
+
+    def test_export_localizer_dataset_merges_base_and_extra_labels(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base = Path(temp_dir) / "base.jsonl"
+            extra = Path(temp_dir) / "extra.jsonl"
+            output = Path(temp_dir) / "merged" / "dataset.jsonl"
+            write_jsonl(base, [{
+                "schema_version": "ascr.teacher_dataset.v1",
+                "sample_id": "p000",
+                "prompt": "red cube",
+                "localizations": [{
+                    "sample_id": "p000:i000",
+                    "prompt": "red cube",
+                    "grid_image": "grid0.ppm",
+                    "evaluation": {"has_error": False, "regions": []},
+                    "raw_text": "remove me",
+                }],
+            }])
+            write_jsonl(extra, [{
+                "schema_version": "ascr.image_manifest_localization.v1",
+                "sample_id": "s0:before_grid_image",
+                "source_sample_id": "s0",
+                "domain": "geneval_smoke16",
+                "prompt": "a photo of a bench",
+                "image_field": "before_grid_image",
+                "grid_image": "before.ppm",
+                "teacher_model": "bailian/qwen3.7-plus",
+                "evaluation": {"has_error": True, "regions": [{"cells": [{"label": "A1"}]}]},
+                "raw_text": "remove me too",
+            }])
+            manifest = export_dataset(base, [extra], output)
+            rows = [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()]
+            self.assertEqual(manifest["row_count"], 2)
+            self.assertEqual(rows[0]["domain"], "hard64")
+            self.assertEqual(rows[1]["domain"], "geneval_smoke16")
+            self.assertNotIn("raw_text", json.dumps(rows))
+
     def test_api_judge_rewrite_latest_rows_dedupes_by_sample_id(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             judgments = Path(temp_dir) / "judgments.jsonl"
@@ -212,6 +283,28 @@ class StudentLocalizerPipelineTests(unittest.TestCase):
             ])
             rows = prune_resolved_errors(errors, {"s0"})
             self.assertEqual(rows, [{"sample_id": "s1", "error": "still bad"}])
+
+    def test_compare_image_judge_summaries(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            baseline = Path(temp_dir) / "v0.json"
+            candidate = Path(temp_dir) / "v1.json"
+            output = Path(temp_dir) / "compare.json"
+            baseline.write_text(json.dumps({
+                "row_count": 2,
+                "error_count": 0,
+                "mean_delta_after_minus_before": 0.1,
+                "winners": {"after": 1, "before": 0, "tie": 1},
+            }), encoding="utf-8")
+            candidate.write_text(json.dumps({
+                "row_count": 2,
+                "error_count": 0,
+                "mean_delta_after_minus_before": 0.2,
+                "winners": {"after": 2, "before": 0, "tie": 0},
+            }), encoding="utf-8")
+            report = compare_summaries(baseline, candidate, output)
+            self.assertEqual(report["delta"]["winner_after"], 1)
+            self.assertAlmostEqual(report["delta"]["mean_delta_after_minus_before"], 0.1)
+            self.assertTrue(output.exists())
 
 
 if __name__ == "__main__":

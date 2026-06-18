@@ -290,6 +290,105 @@ When inspecting benchmark manifests, check whether any row has
 last candidate image, while `selected_after_image` records the conservative
 fallback-selected image when `return_initial_on_max_error` fires.
 
+## Continue To Student Localizer v1
+
+The current v0 baseline is scientifically useful but weak: the latest server
+run recorded `grid-localizer-v0` holdout hit_any `0.2`, in-domain judge delta
+about `+0.0118`, and Geneval smoke all ties. Do not rerun v0 unchanged. The
+next step is to add teacher localization labels for the existing v0 image
+benchmark manifests, merge them into a v1 training dataset, train
+`grid-localizer-v1`, and rerun the same before/after benchmark.
+
+Login-node teacher localization:
+
+```bash
+export OFOX_API_KEY='<your-ofox-api-key>'
+export OFOX_BASE_URL='https://api.ofox.ai/v1'
+export ASCR_TEACHER_MODEL='bailian/qwen3.7-plus'
+export ASCR_TEACHER_LOCALIZATION_MAX_TOKENS=2048
+export ASCR_TEACHER_JSON_REPAIR_RETRIES=1
+
+source .venv-qwen36/bin/activate
+
+python -m ascr.distill.localize_image_manifest \
+  --manifest outputs/image_bench/student_localizer_v0/in_domain_hard64_holdout/manifest.jsonl \
+  --output-dir outputs/teacher_distill/student_localizer_v1/in_domain \
+  --image-fields before_grid_image,after_grid_image \
+  --keep-going
+
+python -m ascr.distill.localize_image_manifest \
+  --manifest outputs/image_bench/student_localizer_v0/geneval_smoke16/manifest.jsonl \
+  --output-dir outputs/teacher_distill/student_localizer_v1/geneval_smoke16 \
+  --image-fields before_grid_image,after_grid_image \
+  --keep-going
+
+python -m ascr.distill.export_localizer_dataset \
+  --base-dataset outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl \
+  --extra-localizations outputs/teacher_distill/student_localizer_v1/in_domain/localization_labels.jsonl \
+  --extra-localizations outputs/teacher_distill/student_localizer_v1/geneval_smoke16/localization_labels.jsonl \
+  --output outputs/teacher_distill/student_localizer_v1/dataset.jsonl
+```
+
+Train v1:
+
+```bash
+python -m ascr.training.train_localizer \
+  --task grid-localizer-v1 \
+  --dataset outputs/teacher_distill/student_localizer_v1/dataset.jsonl \
+  --image-root . \
+  --output-dir outputs/stage2_students/grid_localizer_v1 \
+  --eval-mode holdout \
+  --train-ratio 0.8 \
+  --seed 0
+```
+
+Run v1 image generation on GPU nodes. Keep OFOX/API variables blanked:
+
+```bash
+sbatch --export=ALL,OFOX_API_KEY=,OFOX_BASE_URL=,ASCR_TEACHER_MODEL=,ASCR_TEACHER_QUALITY_MAX_TOKENS=,ASCR_TEACHER_LOCALIZATION_MAX_TOKENS=,ASCR_TEACHER_JSON_REPAIR_RETRIES=,STUDENT_MODEL=outputs/stage2_students/grid_localizer_v1/student_model.json,PROMPTS=outputs/stage2_students/grid_localizer_v1/holdout_prompts.txt,DOMAIN=in_domain_hard64_holdout_v1,OUTPUT_DIR=outputs/image_bench/student_localizer_v1/in_domain_hard64_holdout,MAX_ITERATIONS=3 \
+  jobs/benchmarks/student_image_benchmark_lumina.sbatch
+
+sbatch --export=ALL,OFOX_API_KEY=,OFOX_BASE_URL=,ASCR_TEACHER_MODEL=,ASCR_TEACHER_QUALITY_MAX_TOKENS=,ASCR_TEACHER_LOCALIZATION_MAX_TOKENS=,ASCR_TEACHER_JSON_REPAIR_RETRIES=,STUDENT_MODEL=outputs/stage2_students/grid_localizer_v1/student_model.json,PROMPTS=configs/benchmarks/prompts/geneval_553.txt,DOMAIN=geneval_smoke16_v1,LIMIT=16,OUTPUT_DIR=outputs/image_bench/student_localizer_v1/geneval_smoke16,MAX_ITERATIONS=3 \
+  jobs/benchmarks/student_image_benchmark_lumina.sbatch
+```
+
+Judge v1 on the login node and compare to v0:
+
+```bash
+python -m ascr.benchmarks.api_image_judge \
+  --manifest outputs/image_bench/student_localizer_v1/in_domain_hard64_holdout/manifest.jsonl \
+  --output-dir outputs/api_judges/student_localizer_v1/in_domain_hard64_holdout \
+  --keep-going --overwrite
+
+python -m ascr.benchmarks.api_image_judge \
+  --manifest outputs/image_bench/student_localizer_v1/geneval_smoke16/manifest.jsonl \
+  --output-dir outputs/api_judges/student_localizer_v1/geneval_smoke16 \
+  --keep-going --overwrite
+
+python -m ascr.benchmarks.compare_image_judges \
+  --baseline-summary outputs/api_judges/student_localizer_v0/in_domain_hard64_holdout/summary.json \
+  --candidate-summary outputs/api_judges/student_localizer_v1/in_domain_hard64_holdout/summary.json \
+  --output outputs/api_judges/student_localizer_v1/in_domain_hard64_holdout/compare_to_v0.json
+
+python -m ascr.benchmarks.compare_image_judges \
+  --baseline-summary outputs/api_judges/student_localizer_v0/geneval_smoke16/summary.json \
+  --candidate-summary outputs/api_judges/student_localizer_v1/geneval_smoke16/summary.json \
+  --output outputs/api_judges/student_localizer_v1/geneval_smoke16/compare_to_v0.json
+```
+
+Append the full v1 results to `docs/AI_COLLAB_LOG.md`, including API label
+counts, Slurm job ids, v1 metrics, judge summaries, compare-to-v0 reports, and
+any warnings. Push safe small JSON outputs only:
+
+```bash
+git add docs/AI_COLLAB_LOG.md
+git add -f outputs/teacher_distill/student_localizer_v1/**/*.json*
+git add -f outputs/stage2_students/grid_localizer_v1/*.json*
+git add -f outputs/api_judges/student_localizer_v1/**/*.json*
+git commit -m "Run student localizer v1 benchmark"
+git push
+```
+
 `jobs/distill/api_teacher_distill.sbatch` is retained as a template but is
 disabled by default. Do not use it until compute-node DNS/egress or proxy access
 to `api.ofox.ai` is fixed and confirmed.

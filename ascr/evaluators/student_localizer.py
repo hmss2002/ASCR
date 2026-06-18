@@ -6,7 +6,7 @@ from ascr.training.localizer_model import predict_cells
 
 
 class StudentLocalizerEvaluator:
-    def __init__(self, model_path, threshold=None, max_selected_cells=None):
+    def __init__(self, model_path, threshold=None, max_selected_cells=None, domain=None):
         if not model_path:
             raise ValueError("student_localizer evaluator requires evaluator.model_path or STUDENT_MODEL")
         self.model_path = Path(model_path)
@@ -15,10 +15,11 @@ class StudentLocalizerEvaluator:
             self.model["threshold"] = float(threshold)
         if max_selected_cells is not None:
             self.model["max_selected_cells"] = int(max_selected_cells)
+        self.domain = domain
 
     def evaluate(self, original_prompt, grid_image_path, iteration, current_prompt=None):
         prompt = current_prompt or original_prompt
-        selected, scored = predict_cells(self.model, prompt, grid_image_path)
+        selected, scored = predict_cells(self.model, prompt, grid_image_path, domain=self.domain)
         if not selected:
             return SemanticEvaluation(
                 has_error=False,
@@ -35,7 +36,7 @@ class StudentLocalizerEvaluator:
             regions=[
                 RegionSelection(
                     cells=cells,
-                    reason="student_localizer_v0 predicted semantic mismatch",
+                    reason=f"{self.model.get('schema_version', 'student_localizer')} predicted semantic mismatch",
                     confidence=max(0.0, min(1.0, float(top_score))),
                     error_type="semantic",
                     action="reopen",

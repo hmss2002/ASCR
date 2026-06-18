@@ -1258,3 +1258,49 @@ Problems / blockers:
 Next action requested:
 - use the corrected benchmark/judge semantics as the baseline for any future student-localizer comparisons.
 - if further gains are needed, improve the student model itself rather than rerunning the previous flawed benchmark setup.
+
+## 2026-06-18 14:25 CST - local Codex
+
+Context:
+- Machine: Windows local ASCR checkout
+- Branch before: main
+- Commit before: `3e0e37c06343689813879618eb273aeaf1f07afd`
+- Branch after: main
+- Commit after: pending pushed commit for student-localizer v1 data/model pipeline
+
+Cloud AI audit:
+- Pulled and accepted server commits `f08f4c4` and `35ff82f`.
+- The server AI changes were reasonable and reflected real workflow bugs:
+  - `LIMIT=16` in the shared Slurm wrapper silently truncated in-domain holdout from 17 prompts to 16.
+  - using `summary.final_decoded_image` as benchmark `after_image` was scientifically wrong when `return_initial_on_max_error=true`, because ASCR may fallback-select the initial image while still producing a revised raw final candidate.
+  - `api_image_judge --overwrite` previously mixed old and new rows; dedupe and stale-error pruning are necessary for reproducible reruns.
+  - `--export=ALL` leaked OFOX env vars into compute-node jobs; the wrapper now strips them and handoff commands blank them explicitly.
+- Current v0 result is a valid weak baseline, not a strong distilled student:
+  - `grid-localizer-v0` eval hit_any `0.2`, mean_f1 `0.13`.
+  - corrected in-domain judge: `row_count=17`, winners `{after:1,before:0,tie:16}`, mean delta `+0.0117647`.
+  - corrected Geneval judge: `row_count=16`, all ties, mean delta `0.0`.
+
+Files changed:
+- `ascr/distill/localize_image_manifest.py`: new login-node Qwen3.7/OFOX teacher localizer for existing image benchmark manifests.
+- `ascr/distill/export_localizer_dataset.py`: new dataset merger for Hard64 teacher data plus manifest-derived localizer labels.
+- `ascr/training/localizer_model.py` and `ascr/training/train_localizer.py`: added `grid-localizer-v1` with richer deterministic image/prompt/domain features and one-vs-rest linear weights.
+- `ascr/evaluators/student_localizer.py`, `ascr/evaluators/registry.py`, and image benchmark wiring: student evaluator now supports v1 schema and receives benchmark domain.
+- `ascr/benchmarks/compare_image_judges.py`: new JSON comparison report for v0-vs-v1 API judge summaries.
+- docs and tests updated for the v1 workflow.
+
+Commands run:
+- `git pull --ff-only origin main`
+  Result: passed
+  Notes: fast-forwarded to `35ff82f`.
+- targeted tests for student localizer pipeline
+  Result: passed locally before full validation.
+
+Results:
+- summary: repo now has the next-stage v1 path: teacher-localize existing v0 benchmark images, merge a v1 localizer dataset, train a stronger lightweight student, rerun GPU image benchmark, judge with Qwen3.7, and compare v1 to v0.
+
+Problems / blockers:
+- no real OFOX calls or GPU jobs were run locally.
+- v1 remains a lightweight JSON-model student, not neural/DDP Stage-2.
+
+Next action requested:
+- server AI should pull latest main, run the v1 login-node localization commands, merge/export dataset, train `grid-localizer-v1`, run in-domain and Geneval GPU image benchmark, run login-node Qwen3.7 judge, generate compare-to-v0 JSON, append detailed results here, force-add safe JSON artifacts, commit, and push.

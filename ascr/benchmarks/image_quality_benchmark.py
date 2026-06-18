@@ -65,6 +65,7 @@ def run_benchmark(args):
     config.setdefault("evaluator", {})
     config["evaluator"]["name"] = "student_localizer"
     config["evaluator"]["model_path"] = args.student_model
+    config["evaluator"]["domain"] = args.domain
     if args.output_dir:
         config["output_dir"] = str(output_dir / "runs")
     if args.max_iterations is not None:

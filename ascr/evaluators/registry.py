@@ -153,6 +153,7 @@ def build_evaluator(name, config):
             model_path=os.environ.get("STUDENT_MODEL", evaluator_config.get("model_path")),
             threshold=evaluator_config.get("threshold"),
             max_selected_cells=evaluator_config.get("max_selected_cells", config.get("selector", {}).get("max_selected_cells")),
+            domain=os.environ.get("STUDENT_DOMAIN", evaluator_config.get("domain")),
         )
     if name in {"local_vlm", "local-vlm"}:
         evaluator_config = config.get("evaluator", config)
