@@ -23,6 +23,15 @@ def append_jsonl(path, row):
         handle.write("\n")
 
 
+def write_jsonl(path, rows):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        for row in rows:
+            json.dump(row, handle, sort_keys=True)
+            handle.write("\n")
+
+
 def completed_ids(path):
     path = Path(path)
     if not path.exists():
@@ -92,6 +101,39 @@ def normalize_judgment(payload):
     }
 
 
+def dedupe_rows_by_sample_id(rows):
+    deduped = []
+    seen = set()
+    for row in reversed(rows):
+        sample_id = row.get("sample_id")
+        key = sample_id or json.dumps(row, sort_keys=True)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(row)
+    deduped.reverse()
+    return deduped
+
+
+def rewrite_latest_rows(path):
+    path = Path(path)
+    if not path.exists():
+        return []
+    rows = dedupe_rows_by_sample_id(read_jsonl(path))
+    write_jsonl(path, rows)
+    return rows
+
+
+def prune_resolved_errors(path, resolved_ids):
+    path = Path(path)
+    if not path.exists():
+        return []
+    rows = [row for row in read_jsonl(path) if row.get("sample_id") not in resolved_ids]
+    rows = dedupe_rows_by_sample_id(rows)
+    write_jsonl(path, rows)
+    return rows
+
+
 def summarize(rows, errors, output_dir, manifest, model):
     winners = {"before": 0, "after": 0, "tie": 0}
     before_scores = []
@@ -125,6 +167,10 @@ def run_judge(args):
     output_dir.mkdir(parents=True, exist_ok=True)
     judgments_path = output_dir / "judgments.jsonl"
     errors_path = output_dir / "errors.jsonl"
+    if args.overwrite:
+        for path in (judgments_path, errors_path):
+            if path.exists():
+                path.unlink()
     settings = api_settings()
     model = args.model or settings["model"] or DEFAULT_MODEL
     max_tokens = int(args.max_tokens or os.environ.get("ASCR_TEACHER_QUALITY_MAX_TOKENS", 2048))
@@ -173,8 +219,9 @@ def run_judge(args):
             })
             if not args.keep_going:
                 raise
-    judgments = read_jsonl(judgments_path) if judgments_path.exists() else []
-    errors = read_jsonl(errors_path) if errors_path.exists() else []
+    judgments = rewrite_latest_rows(judgments_path)
+    resolved_ids = {row.get("sample_id") for row in judgments if row.get("sample_id")}
+    errors = prune_resolved_errors(errors_path, resolved_ids)
     return summarize(judgments, errors, output_dir, args.manifest, model)
 
 

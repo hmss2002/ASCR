@@ -246,9 +246,17 @@ bash scripts/benchmark/run_student_image_benchmark.sh
 For Slurm:
 
 ```bash
-sbatch --export=ALL,STUDENT_MODEL=outputs/stage2_students/grid_localizer_v0/student_model.json,PROMPTS=configs/benchmarks/prompts/geneval_553.txt,DOMAIN=geneval_smoke16,LIMIT=16,OUTPUT_DIR=outputs/image_bench/student_localizer_v0/geneval_smoke16,MAX_ITERATIONS=3 \
+sbatch --export=ALL,OFOX_API_KEY=,OFOX_BASE_URL=,ASCR_TEACHER_MODEL=,ASCR_TEACHER_QUALITY_MAX_TOKENS=,ASCR_TEACHER_LOCALIZATION_MAX_TOKENS=,ASCR_TEACHER_JSON_REPAIR_RETRIES=,STUDENT_MODEL=outputs/stage2_students/grid_localizer_v0/student_model.json,PROMPTS=outputs/stage2_students/grid_localizer_v0/holdout_prompts.txt,DOMAIN=in_domain_hard64_holdout,OUTPUT_DIR=outputs/image_bench/student_localizer_v0/in_domain_hard64_holdout,MAX_ITERATIONS=3 \
+  jobs/benchmarks/student_image_benchmark_lumina.sbatch
+
+sbatch --export=ALL,OFOX_API_KEY=,OFOX_BASE_URL=,ASCR_TEACHER_MODEL=,ASCR_TEACHER_QUALITY_MAX_TOKENS=,ASCR_TEACHER_LOCALIZATION_MAX_TOKENS=,ASCR_TEACHER_JSON_REPAIR_RETRIES=,STUDENT_MODEL=outputs/stage2_students/grid_localizer_v0/student_model.json,PROMPTS=configs/benchmarks/prompts/geneval_553.txt,DOMAIN=geneval_smoke16,LIMIT=16,OUTPUT_DIR=outputs/image_bench/student_localizer_v0/geneval_smoke16,MAX_ITERATIONS=3 \
   jobs/benchmarks/student_image_benchmark_lumina.sbatch
 ```
+
+Use the same shared Slurm wrapper for both image-generation paths. Do not let
+compute-node image benchmark jobs inherit live OFOX/API judge variables from the
+login shell; blank them explicitly in `--export` as shown above. The wrapper
+also strips any leaked OFOX/API judge variables defensively.
 
 After image generation finishes, run Qwen3.7 before/after judging on the login
 node only:
@@ -276,6 +284,11 @@ Append exact commands, Slurm job ids, GPU node names, generation counts, judge
 winner counts, score deltas, failures, and output paths to
 `docs/AI_COLLAB_LOG.md`. Commit and push safe small JSON summaries only. Do not
 commit generated images, logs, model weights, caches, `.env`, or API keys.
+
+When inspecting benchmark manifests, check whether any row has
+`fallback_applied=true`. The manifest's `after_image` now represents the actual
+last candidate image, while `selected_after_image` records the conservative
+fallback-selected image when `return_initial_on_max_error` fires.
 
 `jobs/distill/api_teacher_distill.sbatch` is retained as a template but is
 disabled by default. Do not use it until compute-node DNS/egress or proxy access

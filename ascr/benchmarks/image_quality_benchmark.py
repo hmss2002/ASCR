@@ -83,6 +83,8 @@ def run_benchmark(args):
             per_prompt_config["output_dir"] = str(output_dir / "runs" / sample_id.replace(":", "_"))
             loop = build_loop(per_prompt_config, generator_name, "student_localizer")
             summary = loop.run(prompt, project_root=Path.cwd())
+            after_image = summary.get("raw_final_decoded_image") or summary.get("final_decoded_image")
+            after_grid_image = summary.get("raw_final_grid_image") or summary.get("final_grid_image")
             rows.append({
                 "schema_version": "ascr.student_image_benchmark.v1",
                 "created_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
@@ -93,8 +95,12 @@ def run_benchmark(args):
                 "generator": generator_name,
                 "before_image": summary.get("initial_decoded_image"),
                 "before_grid_image": summary.get("initial_grid_image"),
-                "after_image": summary.get("final_decoded_image"),
-                "after_grid_image": summary.get("final_grid_image"),
+                "after_image": after_image,
+                "after_grid_image": after_grid_image,
+                "selected_after_image": summary.get("final_decoded_image"),
+                "selected_after_grid_image": summary.get("final_grid_image"),
+                "fallback_applied": bool(summary.get("fallback_applied", False)),
+                "final_selection_policy": summary.get("final_selection_policy"),
                 "stop_reason": summary.get("stop_reason"),
                 "evaluator_calls": summary.get("evaluator_calls"),
                 "iterations_recorded": summary.get("iterations_recorded"),

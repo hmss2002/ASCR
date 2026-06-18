@@ -1,9 +1,10 @@
 import json
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
-from ascr.benchmarks.api_image_judge import normalize_judgment
+from ascr.benchmarks.api_image_judge import normalize_judgment, prune_resolved_errors, rewrite_latest_rows
 from ascr.benchmarks.image_quality_benchmark import run_benchmark
 from ascr.core.loop import ASCRLoop, ASCRRunConfig
 from ascr.distill.teacher import extract_json_object
@@ -137,11 +138,80 @@ class StudentLocalizerPipelineTests(unittest.TestCase):
             self.assertTrue(manifest[0]["before_image"].endswith("decoded.ppm"))
             self.assertTrue(manifest[0]["after_image"].endswith("decoded.ppm"))
 
+    def test_image_benchmark_prefers_raw_final_image_when_fallback_applies(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            prompts = Path(temp_dir) / "prompts.txt"
+            prompts.write_text("red cube left of blue sphere\n", encoding="utf-8")
+            args = Args()
+            args.student_model = str(Path(temp_dir) / "student.json")
+            args.prompts = str(prompts)
+            args.domain = "unit"
+            args.output_dir = str(Path(temp_dir) / "bench")
+            args.config = None
+            args.generator = "mock"
+            args.limit = None
+            args.shard_index = 0
+            args.shard_count = 1
+            args.max_iterations = 1
+            args.run_name = "unit_bench"
+            args.keep_going = False
+
+            class _FakeLoop:
+                def run(self, prompt, project_root="."):
+                    return {
+                        "initial_decoded_image": "initial.ppm",
+                        "initial_grid_image": "initial-grid.ppm",
+                        "final_decoded_image": "initial.ppm",
+                        "final_grid_image": "initial-grid.ppm",
+                        "raw_final_decoded_image": "raw-final.ppm",
+                        "raw_final_grid_image": "raw-final-grid.ppm",
+                        "stop_reason": "max_iterations",
+                        "evaluator_calls": 2,
+                        "iterations_recorded": 1,
+                        "revision_records": [{"selected_token_count": 9}],
+                        "artifact_root": "artifact-root",
+                        "trace_path": "trace.jsonl",
+                        "fallback_applied": True,
+                        "final_selection_policy": "initial_on_max_error",
+                    }
+
+            with mock.patch("ascr.benchmarks.image_quality_benchmark.build_loop", return_value=_FakeLoop()):
+                run_benchmark(args)
+            manifest = [json.loads(line) for line in (Path(temp_dir) / "bench" / "manifest.jsonl").read_text(encoding="utf-8").splitlines()]
+            self.assertEqual(manifest[0]["after_image"], "raw-final.ppm")
+            self.assertEqual(manifest[0]["selected_after_image"], "initial.ppm")
+            self.assertTrue(manifest[0]["fallback_applied"])
+            self.assertEqual(manifest[0]["final_selection_policy"], "initial_on_max_error")
+            self.assertEqual(manifest[0]["selected_token_counts"], [9])
+
     def test_api_judge_json_helpers(self):
         payload = extract_json_object("analysis first\n```json\n{\"before_score\":0.2,\"after_score\":0.8,\"winner\":\"after\",\"reason\":\"better\"}\n```")
         judgment = normalize_judgment(payload)
         self.assertEqual(judgment["winner"], "after")
         self.assertEqual(judgment["after_score"], 0.8)
+
+    def test_api_judge_rewrite_latest_rows_dedupes_by_sample_id(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            judgments = Path(temp_dir) / "judgments.jsonl"
+            write_jsonl(judgments, [
+                {"sample_id": "s0", "judgment": {"winner": "before"}},
+                {"sample_id": "s1", "judgment": {"winner": "tie"}},
+                {"sample_id": "s0", "judgment": {"winner": "after"}},
+            ])
+            rows = rewrite_latest_rows(judgments)
+            self.assertEqual([row["sample_id"] for row in rows], ["s1", "s0"])
+            self.assertEqual(rows[-1]["judgment"]["winner"], "after")
+
+    def test_api_judge_prunes_resolved_errors(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            errors = Path(temp_dir) / "errors.jsonl"
+            write_jsonl(errors, [
+                {"sample_id": "s0", "error": "old"},
+                {"sample_id": "s1", "error": "still bad"},
+                {"sample_id": "s0", "error": "newer"},
+            ])
+            rows = prune_resolved_errors(errors, {"s0"})
+            self.assertEqual(rows, [{"sample_id": "s1", "error": "still bad"}])
 
 
 if __name__ == "__main__":

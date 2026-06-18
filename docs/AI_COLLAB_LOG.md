@@ -1155,3 +1155,106 @@ Problems / blockers:
 Next action requested:
 - future compute-node student image benchmark submissions should reuse the updated `jobs/benchmarks/student_image_benchmark_lumina.sbatch` and explicitly blank OFOX/API env vars on `sbatch`.
 - if the team wants stronger student gains than the current near-tie results, the next step is improving the student localizer model rather than rerunning the same lightweight baseline unchanged.
+
+## 2026-06-18 11:05 HKT - server AI
+
+Context:
+- Machine: HKU AI server login node hpcr4300a; corrected compute-node benchmark reruns executed on `SPGL-1-18`
+- Branch before: main
+- Commit before: `f08f4c40c999c1e208dc1635f16c2628d8160594`
+- Branch after: main
+- Commit after: pending pushed fix commit for benchmark/judge semantics and refreshed judge outputs
+
+Files changed:
+- `ascr/benchmarks/image_quality_benchmark.py`: fix benchmark manifest semantics so `after_image` / `after_grid_image` use the actual last candidate (`raw_final_*`) rather than the fallback-selected initial image when `return_initial_on_max_error: true`; also record `selected_after_image`, `selected_after_grid_image`, `fallback_applied`, and `final_selection_policy`
+- `ascr/benchmarks/api_image_judge.py`: fix rerun hygiene so `--overwrite` truly resets prior outputs, duplicate `sample_id` rows are deduped, and stale `errors.jsonl` rows are pruned after successful reruns
+- `jobs/benchmarks/student_image_benchmark_lumina.sbatch`: remove the default `LIMIT=16`, preserve the `PROJECT_ROOT`/`SLURM_SUBMIT_DIR` fix, and defensively clear leaked OFOX/API env vars inside compute-node image benchmark jobs
+- `docs/STUDENT_LOCALIZER_IMAGE_BENCHMARK.md` and `docs/SERVER_AI_HANDOFF.md`: document the shared Slurm wrapper for both GPU generation paths, explicit OFOX/API env blanking, and the corrected benchmark manifest semantics
+- `tests/test_student_localizer_pipeline.py`: add regression coverage for the raw-final-image benchmark semantics and the API judge dedupe / stale-error-pruning behavior
+- `outputs/api_judges/student_localizer_v0/geneval_smoke16/*.json*`: refreshed from the corrected Geneval manifest
+- `outputs/api_judges/student_localizer_v0/in_domain_hard64_holdout/*.json*`: refreshed from the corrected in-domain manifest
+- `docs/AI_COLLAB_LOG.md`: appended this bug-audit and fix summary
+
+Commands run:
+- Student pipeline code audit (`sed`/`rg` over `ascr/core/loop.py`, `ascr/benchmarks/image_quality_benchmark.py`, `ascr/benchmarks/api_image_judge.py`, `jobs/benchmarks/student_image_benchmark_lumina.sbatch`, docs, and tests)
+  Result: passed
+  Notes: confirmed several severe semantic issues in addition to the already-known OFOX env leak.
+- `source .venv-qwen36/bin/activate && python -m pytest tests/test_student_localizer_pipeline.py -q`
+  Result: passed before and after the new fixes
+  Notes: coverage increased from 6 passing tests to 8 passing tests after adding regressions for benchmark/judge semantics.
+- `sbatch --parsable --export=ALL,OFOX_API_KEY=,OFOX_BASE_URL=,ASCR_TEACHER_MODEL=,ASCR_TEACHER_QUALITY_MAX_TOKENS=,ASCR_TEACHER_LOCALIZATION_MAX_TOKENS=,ASCR_TEACHER_JSON_REPAIR_RETRIES=,STUDENT_MODEL=outputs/stage2_students/grid_localizer_v0/student_model.json,PROMPTS=outputs/stage2_students/grid_localizer_v0/holdout_prompts.txt,DOMAIN=in_domain_hard64_holdout,OUTPUT_DIR=outputs/image_bench/student_localizer_v0/in_domain_hard64_holdout,MAX_ITERATIONS=3 jobs/benchmarks/student_image_benchmark_lumina.sbatch`
+  Result: passed after fixes
+  Notes: rerun job `70692` completed on `SPGL-1-18`.
+- `sbatch --parsable --export=ALL,OFOX_API_KEY=,OFOX_BASE_URL=,ASCR_TEACHER_MODEL=,ASCR_TEACHER_QUALITY_MAX_TOKENS=,ASCR_TEACHER_LOCALIZATION_MAX_TOKENS=,ASCR_TEACHER_JSON_REPAIR_RETRIES=,STUDENT_MODEL=outputs/stage2_students/grid_localizer_v0/student_model.json,PROMPTS=configs/benchmarks/prompts/geneval_553.txt,DOMAIN=geneval_smoke16,LIMIT=16,OUTPUT_DIR=outputs/image_bench/student_localizer_v0/geneval_smoke16,MAX_ITERATIONS=3 jobs/benchmarks/student_image_benchmark_lumina.sbatch`
+  Result: passed after fixes
+  Notes: rerun job `70693` completed on `SPGL-1-18`.
+- `source .venv-qwen36/bin/activate && python -m ascr.benchmarks.api_image_judge --manifest outputs/image_bench/student_localizer_v0/geneval_smoke16/manifest.jsonl --output-dir outputs/api_judges/student_localizer_v0/geneval_smoke16 --keep-going --overwrite`
+  Result: passed
+  Notes: rejudged Geneval against the corrected manifest and cleanly rewrote output rows.
+- `source .venv-qwen36/bin/activate && python -m ascr.benchmarks.api_image_judge --manifest outputs/image_bench/student_localizer_v0/in_domain_hard64_holdout/manifest.jsonl --output-dir outputs/api_judges/student_localizer_v0/in_domain_hard64_holdout --keep-going --overwrite`
+  Result: passed
+  Notes: rejudged the corrected in-domain manifest with 17 rows.
+
+Environment:
+- python: Python 3.11.15
+- active envs: `.venv-qwen36` for tests and API judge; compute-node benchmark reruns still used `.venv-lumina`
+- gpu summary: no separate GPU summary probe was run in this fix cycle; benchmark reruns completed on `SPGL-1-18`
+- important env vars set/unset, without values:
+  - compute-node image benchmark reruns explicitly blanked all OFOX/API judge variables in `sbatch --export`
+  - login-node API judge still used shell-only `OFOX_API_KEY`, `OFOX_BASE_URL`, `ASCR_TEACHER_MODEL`, and `ASCR_TEACHER_QUALITY_MAX_TOKENS`
+
+Server jobs:
+- job id: 70692
+- mode: corrected in-domain student image benchmark rerun
+- command: shared `jobs/benchmarks/student_image_benchmark_lumina.sbatch` with holdout prompts and explicit blank OFOX/API env vars
+- output dir: `outputs/image_bench/student_localizer_v0/in_domain_hard64_holdout`
+- stdout log: `logs/ascr-student-img-70692.out`
+- stderr log: `logs/ascr-student-img-70692.err`
+- status: COMPLETED on `SPGL-1-18`
+- job id: 70693
+- mode: corrected Geneval smoke student image benchmark rerun
+- command: shared `jobs/benchmarks/student_image_benchmark_lumina.sbatch` with Geneval prompts, `LIMIT=16`, and explicit blank OFOX/API env vars
+- output dir: `outputs/image_bench/student_localizer_v0/geneval_smoke16`
+- stdout log: `logs/ascr-student-img-70693.out`
+- stderr log: `logs/ascr-student-img-70693.err`
+- status: COMPLETED on `SPGL-1-18`
+
+Results:
+- **Severe bug 1 fixed: silent prompt truncation in the shared Slurm wrapper.**
+  - Before fix: in-domain holdout benchmark processed only `16 / 17` prompts; the prompt `The red book was on top of the yellow bookshelf.` was silently missing.
+  - Root cause: the shared benchmark wrapper defaulted `LIMIT=16`, which is valid for Geneval smoke but wrong for in-domain holdout reuse.
+  - After fix: `holdout_prompts.txt` has `17` prompts and the corrected in-domain manifest now has `17` rows with no missing prompt.
+- **Severe bug 2 fixed: benchmark “after” image could collapse back to the initial image on max-iteration fallback.**
+  - Root cause: `image_quality_benchmark.py` used `summary.final_decoded_image`, but `ascr/core/loop.py` intentionally rewrites `final_decoded_image` to the initial image when `stop_reason == "max_iterations"` and `return_initial_on_max_error: true`.
+  - This meant benchmark manifests could silently compare `before` vs `before` even when the loop actually produced revised intermediate candidates.
+  - After fix: benchmark manifests now preserve the scientific “after” image via `raw_final_decoded_image` / `raw_final_grid_image`, and separately record the fallback-selected images plus `fallback_applied`.
+  - Corrected manifest stats:
+    - in-domain: `fallback_applied=5`, `before_eq_after=7`, `before_eq_selected_after=12`, `max_iterations=5`, `changed_with_iters=10`, `same_with_iters=0`
+    - Geneval: `fallback_applied=2`, `before_eq_after=11`, `before_eq_selected_after=13`, `max_iterations=2`, `changed_with_iters=5`, `same_with_iters=0`
+  - The key corrected behavior is `same_with_iters=0` in both domains: once there were student-guided iterations, the benchmark no longer reports an unchanged before/after pair.
+- **Severe bug 3 fixed: `api_image_judge` reruns could silently mix old and new state.**
+  - Before fix: reruns with `--overwrite` still appended duplicate `judgments.jsonl` rows, and old `errors.jsonl` rows survived successful reruns.
+  - After fix: `--overwrite` starts cleanly, rows are deduped by `sample_id`, and stale errors are pruned after successful judgments.
+- Corrected benchmark/judge outputs:
+  - in-domain holdout benchmark summary: `row_count=17`, `error_count=0`
+  - Geneval benchmark summary: `row_count=16`, `error_count=0`
+  - corrected in-domain judge summary:
+    - `row_count=17`
+    - winners `{after: 1, before: 0, tie: 16}`
+    - `mean_before_score=0.8470588235294116`
+    - `mean_after_score=0.8588235294117645`
+    - `mean_delta_after_minus_before=0.0117647058823529`
+  - corrected Geneval judge summary:
+    - `row_count=16`
+    - winners `{after: 0, before: 0, tie: 16}`
+    - `mean_before_score=0.990625`
+    - `mean_after_score=0.990625`
+    - `mean_delta_after_minus_before=0.0`
+
+Problems / blockers:
+- compute-node stderr still shows repeated non-fatal model-loading warnings such as `The model weights are not tied...` and `Some parameters are on the meta device because they were offloaded to the cpu.` The reruns still completed, but these warnings remain worth monitoring.
+- `grid-localizer-v0` remains a lightweight baseline; the corrected benchmark semantics remove misleading artifacts, but they do not by themselves make the student model strong.
+
+Next action requested:
+- use the corrected benchmark/judge semantics as the baseline for any future student-localizer comparisons.
+- if further gains are needed, improve the student model itself rather than rerunning the previous flawed benchmark setup.

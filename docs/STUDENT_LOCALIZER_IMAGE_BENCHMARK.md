@@ -71,11 +71,16 @@ bash scripts/benchmark/run_student_image_benchmark.sh
 Slurm:
 
 ```bash
-sbatch --export=ALL,STUDENT_MODEL=outputs/stage2_students/grid_localizer_v0/student_model.json,PROMPTS=configs/benchmarks/prompts/geneval_553.txt,DOMAIN=geneval_smoke16,LIMIT=16,OUTPUT_DIR=outputs/image_bench/student_localizer_v0/geneval_smoke16,MAX_ITERATIONS=3 \
+sbatch --export=ALL,OFOX_API_KEY=,OFOX_BASE_URL=,ASCR_TEACHER_MODEL=,ASCR_TEACHER_QUALITY_MAX_TOKENS=,ASCR_TEACHER_LOCALIZATION_MAX_TOKENS=,ASCR_TEACHER_JSON_REPAIR_RETRIES=,STUDENT_MODEL=outputs/stage2_students/grid_localizer_v0/student_model.json,PROMPTS=outputs/stage2_students/grid_localizer_v0/holdout_prompts.txt,DOMAIN=in_domain_hard64_holdout,OUTPUT_DIR=outputs/image_bench/student_localizer_v0/in_domain_hard64_holdout,MAX_ITERATIONS=3 \
+  jobs/benchmarks/student_image_benchmark_lumina.sbatch
+
+sbatch --export=ALL,OFOX_API_KEY=,OFOX_BASE_URL=,ASCR_TEACHER_MODEL=,ASCR_TEACHER_QUALITY_MAX_TOKENS=,ASCR_TEACHER_LOCALIZATION_MAX_TOKENS=,ASCR_TEACHER_JSON_REPAIR_RETRIES=,STUDENT_MODEL=outputs/stage2_students/grid_localizer_v0/student_model.json,PROMPTS=configs/benchmarks/prompts/geneval_553.txt,DOMAIN=geneval_smoke16,LIMIT=16,OUTPUT_DIR=outputs/image_bench/student_localizer_v0/geneval_smoke16,MAX_ITERATIONS=3 \
   jobs/benchmarks/student_image_benchmark_lumina.sbatch
 ```
 
-Do not pass `OFOX_API_KEY` to compute-node image benchmark jobs.
+The shared Slurm wrapper now works for both in-domain and Geneval paths. It
+also strips any leaked OFOX/API judge environment variables as a defensive
+backstop, but submissions should still blank them explicitly as shown above.
 
 ## Judge Before/After Quality On The Login Node
 
@@ -101,3 +106,10 @@ python -m ascr.benchmarks.api_image_judge \
 The judge writes `judgments.jsonl`, `summary.json`, and `errors.jsonl`. It does
 not print or persist API keys. It stores raw model text only if
 `--include-raw-text` is explicitly set.
+
+Important benchmark semantics: when the ASCR loop hits `max_iterations`, the
+stage-1 config can conservatively fall back to the initial image for the loop's
+selected final output. The benchmark manifest now records the actual last
+candidate image as `after_image`, and keeps the fallback-selected image in
+`selected_after_image` together with `fallback_applied` metadata so before/after
+judging does not collapse real revisions back to the initial image.
