@@ -106,8 +106,27 @@ python -m ascr.training.train_selector \
   --output-dir outputs/stage2_baselines/cell_prior_qwen37
 ```
 
-`cell-prior` is a lightweight baseline only. It does not implement the Stage-2
-learned selector model or DDP training.
+`cell-prior` is a lightweight sanity baseline only. It does not read images or
+prompt details and must not be treated as the after-distill student model.
+
+For the first real distilled-student image workflow, train `grid-localizer-v0`
+and run before/after image benchmarks:
+
+```bash
+python -m ascr.training.train_localizer \
+  --task grid-localizer-v0 \
+  --dataset outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl \
+  --image-root outputs/lumina_qwen_hard64 \
+  --output-dir outputs/stage2_students/grid_localizer_v0 \
+  --eval-mode holdout \
+  --train-ratio 0.8 \
+  --seed 0
+```
+
+Then follow `docs/STUDENT_LOCALIZER_IMAGE_BENCHMARK.md`. The after-distill path
+is the normal ASCR loop with `student_localizer` as evaluator and the existing
+`GridSemanticReopeningSelector`; reopen count is determined by the loop up to
+`max_iterations`.
 
 ## Cluster Split
 

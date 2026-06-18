@@ -8,6 +8,7 @@ QWEN_BACKENDS = {"qwen", "qwen_vl", "qwen-vl"}
 QWEN_TOKEN_BACKENDS = {"qwen_vl_token", "qwen-vl-token", "qwen_token", "qwen-token"}
 MMADA_SELF_BACKENDS = {"mmada_self", "mmada-self", "mmada", "mmada_mmu", "mmada-mmu"}
 MMADA_SELF_COARSE_BACKENDS = {"mmada_self_coarse", "mmada-self-coarse", "mmada_coarse", "mmada-coarse"}
+STUDENT_LOCALIZER_BACKENDS = {"student_localizer", "student-localizer", "grid_localizer_v0", "grid-localizer-v0"}
 
 
 def _as_bool(value, default=False):
@@ -144,6 +145,15 @@ def build_evaluator(name, config):
         return _build_qwen_vl_token(config)
     if name in QWEN_BACKENDS:
         return _build_qwen_vl(config)
+    if name in STUDENT_LOCALIZER_BACKENDS:
+        from ascr.evaluators.student_localizer import StudentLocalizerEvaluator
+
+        evaluator_config = config.get("evaluator", config)
+        return StudentLocalizerEvaluator(
+            model_path=os.environ.get("STUDENT_MODEL", evaluator_config.get("model_path")),
+            threshold=evaluator_config.get("threshold"),
+            max_selected_cells=evaluator_config.get("max_selected_cells", config.get("selector", {}).get("max_selected_cells")),
+        )
     if name in {"local_vlm", "local-vlm"}:
         evaluator_config = config.get("evaluator", config)
         backend = str(evaluator_config.get("backend", "heuristic")).lower()

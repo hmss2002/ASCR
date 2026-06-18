@@ -197,6 +197,86 @@ out-domain section reports `label_status=unlabeled_prompts_only` instead of an
 accuracy metric. Add teacher labels later before treating out-domain accuracy as
 a real benchmark.
 
+## Run Student Localizer Before/After Image Benchmarks
+
+Read `docs/STUDENT_LOCALIZER_IMAGE_BENCHMARK.md` before running this section.
+This is the first real distilled-student image-quality workflow. It does not
+treat `cell-prior` as the student model. The student is
+`grid-localizer-v0`, which predicts semantic error cells from the prompt and
+current grid image; the existing `GridSemanticReopeningSelector` then maps those
+cells to token reopen masks inside the normal ASCR loop.
+
+Train the student localizer from the canonical Qwen3.7 compact teacher dataset:
+
+```bash
+source .venv-qwen36/bin/activate
+
+python -m ascr.training.train_localizer \
+  --task grid-localizer-v0 \
+  --dataset outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl \
+  --image-root outputs/lumina_qwen_hard64 \
+  --output-dir outputs/stage2_students/grid_localizer_v0 \
+  --eval-mode holdout \
+  --train-ratio 0.8 \
+  --seed 0
+```
+
+Run in-domain and Geneval-smoke image generation on GPU nodes. These jobs must
+not receive `OFOX_API_KEY`.
+
+```bash
+source .venv-lumina/bin/activate
+
+STUDENT_MODEL=outputs/stage2_students/grid_localizer_v0/student_model.json \
+PROMPTS=outputs/stage2_students/grid_localizer_v0/holdout_prompts.txt \
+DOMAIN=in_domain_hard64_holdout \
+OUTPUT_DIR=outputs/image_bench/student_localizer_v0/in_domain_hard64_holdout \
+MAX_ITERATIONS=3 \
+bash scripts/benchmark/run_student_image_benchmark.sh
+
+STUDENT_MODEL=outputs/stage2_students/grid_localizer_v0/student_model.json \
+PROMPTS=configs/benchmarks/prompts/geneval_553.txt \
+DOMAIN=geneval_smoke16 \
+LIMIT=16 \
+OUTPUT_DIR=outputs/image_bench/student_localizer_v0/geneval_smoke16 \
+MAX_ITERATIONS=3 \
+bash scripts/benchmark/run_student_image_benchmark.sh
+```
+
+For Slurm:
+
+```bash
+sbatch --export=ALL,STUDENT_MODEL=outputs/stage2_students/grid_localizer_v0/student_model.json,PROMPTS=configs/benchmarks/prompts/geneval_553.txt,DOMAIN=geneval_smoke16,LIMIT=16,OUTPUT_DIR=outputs/image_bench/student_localizer_v0/geneval_smoke16,MAX_ITERATIONS=3 \
+  jobs/benchmarks/student_image_benchmark_lumina.sbatch
+```
+
+After image generation finishes, run Qwen3.7 before/after judging on the login
+node only:
+
+```bash
+export OFOX_API_KEY='<your-ofox-api-key>'
+export OFOX_BASE_URL='https://api.ofox.ai/v1'
+export ASCR_TEACHER_MODEL='bailian/qwen3.7-plus'
+export ASCR_TEACHER_QUALITY_MAX_TOKENS=2048
+
+source .venv-qwen36/bin/activate
+
+python -m ascr.benchmarks.api_image_judge \
+  --manifest outputs/image_bench/student_localizer_v0/in_domain_hard64_holdout/manifest.jsonl \
+  --output-dir outputs/api_judges/student_localizer_v0/in_domain_hard64_holdout \
+  --keep-going
+
+python -m ascr.benchmarks.api_image_judge \
+  --manifest outputs/image_bench/student_localizer_v0/geneval_smoke16/manifest.jsonl \
+  --output-dir outputs/api_judges/student_localizer_v0/geneval_smoke16 \
+  --keep-going
+```
+
+Append exact commands, Slurm job ids, GPU node names, generation counts, judge
+winner counts, score deltas, failures, and output paths to
+`docs/AI_COLLAB_LOG.md`. Commit and push safe small JSON summaries only. Do not
+commit generated images, logs, model weights, caches, `.env`, or API keys.
+
 `jobs/distill/api_teacher_distill.sbatch` is retained as a template but is
 disabled by default. Do not use it until compute-node DNS/egress or proxy access
 to `api.ofox.ai` is fixed and confirmed.

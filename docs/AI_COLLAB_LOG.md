@@ -979,3 +979,50 @@ Problems / blockers:
 
 Next action requested:
 - server AI should pull latest main, run `bash scripts/benchmark/run_selector_benchmark.sh`, inspect `outputs/selector_benchmarks/cell_prior_qwen37/benchmark_report.json`, append results to this log, force-add the small JSON benchmark outputs, commit, and push.
+
+## 2026-06-18 23:40 CST - local Codex
+
+Context:
+- Machine: Windows local ASCR checkout
+- Branch before: main
+- Commit before: b8af0b3a45000f8e06f21345b722c4ba1cc7f3be
+- Branch after: main
+- Commit after: pending pushed commit for student localizer image benchmark pipeline
+
+Files changed:
+- added `grid-localizer-v0` training for a real student semantic localizer/evaluator that reads prompt and grid-image features.
+- added `student_localizer` evaluator backend so the learned localizer plugs into the existing ASCR loop while keeping `GridSemanticReopeningSelector` unchanged.
+- added before/after image benchmark CLI and runner. The before image is the same run's `initial_decoded_image`; the after image is the final ASCR-loop output, so differences come from student-guided reopen steps rather than independent random generation.
+- added Qwen3.7/OFOX API image judge CLI for login-node before/after quality evaluation.
+- added server handoff docs and a Slurm wrapper for GPU image generation.
+
+Commands run:
+- `git pull --ff-only origin main`
+  Result: passed
+  Notes: already up to date before implementation.
+
+Environment:
+- python: local Windows Python 3.11
+- active env: local project environment expected for validation
+- important env vars set/unset, without values: OFOX_API_KEY not used locally
+
+Server jobs:
+- job id: none
+- mode: not run locally
+- status: not submitted
+
+Results:
+- summary: repo now has the intended image-quality experiment path:
+  `prompt -> generator -> initial image` versus
+  `prompt -> generator -> student_localizer -> existing selector -> ASCR loop -> final image`.
+- expected student output: `outputs/stage2_students/grid_localizer_v0/{student_model.json,metrics.json,predictions.jsonl,split_manifest.json,holdout_prompts.txt}`.
+- expected image benchmark outputs: `outputs/image_bench/student_localizer_v0/<domain>/{manifest.jsonl,summary.json,errors.jsonl}`.
+- expected API judge outputs: `outputs/api_judges/student_localizer_v0/<domain>/{judgments.jsonl,summary.json,errors.jsonl}`.
+
+Problems / blockers:
+- `grid-localizer-v0` is a meaningful lightweight baseline, not the final neural/DDP Stage-2 model.
+- compute nodes still must not call OFOX/API until cluster network egress is fixed; API judging remains login-node only.
+- generated images and Slurm logs should not be committed.
+
+Next action requested:
+- server AI should pull latest main, train `grid-localizer-v0`, run in-domain and Geneval smoke image generation on GPU, run Qwen3.7 before/after judge on the login node, append detailed results here, then commit and push safe small JSON summaries only.
