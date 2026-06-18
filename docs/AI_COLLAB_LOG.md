@@ -1304,3 +1304,36 @@ Problems / blockers:
 
 Next action requested:
 - server AI should pull latest main, run the v1 login-node localization commands, merge/export dataset, train `grid-localizer-v1`, run in-domain and Geneval GPU image benchmark, run login-node Qwen3.7 judge, generate compare-to-v0 JSON, append detailed results here, force-add safe JSON artifacts, commit, and push.
+
+## 2026-06-18 15:35 CST - local Codex
+
+Context:
+- Machine: Windows local ASCR checkout.
+- Branch: main.
+- Research correction: the formal Stage-2 target is no longer the external
+  `grid-localizer-v0/v1` scaffold. The target is Lumina-native semantic
+  evaluator distillation: Lumina-DiMOO should read `prompt + current image/image
+  tokens` and output Qwen3.7-style `SemanticEvaluation` JSON.
+
+Files changed:
+- Added `ascr/evaluators/lumina_native.py`, a conservative evaluator backend
+  contract. It parses Lumina-native JSON if an image-conditioned answer method
+  exists; otherwise it returns `SemanticEvaluation.abstain(...)` so no unsafe
+  reopen happens.
+- Added `ascr/cli/lumina_native_audit.py` to inspect whether the current Lumina
+  checkout/wrapper exposes an image-conditioned text/MMU hook.
+- Added `ascr/training/train_lumina_evaluator.py` to prepare Qwen teacher labels
+  as SFT examples for future Lumina-native LoRA/SFT. It does not fake training;
+  true LoRA/SFT remains blocked until the audit confirms the native answer hook.
+- Added `configs/stage2/lumina/lumina_native_evaluator_smoke.yaml`, server
+  scripts, and a Slurm audit job.
+- Updated docs to mark `grid-localizer-v0/v1` as scaffold baselines only.
+
+Server next action:
+1. Pull latest `main`.
+2. Run `bash scripts/training/run_lumina_native_audit.sh`.
+3. Run `bash scripts/training/prepare_lumina_native_sft.sh`.
+4. Append the audit JSON result and SFT manifest summary here.
+5. If the audit reports no native evaluator hook, stop and report the blocker.
+   Do not run formal Stage-2 image benchmarks with the external shallow
+   localizer as the main student.

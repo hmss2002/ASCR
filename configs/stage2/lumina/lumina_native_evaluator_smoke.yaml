@@ -1,0 +1,32 @@
+run_name: stage2_lumina_native_evaluator_smoke
+output_dir: outputs/stage2_lumina_native/smoke
+max_iterations: 1
+image_size: 1024
+token_grid_size: 64
+coarse_grid_size: 4
+dilation: 1
+
+generator:
+  name: lumina
+  repo_path: third_party/Lumina-DiMOO
+  checkpoint_path: models/lumina-dimoo
+  device: cuda
+  image_size: 1024
+  token_grid_size: 64
+  guidance_scale: 4.0
+  generation_timesteps: 64
+  temperature: 1.0
+  seed: 1234
+
+evaluator:
+  name: lumina_native_evaluator
+  repo_path: third_party/Lumina-DiMOO
+  checkpoint_path: models/lumina-dimoo
+  device: cuda
+  grid_size: 4
+  max_new_tokens: 384
+  max_selected_cells: 6
+  unsupported_policy: abstain
+
+selector:
+  max_selected_cells: 6

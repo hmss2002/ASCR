@@ -67,6 +67,8 @@ setup(
             "ascr-teacher-distill=ascr.distill.teacher:main",
             "ascr-teacher-audit=ascr.distill.audit:main",
             "ascr-teacher-export=ascr.distill.export_dataset:main",
+            "ascr-lumina-native-audit=ascr.cli.lumina_native_audit:main",
+            "ascr-train-lumina-evaluator=ascr.training.train_lumina_evaluator:main",
             "ascr-compare-stage1-variants=ascr.cli.compare_stage1_variants:main",
             # Legacy preserved Show-o comparison entrypoint; not the project mainline.
             "ascr-compare-showo=ascr.cli.compare_showo_ascr:main",

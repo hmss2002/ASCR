@@ -16,7 +16,7 @@ def build_parser():
     parser.add_argument("--output-dir", default=None, help="Override output directory.")
     parser.add_argument("--max-iterations", type=int, default=None, help="Override max ASCR iterations.")
     parser.add_argument("--generator", default=None, choices=["mock", "lumina", "showo", "mmada"], help="Generator adapter.")
-    parser.add_argument("--evaluator", default=None, choices=["mock", "local_vlm", "local-vlm", "showo_mmu", "showo-mmu", "qwen_vl", "qwen-vl", "qwen_vl_token", "qwen-vl-token", "mmada_self", "mmada-self", "mmada_self_coarse", "mmada-self-coarse", "student_localizer", "student-localizer"], help="Semantic evaluator adapter.")
+    parser.add_argument("--evaluator", default=None, choices=["mock", "local_vlm", "local-vlm", "showo_mmu", "showo-mmu", "qwen_vl", "qwen-vl", "qwen_vl_token", "qwen-vl-token", "mmada_self", "mmada-self", "mmada_self_coarse", "mmada-self-coarse", "student_localizer", "student-localizer", "lumina_native_evaluator", "lumina-native-evaluator"], help="Semantic evaluator adapter.")
     parser.add_argument("--dry-run", action="store_true", help="Force mock generator and mock evaluator.")
     return parser
 

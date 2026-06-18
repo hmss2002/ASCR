@@ -1,0 +1,38 @@
+﻿ASCR Stage-2 Lumina-Native Distillation - Speaker Notes
+Style: 中文讲解为主，关键术语保留 English。
+
+Slide 1. Title
+
+老师，这次我把 Stage 2 的定义纠正过来。真正要蒸馏的不是外置的 shallow localizer，而是 Lumina-DiMOO 自己的 semantic evaluator / MMU-like ability。
+
+Slide 2. Student definition
+
+这里要讲清楚：v0/v1 localizer 是 scaffold，不是最终 student。正式 student 应该是 Lumina-native evaluator，也就是 Lumina 自己看图和 prompt，然后输出 JSON。
+
+Slide 3. Target loop
+
+目标流程是 Lumina generate，然后 Lumina-native evaluator 输出 JSON，selector 把 cells 映射成 token mask，再由 Lumina reopen。这里不再把外置 shallow localizer 当主角。
+
+Slide 4. Feasibility gate
+
+第一步不是直接训练，而是确认 Lumina-DiMOO wrapper 是否真的支持 image-conditioned text generation。如果没有这个 hook，就必须停下来，不能假装 RGB localizer 是正式 student。
+
+Slide 5. Teacher supervision
+
+Teacher 还是 Qwen3.7-plus。它负责产生 prompt-image 到 SemanticEvaluation JSON 的监督信号。之后 Lumina 要模仿这个输出格式和判断能力。
+
+Slide 6. Training path
+
+现在代码先准备 SFT examples：输入是 evaluator prompt 和 image，target 是 Qwen 的 JSON。真正 LoRA/SFT 要等 Lumina native answer hook 被验证后再开始。
+
+Slide 7. Benchmark policy
+
+正式 benchmark 只比较 before 和 after：before 是 Lumina direct generation；after 是 Lumina-native evaluator 加 selector 加 ASCR loop。外置 localizer 不作为正式 benchmark arm。
+
+Slide 8. Server handoff
+
+服务器下一步不是跑 grid-localizer-v1 benchmark，而是先做 Lumina-native audit。如果没有 native answer hook，就记录 blocker，先不要做正式 Stage 2 benchmark。
+
+Slide 9. Decision criteria
+
+判断标准很清楚：先看 hook 是否存在，再看 JSON 输出是否合法，最后再看 before/after benchmark 是否有提升。如果 hook 不存在，下一步是补能力，不是继续包装 shallow localizer。

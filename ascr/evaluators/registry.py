@@ -9,6 +9,12 @@ QWEN_TOKEN_BACKENDS = {"qwen_vl_token", "qwen-vl-token", "qwen_token", "qwen-tok
 MMADA_SELF_BACKENDS = {"mmada_self", "mmada-self", "mmada", "mmada_mmu", "mmada-mmu"}
 MMADA_SELF_COARSE_BACKENDS = {"mmada_self_coarse", "mmada-self-coarse", "mmada_coarse", "mmada-coarse"}
 STUDENT_LOCALIZER_BACKENDS = {"student_localizer", "student-localizer", "grid_localizer_v0", "grid-localizer-v0"}
+LUMINA_NATIVE_BACKENDS = {
+    "lumina_native_evaluator",
+    "lumina-native-evaluator",
+    "lumina_mmu",
+    "lumina-mmu",
+}
 
 
 def _as_bool(value, default=False):
@@ -154,6 +160,21 @@ def build_evaluator(name, config):
             threshold=evaluator_config.get("threshold"),
             max_selected_cells=evaluator_config.get("max_selected_cells", config.get("selector", {}).get("max_selected_cells")),
             domain=os.environ.get("STUDENT_DOMAIN", evaluator_config.get("domain")),
+        )
+    if name in LUMINA_NATIVE_BACKENDS:
+        from ascr.evaluators.lumina_native import LuminaNativeEvaluator
+
+        evaluator_config = config.get("evaluator", config)
+        generator_config = config.get("generator", {})
+        return LuminaNativeEvaluator(
+            checkpoint_path=evaluator_config.get("checkpoint_path", generator_config.get("checkpoint_path", "models/lumina-dimoo")),
+            repo_path=evaluator_config.get("repo_path", generator_config.get("repo_path")),
+            device=evaluator_config.get("device", generator_config.get("device", "cuda")),
+            grid_size=int(config.get("coarse_grid_size", evaluator_config.get("grid_size", 4))),
+            image_size=int(config.get("image_size", evaluator_config.get("image_size", generator_config.get("image_size", 1024)))),
+            max_new_tokens=int(evaluator_config.get("max_new_tokens", 384)),
+            max_selected_cells=int(evaluator_config.get("max_selected_cells", config.get("selector", {}).get("max_selected_cells", 6))),
+            unsupported_policy=evaluator_config.get("unsupported_policy", "abstain"),
         )
     if name in {"local_vlm", "local-vlm"}:
         evaluator_config = config.get("evaluator", config)

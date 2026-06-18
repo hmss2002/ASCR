@@ -1,14 +1,24 @@
-# Student Localizer Image Benchmark
+# External Student Localizer Scaffold Benchmark
 
-This workflow evaluates the real distilled-student path:
+Status: historical scaffold/sanity baseline.
+
+The formal Stage-2 target has moved to Lumina-native semantic evaluator
+distillation. See `docs/LUMINA_NATIVE_DISTILLATION.md`. The `grid-localizer-v0`
+and `grid-localizer-v1` workflows below are retained because they validate data
+contracts, ASCR loop wiring, before/after manifests, and Qwen3.7 judging. They
+should not be presented as the main distilled student or used as a formal
+benchmark arm for Stage-2 claims.
+
+This workflow evaluates the old external-student scaffold path:
 
 ```text
 before distill: prompt -> generator -> initial image
 after distill:  prompt -> generator -> student localizer -> GridSemanticReopeningSelector -> ASCR loop -> final image
 ```
 
-The student learns the semantic localizer/evaluator role. The existing selector
-still maps selected grid cells to token reopen masks.
+In this scaffold only, the external student approximates the semantic
+localizer/evaluator role. The existing selector still maps selected grid cells
+to token reopen masks.
 
 ## Train The Student Localizer
 
@@ -36,10 +46,10 @@ outputs/stage2_students/grid_localizer_v0/
   holdout_prompts.txt
 ```
 
-`grid-localizer-v0` is a lightweight, reproducible baseline that uses prompt
+`grid-localizer-v0` is a lightweight, reproducible scaffold baseline that uses prompt
 hash features and image grid-cell RGB features. It is more meaningful than
 `cell-prior` because it reads the current image and prompt, but it is not the
-final neural/DDP Stage-2 model.
+formal Lumina-native Stage-2 student.
 
 ## Build The v1 Localizer Dataset
 

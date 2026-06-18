@@ -16,7 +16,40 @@ without SSH access.
 
 - Repository: https://github.com/hmss2002/ASCR.git
 - Branch: main
-- Expected minimum commit: latest `origin/main`; must include `docs/API_TEACHER_DISTILL.md` and `jobs/distill/api_teacher_distill.sbatch`
+- Expected minimum commit: latest `origin/main`; must include `docs/LUMINA_NATIVE_DISTILLATION.md`
+
+## Current Stage-2 Priority
+
+The formal Stage-2 target is now **Lumina-native semantic evaluator
+distillation**. Do not treat `grid-localizer-v0` or `grid-localizer-v1` as the
+main distilled student. Those workflows are retained only as scaffold/sanity
+baselines.
+
+First validate whether the current Lumina checkout and ASCR wrapper can support
+image-conditioned text/MMU-style answering:
+
+```bash
+source .venv-lumina/bin/activate
+
+LUMINA_REPO=${LUMINA_REPO:-third_party/Lumina-DiMOO} \
+LUMINA_MODEL_PATH=${LUMINA_MODEL_PATH:-models/lumina-dimoo} \
+bash scripts/training/run_lumina_native_audit.sh
+```
+
+Then prepare a small Qwen-teacher SFT dataset. This does not launch LoRA/SFT;
+it only verifies that the supervision rows are ready:
+
+```bash
+DATASET=outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl \
+IMAGE_ROOT=outputs/lumina_qwen_hard64 \
+OUTPUT_DIR=outputs/stage2_lumina_native/sft_smoke \
+LIMIT=10 \
+bash scripts/training/prepare_lumina_native_sft.sh
+```
+
+Append the audit result and SFT-prep manifest to `docs/AI_COLLAB_LOG.md`. If
+the audit reports no native evaluator hook, record that blocker and stop before
+running any formal Stage-2 benchmark.
 
 ## Sync The Server Checkout
 
@@ -290,7 +323,11 @@ When inspecting benchmark manifests, check whether any row has
 last candidate image, while `selected_after_image` records the conservative
 fallback-selected image when `return_initial_on_max_error` fires.
 
-## Continue To Student Localizer v1
+## Historical Scaffold: Student Localizer v1
+
+This section is retained for reproducibility of the earlier scaffold baseline.
+It is not the current formal Stage-2 path. Do not run it as the main next step
+unless the human explicitly asks to revisit the external localizer scaffold.
 
 The current v0 baseline is scientifically useful but weak: the latest server
 run recorded `grid-localizer-v0` holdout hit_any `0.2`, in-domain judge delta

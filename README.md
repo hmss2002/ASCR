@@ -68,12 +68,17 @@ fixed dilation as an engineering interface. The method itself is not the grid; t
 | Stage | Goal | Current status |
 | --- | --- | --- |
 | Stage 1 | Zero-training semantic reopening with external or self evaluators | Implemented and evaluated across Show-o, MMaDA, Lumina |
-| Stage 2 | Learned token-level semantic reopening selector | Scaffold exists under `ascr/training/` |
+| Stage 2 | Lumina-native semantic evaluator distillation | Feasibility/audit scaffold added; Qwen3.7 teacher labels are the supervision source |
 | Stage 3 | Cross-model ASCR framework across stronger discrete / masked generators | Direction established by current Lumina migration |
 
 In this section, **Stage 1 / 2 / 3** refer to the **research roadmap** of ASCR, not to a single
 CLI or Slurm command. The operational pipeline used today is the **Stage-1 implementation** of
 that roadmap.
+
+Stage 2 now means distilling Qwen3.7-style prompt-image semantic evaluation into
+the Lumina-DiMOO model path itself. External `grid-localizer-v0/v1` models remain
+historical scaffold baselines and should not be treated as the formal distilled
+student.
 
 ## 3. Current empirical summary
 
