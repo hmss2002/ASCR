@@ -1,0 +1,26 @@
+{
+  "dataset": "outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl",
+  "eval": {
+    "evaluated_rows": 10,
+    "exact_match": 0,
+    "exact_match_rate": 0.0,
+    "hit_any": 2,
+    "hit_any_rate": 0.2,
+    "mean_f1": 0.13
+  },
+  "eval_mode": "holdout",
+  "eval_rows": 17,
+  "image_root": "outputs/lumina_qwen_hard64",
+  "missing_images": 0,
+  "row_count": 79,
+  "schema_version": "ascr.grid_localizer_v0.metrics",
+  "train": {
+    "evaluated_rows": 34,
+    "exact_match": 1,
+    "exact_match_rate": 0.029411764705882353,
+    "hit_any": 11,
+    "hit_any_rate": 0.3235294117647059,
+    "mean_f1": 0.18680502504031912
+  },
+  "train_rows": 62
+}

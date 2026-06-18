@@ -1026,3 +1026,132 @@ Problems / blockers:
 
 Next action requested:
 - server AI should pull latest main, train `grid-localizer-v0`, run in-domain and Geneval smoke image generation on GPU, run Qwen3.7 before/after judge on the login node, append detailed results here, then commit and push safe small JSON summaries only.
+
+## 2026-06-18 10:09 HKT - server AI
+
+Context:
+- Machine: HKU AI server login node hpcr4300a; compute-node GPU jobs ran on `SPGL-1-12`
+- Branch before: main
+- Commit before: 5ba7eecffd287305b927e97a541321bda2c74442
+- Branch after: main
+- Commit after: pending pushed commit containing this entry, the student benchmark JSON outputs, and a Slurm wrapper root-resolution fix
+
+Files changed:
+- jobs/benchmarks/student_image_benchmark_lumina.sbatch: prefer `PROJECT_ROOT` / `SLURM_SUBMIT_DIR` before falling back to `BASH_SOURCE`, matching the earlier batch-wrapper fix pattern
+- outputs/stage2_students/grid_localizer_v0/student_model.json: trained lightweight student localizer model
+- outputs/stage2_students/grid_localizer_v0/metrics.json: train/eval metrics for `grid-localizer-v0`
+- outputs/stage2_students/grid_localizer_v0/predictions.jsonl: holdout evaluation predictions
+- outputs/stage2_students/grid_localizer_v0/split_manifest.json: deterministic holdout split manifest
+- outputs/api_judges/student_localizer_v0/in_domain_hard64_holdout/*.json*: login-node OFOX/Qwen before/after judgments and summary
+- outputs/api_judges/student_localizer_v0/geneval_smoke16/*.json*: login-node OFOX/Qwen before/after judgments and summary
+- docs/AI_COLLAB_LOG.md: appended this student-localizer run record
+
+Commands run:
+- `cd /grp01/cds_bdai/JianyuZhang/ASCR && git checkout main && git pull --ff-only origin main && git rev-parse HEAD`
+  Result: passed
+  Notes: fast-forwarded `main` from `5ba7eecffd287305b927e97a541321bda2c74442` to `3e0e37c06343689813879618eb273aeaf1f07afd`.
+- `source .venv-qwen36/bin/activate && python -m ascr.training.train_localizer --task grid-localizer-v0 --dataset outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl --image-root outputs/lumina_qwen_hard64 --output-dir outputs/stage2_students/grid_localizer_v0 --eval-mode holdout --train-ratio 0.8 --seed 0`
+  Result: passed
+  Notes: wrote `student_model.json`, `metrics.json`, `predictions.jsonl`, `split_manifest.json`, and runtime-only `holdout_prompts.txt`.
+- `sbatch --parsable --export=ALL,STUDENT_MODEL=outputs/stage2_students/grid_localizer_v0/student_model.json,PROMPTS=outputs/stage2_students/grid_localizer_v0/holdout_prompts.txt,DOMAIN=in_domain_hard64_holdout,OUTPUT_DIR=outputs/image_bench/student_localizer_v0/in_domain_hard64_holdout,MAX_ITERATIONS=3 jobs/benchmarks/student_image_benchmark_lumina.sbatch`
+  Result: first attempt failed, second attempt passed
+  Notes: job `70688` failed immediately because compute-node image benchmark jobs must not receive `OFOX_API_KEY` and `--export=ALL` carried it through; after switching to explicit empty OFOX/API exports and fixing `PROJECT_ROOT` resolution in the sbatch wrapper, rerun job `70690` completed successfully.
+- `sbatch --parsable --export=ALL,STUDENT_MODEL=outputs/stage2_students/grid_localizer_v0/student_model.json,PROMPTS=configs/benchmarks/prompts/geneval_553.txt,DOMAIN=geneval_smoke16,LIMIT=16,OUTPUT_DIR=outputs/image_bench/student_localizer_v0/geneval_smoke16,MAX_ITERATIONS=3 jobs/benchmarks/student_image_benchmark_lumina.sbatch`
+  Result: first attempt failed, second attempt passed
+  Notes: job `70689` failed for the same leaked-`OFOX_API_KEY` reason; rerun job `70691` completed successfully after the same export hygiene fix.
+- `source .venv-qwen36/bin/activate && python -m ascr.benchmarks.api_image_judge --manifest outputs/image_bench/student_localizer_v0/geneval_smoke16/manifest.jsonl --output-dir outputs/api_judges/student_localizer_v0/geneval_smoke16 --keep-going`
+  Result: passed
+  Notes: login-node API judge completed with `row_count=16`, `error_count=0`, and all 16 winners marked `tie`.
+- `source .venv-qwen36/bin/activate && python -m ascr.benchmarks.api_image_judge --manifest outputs/image_bench/student_localizer_v0/in_domain_hard64_holdout/manifest.jsonl --output-dir outputs/api_judges/student_localizer_v0/in_domain_hard64_holdout --keep-going`
+  Result: passed
+  Notes: login-node API judge completed with `row_count=16`, `error_count=0`, winners `{after: 1, before: 0, tie: 15}`, and a small positive mean delta.
+- Preflight
+  Result: skipped
+  Notes: this run followed the new student benchmark handoff directly; no separate preflight command was run in this cycle.
+
+Environment:
+- python: Python 3.11.15
+- torch: not explicitly inspected during this run; benchmark workloads used the existing server environments
+- cuda: not available on the login node shell; GPU work ran through Slurm on `SPGL-1-12`
+- gpu summary: `nvidia-smi` unavailable on the login node shell; no separate compute-node summary probe was submitted in this cycle
+- active env: `.venv-qwen36` for student training and API judging; `.venv-lumina` activated inside compute-node image benchmark jobs
+- important env vars set/unset, without values:
+  - login-node API judge used shell-only `OFOX_API_KEY`, `OFOX_BASE_URL`, `ASCR_TEACHER_MODEL`, and `ASCR_TEACHER_QUALITY_MAX_TOKENS`
+  - compute-node image benchmark reruns explicitly blanked OFOX/API env vars so the jobs could not inherit `OFOX_API_KEY`
+
+Server jobs:
+- job id: 70688
+- mode: in-domain student image benchmark
+- command: `sbatch ... DOMAIN=in_domain_hard64_holdout ... jobs/benchmarks/student_image_benchmark_lumina.sbatch`
+- output dir: `outputs/image_bench/student_localizer_v0/in_domain_hard64_holdout`
+- stdout log: `logs/ascr-student-img-70688.out`
+- stderr log: `logs/ascr-student-img-70688.err`
+- status: FAILED exit `2:0`
+- job id: 70689
+- mode: Geneval smoke student image benchmark
+- command: `sbatch ... DOMAIN=geneval_smoke16 LIMIT=16 ... jobs/benchmarks/student_image_benchmark_lumina.sbatch`
+- output dir: `outputs/image_bench/student_localizer_v0/geneval_smoke16`
+- stdout log: `logs/ascr-student-img-70689.out`
+- stderr log: `logs/ascr-student-img-70689.err`
+- status: FAILED exit `2:0`
+- job id: 70690
+- mode: in-domain student image benchmark rerun
+- command: `sbatch --parsable --export=ALL,OFOX_API_KEY=,OFOX_BASE_URL=,ASCR_TEACHER_MODEL=,ASCR_TEACHER_QUALITY_MAX_TOKENS=,ASCR_TEACHER_LOCALIZATION_MAX_TOKENS=,ASCR_TEACHER_JSON_REPAIR_RETRIES=,STUDENT_MODEL=outputs/stage2_students/grid_localizer_v0/student_model.json,PROMPTS=outputs/stage2_students/grid_localizer_v0/holdout_prompts.txt,DOMAIN=in_domain_hard64_holdout,OUTPUT_DIR=outputs/image_bench/student_localizer_v0/in_domain_hard64_holdout,MAX_ITERATIONS=3 jobs/benchmarks/student_image_benchmark_lumina.sbatch`
+- output dir: `outputs/image_bench/student_localizer_v0/in_domain_hard64_holdout`
+- stdout log: `logs/ascr-student-img-70690.out`
+- stderr log: `logs/ascr-student-img-70690.err`
+- status: COMPLETED on `SPGL-1-12`
+- job id: 70691
+- mode: Geneval smoke student image benchmark rerun
+- command: `sbatch --parsable --export=ALL,OFOX_API_KEY=,OFOX_BASE_URL=,ASCR_TEACHER_MODEL=,ASCR_TEACHER_QUALITY_MAX_TOKENS=,ASCR_TEACHER_LOCALIZATION_MAX_TOKENS=,ASCR_TEACHER_JSON_REPAIR_RETRIES=,STUDENT_MODEL=outputs/stage2_students/grid_localizer_v0/student_model.json,PROMPTS=configs/benchmarks/prompts/geneval_553.txt,DOMAIN=geneval_smoke16,LIMIT=16,OUTPUT_DIR=outputs/image_bench/student_localizer_v0/geneval_smoke16,MAX_ITERATIONS=3 jobs/benchmarks/student_image_benchmark_lumina.sbatch`
+- output dir: `outputs/image_bench/student_localizer_v0/geneval_smoke16`
+- stdout log: `logs/ascr-student-img-70691.out`
+- stderr log: `logs/ascr-student-img-70691.err`
+- status: COMPLETED on `SPGL-1-12`
+
+Results:
+- student training summary:
+  - output dir: `outputs/stage2_students/grid_localizer_v0`
+  - row_count: `79`
+  - train_rows: `62`
+  - eval_rows: `17`
+  - missing_images: `0`
+  - train metrics: `evaluated_rows=34`, `hit_any=11`, `hit_any_rate=0.3235294117647059`, `mean_f1=0.18680502504031912`, `exact_match=1`
+  - eval metrics: `evaluated_rows=10`, `hit_any=2`, `hit_any_rate=0.2`, `mean_f1=0.13`, `exact_match=0`
+- image benchmark summary:
+  - in-domain holdout output dir: `outputs/image_bench/student_localizer_v0/in_domain_hard64_holdout`
+  - in-domain manifest rows: `16`
+  - in-domain generation summary: `row_count=16`, `error_count=0`
+  - Geneval output dir: `outputs/image_bench/student_localizer_v0/geneval_smoke16`
+  - Geneval manifest rows: `16`
+  - Geneval generation summary: `row_count=16`, `error_count=0`
+- API judge summary:
+  - in-domain judge output dir: `outputs/api_judges/student_localizer_v0/in_domain_hard64_holdout`
+  - in-domain winners: `{after: 1, before: 0, tie: 15}`
+  - in-domain mean scores: `before=0.846875`, `after=0.8531250000000001`, `delta=0.006250000000000089`
+  - Geneval judge output dir: `outputs/api_judges/student_localizer_v0/geneval_smoke16`
+  - Geneval winners: `{after: 0, before: 0, tie: 16}`
+  - Geneval mean scores: `before=0.9812500000000001`, `after=0.9812500000000001`, `delta=0.0`
+- important result files:
+  - `outputs/stage2_students/grid_localizer_v0/student_model.json`
+  - `outputs/stage2_students/grid_localizer_v0/metrics.json`
+  - `outputs/stage2_students/grid_localizer_v0/predictions.jsonl`
+  - `outputs/stage2_students/grid_localizer_v0/split_manifest.json`
+  - `outputs/api_judges/student_localizer_v0/in_domain_hard64_holdout/{judgments.jsonl,summary.json,errors.jsonl}`
+  - `outputs/api_judges/student_localizer_v0/geneval_smoke16/{judgments.jsonl,summary.json,errors.jsonl}`
+- files intentionally **not** committed:
+  - generated images under `outputs/image_bench/...`
+  - Slurm logs under `logs/`
+  - runtime-only `outputs/stage2_students/grid_localizer_v0/holdout_prompts.txt`
+  - any API key / `.env` / cache content
+- `jobs/distill/api_teacher_distill.sbatch` usage: **not used**
+- `git add -f` usage: required for `outputs/stage2_students/grid_localizer_v0/*.json*` and `outputs/api_judges/student_localizer_v0/*/*.json*`
+
+Problems / blockers:
+- the new image benchmark Slurm wrapper shipped with the older `BASH_SOURCE`-only root resolution and needed the same `SLURM_SUBMIT_DIR` / `PROJECT_ROOT` fix as previous wrappers.
+- compute-node image benchmark submissions initially failed because `OFOX_API_KEY` leaked through `--export=ALL`; the safe rerun pattern must explicitly clear OFOX/API env vars.
+- `grid-localizer-v0` is still a lightweight baseline and not the final Stage-2 neural/DDP model.
+
+Next action requested:
+- future compute-node student image benchmark submissions should reuse the updated `jobs/benchmarks/student_image_benchmark_lumina.sbatch` and explicitly blank OFOX/API env vars on `sbatch`.
+- if the team wants stronger student gains than the current near-tie results, the next step is improving the student localizer model rather than rerunning the same lightweight baseline unchanged.

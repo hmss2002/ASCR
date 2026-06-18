@@ -1,0 +1,17 @@
+{
+  "created_at_utc": "2026-06-18T01:38:24Z",
+  "error_count": 0,
+  "manifest": "outputs/image_bench/student_localizer_v0/geneval_smoke16/manifest.jsonl",
+  "mean_after_score": 0.9812500000000001,
+  "mean_before_score": 0.9812500000000001,
+  "mean_delta_after_minus_before": 0.0,
+  "model": "bailian/qwen3.7-plus",
+  "output_dir": "outputs/api_judges/student_localizer_v0/geneval_smoke16",
+  "row_count": 16,
+  "schema_version": "ascr.api_image_judge.summary.v1",
+  "winners": {
+    "after": 0,
+    "before": 0,
+    "tie": 16
+  }
+}

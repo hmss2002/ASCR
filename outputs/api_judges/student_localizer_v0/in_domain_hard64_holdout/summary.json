@@ -1,0 +1,17 @@
+{
+  "created_at_utc": "2026-06-18T02:09:14Z",
+  "error_count": 0,
+  "manifest": "outputs/image_bench/student_localizer_v0/in_domain_hard64_holdout/manifest.jsonl",
+  "mean_after_score": 0.8531250000000001,
+  "mean_before_score": 0.846875,
+  "mean_delta_after_minus_before": 0.006250000000000089,
+  "model": "bailian/qwen3.7-plus",
+  "output_dir": "outputs/api_judges/student_localizer_v0/in_domain_hard64_holdout",
+  "row_count": 16,
+  "schema_version": "ascr.api_image_judge.summary.v1",
+  "winners": {
+    "after": 1,
+    "before": 0,
+    "tie": 15
+  }
+}
