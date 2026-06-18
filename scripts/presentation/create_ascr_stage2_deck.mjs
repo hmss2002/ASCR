@@ -150,6 +150,8 @@ function addMiniBar(slide, label, value, max, x, y, w, color) {
 
 const notes = [];
 function note(slideNo, title, body) {
+  const currentSlide = p.slides.items[p.slides.items.length - 1];
+  currentSlide.speakerNotes.text = `Slide ${slideNo}. ${title}\n\n${body}`;
   notes.push(`Slide ${slideNo}. ${title}\n${body}\n`);
 }
 
