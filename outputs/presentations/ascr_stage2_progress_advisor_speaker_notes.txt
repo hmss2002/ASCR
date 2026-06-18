@@ -1,0 +1,47 @@
+﻿ASCR Stage-2 Progress Advisor Meeting - Speaker Notes
+Style: 中文讲解为主，关键术语保留 English。
+
+Slide 1. Title
+老师，这次主要汇报 ASCR 从 Stage 1 往 Stage 2 走的进展。核心不是再做一个 heuristic selector，而是把 external semantic evaluator 蒸馏成本地 student semantic localizer。
+
+Slide 2. Executive summary
+一句话总结：Stage 1 的 ASCR loop 已经跑通，Qwen3.7 teacher 数据也有了。现在第一个 end-to-end student localizer baseline 已经在 server 上跑过，但结果还弱，所以不是重复跑 v0，而是进入 v1 data expansion 和 stronger lightweight student。
+
+Slide 3. Research problem
+原始 masked/discrete generation 主要依赖 confidence。问题是，有些区域 confidence 已经 stable，但 semantic 上仍然错，比如颜色、数量、左右关系。这就是 ASCR 要解决的 confidence-semantic inconsistency。
+
+Slide 4. ASCR core loop
+ASCR 的核心是 alternating。Confidence block 继续 native denoising；Semantic block 问另一个问题：当前图像哪里和 prompt 不一致，然后只 reopen those selected token regions。
+
+Slide 5. Stage roadmap
+Stage 1 是 zero-training，用 external evaluator。Stage 2 是把 evaluator/localizer 学出来。Stage 3 才是更系统地迁移到不同 masked/discrete generator。
+
+Slide 6. Stage-1 results
+Stage 1 已经证明 ASCR 不只是工程结构。Lumina 上提升比较小但没有 regression，因为 base model 本身强；Show-o 上提升更明显，说明 semantic reopening 在弱一些的 generator 上空间更大。
+
+Slide 7. What is distilled
+这里我特别区分两个概念。semantic localizer/evaluator 是看 prompt 和 image，判断有没有 semantic error、错在哪些 grid cells。selector 只是把 grid cells 映射成 token reopen mask。所以真正要 distill 的是 localizer/evaluator，不是 selector。
+
+Slide 8. Before/after design
+before distill 是 prompt 到 generator 得到 initial image。after distill 是同一个 generator 加上 student localizer，再经过 existing GridSemanticReopeningSelector 和 ASCR loop，最终得到 revised image。这里不是固定 reopen 一次，而是 loop 自己决定，最多到 max_iterations。
+
+Slide 9. Teacher data
+我用 Qwen3.7-plus through OFOX 做 teacher。它给两类 supervision：一个是 quality comparison，一个是 localization labels。现在 hard64 compact dataset 已经 clean 到没有 unresolved errors。
+
+Slide 10. Student v0
+v0 是第一个真正的 student localizer baseline。它不是 cell-prior；它至少读 prompt 和 grid image。但它仍然是 shallow features，不是 neural model。它的意义是验证整个 Stage-2 pipeline 能跑通。
+
+Slide 11. v0 quantitative results
+结果很诚实：pipeline works, but student is weak。Hit-any 只有 0.2，mean F1 只有 0.13。这说明现在不是 rerun v0，而是要 improve student data and model。
+
+Slide 12. Image benchmark results
+In-domain 有非常小的 positive delta，Geneval 全 tie。这个结果不是失败，它说明 measurement loop 是健康的，没有明显 regression，但要看到实质提升，需要更强的 student localizer。
+
+Slide 13. Engineering lessons
+这一步也暴露了几个关键工程问题。第一，LIMIT=16 差点截断 in-domain holdout。第二，fallback 会让 after image 变成 before image，所以必须记录 raw final candidate。第三，API judge rerun 要 overwrite and dedupe，否则会混旧结果。第四，compute node 不能继承 OFOX key。
+
+Slide 14. v1 plan
+v1 的核心是增加 supervision。我们会让 Qwen3.7 teacher 对 v0 benchmark 产生的 before/after grid images 再做 localization，然后合并 hard64、in-domain、Geneval labels，训练 grid-localizer-v1。v1 还是 lightweight，但比 v0 有更多 image statistics 和 domain features。
+
+Slide 15. Next milestone
+下一步我会用同样 benchmark 比较 v1 和 v0：winner counts、mean score delta、fallback count、changed image count。如果 v1 仍然弱，那就说明 shallow localizer 不够，下一步应该进入 neural localizer 或更强 multimodal student。
