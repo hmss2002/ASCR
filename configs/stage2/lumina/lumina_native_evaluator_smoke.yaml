@@ -17,6 +17,10 @@ generator:
   generation_timesteps: 64
   temperature: 1.0
   seed: 1234
+  answer_steps: 64
+  answer_block_length: 128
+  answer_temperature: 0.0
+  answer_cfg_scale: 0.0
 
 evaluator:
   name: lumina_native_evaluator
@@ -26,6 +30,10 @@ evaluator:
   grid_size: 4
   max_new_tokens: 384
   max_selected_cells: 6
+  answer_steps: 64
+  answer_block_length: 128
+  answer_temperature: 0.0
+  answer_cfg_scale: 0.0
   unsupported_policy: abstain
 
 selector:

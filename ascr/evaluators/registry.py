@@ -174,6 +174,10 @@ def build_evaluator(name, config):
             image_size=int(config.get("image_size", evaluator_config.get("image_size", generator_config.get("image_size", 1024)))),
             max_new_tokens=int(evaluator_config.get("max_new_tokens", 384)),
             max_selected_cells=int(evaluator_config.get("max_selected_cells", config.get("selector", {}).get("max_selected_cells", 6))),
+            answer_steps=int(evaluator_config.get("answer_steps", generator_config.get("answer_steps", 64))),
+            answer_block_length=int(evaluator_config.get("answer_block_length", generator_config.get("answer_block_length", 128))),
+            answer_temperature=float(evaluator_config.get("answer_temperature", generator_config.get("answer_temperature", 0.0))),
+            answer_cfg_scale=float(evaluator_config.get("answer_cfg_scale", generator_config.get("answer_cfg_scale", 0.0))),
             unsupported_policy=evaluator_config.get("unsupported_policy", "abstain"),
         )
     if name in {"local_vlm", "local-vlm"}:

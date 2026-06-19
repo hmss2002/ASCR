@@ -16,7 +16,17 @@ without SSH access.
 
 - Repository: https://github.com/hmss2002/ASCR.git
 - Branch: main
-- Expected minimum commit: latest `origin/main`; must include `docs/LUMINA_NATIVE_DISTILLATION.md`
+- Expected minimum commit: latest `origin/main`; must include `ascr.cli.lumina_native_json_probe`
+
+For new server-side work, create a branch from updated `main`:
+
+```bash
+cd ASCR
+git fetch origin
+git checkout main
+git pull --ff-only origin main
+git checkout -b feat/lumina-native-json-sft-server
+```
 
 ## Current Stage-2 Priority
 
@@ -25,8 +35,12 @@ distillation**. Do not treat `grid-localizer-v0` or `grid-localizer-v1` as the
 main distilled student. Those workflows are retained only as scaffold/sanity
 baselines.
 
-First validate whether the current Lumina checkout and ASCR wrapper can support
-image-conditioned text/MMU-style answering:
+The server has already shown that `LuminaNativeEngine.answer_image()` can use
+Lumina-DiMOO's MMU path to read an image and return text. The unresolved gate is
+JSON compliance: the current raw output is natural language, so the evaluator
+abstains instead of reopening tokens.
+
+First rerun the audit and a JSON compliance probe:
 
 ```bash
 source .venv-lumina/bin/activate
@@ -34,22 +48,33 @@ source .venv-lumina/bin/activate
 LUMINA_REPO=${LUMINA_REPO:-third_party/Lumina-DiMOO} \
 LUMINA_MODEL_PATH=${LUMINA_MODEL_PATH:-models/lumina-dimoo} \
 bash scripts/training/run_lumina_native_audit.sh
+
+DATASET=outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl \
+IMAGE_ROOT=outputs/lumina_qwen_hard64 \
+OUTPUT_DIR=outputs/stage2_lumina_native/json_probe \
+bash scripts/training/run_lumina_native_json_probe.sh
 ```
 
 Then prepare a small Qwen-teacher SFT dataset. This does not launch LoRA/SFT;
-it only verifies that the supervision rows are ready:
+it verifies that the supervision rows are ready for the next server branch:
 
 ```bash
 DATASET=outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/dataset.jsonl \
 IMAGE_ROOT=outputs/lumina_qwen_hard64 \
 OUTPUT_DIR=outputs/stage2_lumina_native/sft_smoke \
-LIMIT=10 \
+LIMIT=16 \
 bash scripts/training/prepare_lumina_native_sft.sh
 ```
 
-Append the audit result and SFT-prep manifest to `docs/AI_COLLAB_LOG.md`. If
-the audit reports no native evaluator hook, record that blocker and stop before
-running any formal Stage-2 benchmark.
+Decision rule:
+
+- If JSON probe parse rate is poor, do not run formal before/after benchmark.
+  Inspect Lumina-DiMOO training/MMU code and implement a LoRA/SFT smoke path.
+- If JSON probe reliably returns valid `SemanticEvaluation` JSON, run the
+  Lumina-native before/after benchmark smoke and then login-node Qwen3.7 judge.
+
+Append audit/probe/SFT results to `docs/AI_COLLAB_LOG.md` with exact commands,
+job ids, GPU/node, parse counts, output paths, branch, and commit hash.
 
 ## Sync The Server Checkout
 
@@ -230,14 +255,83 @@ out-domain section reports `label_status=unlabeled_prompts_only` instead of an
 accuracy metric. Add teacher labels later before treating out-domain accuracy as
 a real benchmark.
 
-## Run Student Localizer Before/After Image Benchmarks
+## Run Formal Lumina-Native Before/After Benchmarks
+
+Run this section only after JSON compliance is acceptable or after a
+Lumina-native SFT smoke adapter is available. This is the formal Stage-2 image
+workflow:
+
+```text
+before: Lumina direct generation
+after:  Lumina-native evaluator + GridSemanticReopeningSelector + ASCR loop
+```
+
+Compute/GPU jobs must not receive `OFOX_API_KEY`:
+
+```bash
+source .venv-lumina/bin/activate
+
+PROMPTS=configs/benchmarks/prompts/t2i_compbench_hard64.txt \
+DOMAIN=in_domain_hard64_smoke16 \
+LIMIT=16 \
+OUTPUT_DIR=outputs/image_bench/lumina_native/in_domain_hard64_smoke16 \
+MAX_ITERATIONS=3 \
+bash scripts/benchmark/run_lumina_native_image_benchmark.sh
+
+PROMPTS=configs/benchmarks/prompts/geneval_553.txt \
+DOMAIN=geneval_smoke16 \
+LIMIT=16 \
+OUTPUT_DIR=outputs/image_bench/lumina_native/geneval_smoke16 \
+MAX_ITERATIONS=3 \
+bash scripts/benchmark/run_lumina_native_image_benchmark.sh
+```
+
+For Slurm:
+
+```bash
+sbatch --export=ALL,OFOX_API_KEY=,OFOX_BASE_URL=,ASCR_TEACHER_MODEL=,ASCR_TEACHER_QUALITY_MAX_TOKENS=,ASCR_TEACHER_LOCALIZATION_MAX_TOKENS=,ASCR_TEACHER_JSON_REPAIR_RETRIES=,PROMPTS=configs/benchmarks/prompts/t2i_compbench_hard64.txt,DOMAIN=in_domain_hard64_smoke16,LIMIT=16,OUTPUT_DIR=outputs/image_bench/lumina_native/in_domain_hard64_smoke16,MAX_ITERATIONS=3 \
+  jobs/benchmarks/lumina_native_image_benchmark.sbatch
+
+sbatch --export=ALL,OFOX_API_KEY=,OFOX_BASE_URL=,ASCR_TEACHER_MODEL=,ASCR_TEACHER_QUALITY_MAX_TOKENS=,ASCR_TEACHER_LOCALIZATION_MAX_TOKENS=,ASCR_TEACHER_JSON_REPAIR_RETRIES=,PROMPTS=configs/benchmarks/prompts/geneval_553.txt,DOMAIN=geneval_smoke16,LIMIT=16,OUTPUT_DIR=outputs/image_bench/lumina_native/geneval_smoke16,MAX_ITERATIONS=3 \
+  jobs/benchmarks/lumina_native_image_benchmark.sbatch
+```
+
+Then run Qwen3.7 before/after judging on the login node only:
+
+```bash
+export OFOX_API_KEY='<your-ofox-api-key>'
+export OFOX_BASE_URL='https://api.ofox.ai/v1'
+export ASCR_TEACHER_MODEL='bailian/qwen3.7-plus'
+export ASCR_TEACHER_QUALITY_MAX_TOKENS=2048
+
+source .venv-qwen36/bin/activate
+
+python -m ascr.benchmarks.api_image_judge \
+  --manifest outputs/image_bench/lumina_native/in_domain_hard64_smoke16/manifest.jsonl \
+  --output-dir outputs/api_judges/lumina_native/in_domain_hard64_smoke16 \
+  --keep-going
+
+python -m ascr.benchmarks.api_image_judge \
+  --manifest outputs/image_bench/lumina_native/geneval_smoke16/manifest.jsonl \
+  --output-dir outputs/api_judges/lumina_native/geneval_smoke16 \
+  --keep-going
+```
+
+Append exact commands, Slurm job ids, GPU node names, generation counts, judge
+winner counts, score deltas, failures, and output paths to
+`docs/AI_COLLAB_LOG.md`. Commit and push safe small JSON summaries only. Do not
+commit generated images, logs, model weights, caches, `.env`, or API keys.
+
+When inspecting benchmark manifests, check whether any row has
+`fallback_applied=true`. The manifest's `after_image` represents the actual
+last candidate image, while `selected_after_image` records the conservative
+fallback-selected image when `return_initial_on_max_error` fires.
+
+## Historical Scaffold: Student Localizer v0
 
 Read `docs/STUDENT_LOCALIZER_IMAGE_BENCHMARK.md` before running this section.
-This is the first real distilled-student image-quality workflow. It does not
-treat `cell-prior` as the student model. The student is
-`grid-localizer-v0`, which predicts semantic error cells from the prompt and
-current grid image; the existing `GridSemanticReopeningSelector` then maps those
-cells to token reopen masks inside the normal ASCR loop.
+This external student-localizer workflow is retained for reproducing earlier
+scaffold results only. It is not the formal Stage-2 distilled student.
 
 Train the student localizer from the canonical Qwen3.7 compact teacher dataset:
 

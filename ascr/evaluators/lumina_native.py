@@ -56,6 +56,23 @@ def supported_native_answer_methods(engine):
     return methods
 
 
+def attach_lumina_native_engine_if_available(generator, evaluator):
+    """Share a Lumina generator engine with the native evaluator when possible."""
+    if not isinstance(evaluator, LuminaNativeEvaluator):
+        return False
+    if evaluator.engine is not None:
+        return False
+    engine_method = getattr(generator, "engine", None)
+    if not callable(engine_method):
+        return False
+    try:
+        evaluator.engine = engine_method()
+    except Exception:
+        evaluator.engine = None
+        return False
+    return evaluator.engine is not None
+
+
 def _call_with_optional_max_tokens(method, *args, max_new_tokens=None):
     try:
         return method(*args, max_new_tokens=max_new_tokens)
@@ -88,12 +105,20 @@ class LuminaNativeEvaluator:
         image_size=1024,
         max_new_tokens=384,
         max_selected_cells=6,
+        answer_steps=64,
+        answer_block_length=128,
+        answer_temperature=0.0,
+        answer_cfg_scale=0.0,
         unsupported_policy="abstain",
         engine=None,
     ):
         self.grid_size = int(grid_size)
         self.max_new_tokens = int(max_new_tokens)
         self.max_selected_cells = int(max_selected_cells)
+        self.answer_steps = int(answer_steps)
+        self.answer_block_length = int(answer_block_length)
+        self.answer_temperature = float(answer_temperature)
+        self.answer_cfg_scale = float(answer_cfg_scale)
         self.unsupported_policy = str(unsupported_policy)
         self.engine = engine
         self.checkpoint_path = checkpoint_path
@@ -110,6 +135,10 @@ class LuminaNativeEvaluator:
                 repo_path=self.repo_path,
                 device=self.device,
                 image_size=self.image_size,
+                answer_steps=self.answer_steps,
+                answer_block_length=self.answer_block_length,
+                answer_temperature=self.answer_temperature,
+                answer_cfg_scale=self.answer_cfg_scale,
             )
         return self.engine
 
@@ -152,6 +181,10 @@ class LuminaNativeEvaluator:
                 "method": method_name,
                 "raw_text": raw_text,
                 "parsed": payload,
+                "answer_steps": self.answer_steps,
+                "answer_block_length": self.answer_block_length,
+                "answer_temperature": self.answer_temperature,
+                "answer_cfg_scale": self.answer_cfg_scale,
             }
             return parsed
         except Exception as exc:

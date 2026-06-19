@@ -30,6 +30,10 @@ class LuminaAdapter(GeneratorAdapter):
         generation_timesteps=64,
         temperature=1.0,
         seed=1234,
+        answer_steps=64,
+        answer_block_length=128,
+        answer_temperature=0.0,
+        answer_cfg_scale=0.0,
     ):
         self.checkpoint_path = checkpoint_path or "models/lumina-dimoo"
         self.repo_path = repo_path
@@ -40,6 +44,10 @@ class LuminaAdapter(GeneratorAdapter):
         self.generation_timesteps = int(generation_timesteps)
         self.temperature = float(temperature)
         self.seed = int(seed)
+        self.answer_steps = int(answer_steps)
+        self.answer_block_length = int(answer_block_length)
+        self.answer_temperature = float(answer_temperature)
+        self.answer_cfg_scale = float(answer_cfg_scale)
         self._engine = None
 
     def engine(self):
@@ -53,6 +61,10 @@ class LuminaAdapter(GeneratorAdapter):
                 guidance_scale=self.guidance_scale,
                 generation_timesteps=self.generation_timesteps,
                 temperature=self.temperature,
+                answer_steps=self.answer_steps,
+                answer_block_length=self.answer_block_length,
+                answer_temperature=self.answer_temperature,
+                answer_cfg_scale=self.answer_cfg_scale,
             )
         return self._engine
 

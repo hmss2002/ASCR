@@ -2,9 +2,14 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
+from ascr.benchmarks.lumina_native_benchmark import run_benchmark as run_lumina_native_benchmark
+from ascr.cli.lumina_native_json_probe import run_probe as run_lumina_json_probe
 from ascr.evaluators.lumina_native import LuminaNativeEvaluator
+from ascr.evaluators.lumina_native import attach_lumina_native_engine_if_available
 from ascr.generators.base import _write_mock_ppm
+from ascr.generators.lumina_native import LuminaNativeEngine
 from ascr.training.train_lumina_evaluator import prepare_sft_dataset
 
 
@@ -26,6 +31,22 @@ class _JsonAnswerEngine:
             }],
             "correction_instruction": "Fix the selected relation.",
         })
+
+
+class _NaturalLanguageEngine:
+    def answer_image(self, question, image_path, max_new_tokens=384):
+        return "The image appears to contain a bench and a bowl."
+
+
+class _ProbeEngine:
+    def answer_image(self, question, image_path, max_new_tokens=384):
+        if "Return JSON only" in question:
+            return json.dumps({"has_error": False, "summary": "match", "regions": [], "correction_instruction": ""})
+        return "natural language caption"
+
+
+class _Args:
+    pass
 
 
 def write_jsonl(path, rows):
@@ -52,6 +73,109 @@ class LuminaNativeStage2Tests(unittest.TestCase):
             self.assertTrue(evaluation.has_error)
             self.assertEqual(evaluation.regions[0].cells[0].to_label(), "B2")
             self.assertEqual(evaluation.raw["method"], "answer_image")
+
+    def test_malformed_native_answer_abstains(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            image_path = Path(temp_dir) / "grid.ppm"
+            _write_mock_ppm(image_path, [[row + col for col in range(4)] for row in range(4)], image_size=32)
+            evaluator = LuminaNativeEvaluator(engine=_NaturalLanguageEngine())
+            evaluation = evaluator.evaluate("a green bench and a blue bowl", str(image_path), 0)
+            self.assertFalse(evaluation.has_error)
+            self.assertTrue(evaluation.should_abstain)
+            self.assertIn("malformed JSON", evaluation.summary)
+
+    def test_answer_generation_settings_are_stored_without_load(self):
+        engine = LuminaNativeEngine(
+            answer_steps=7,
+            answer_block_length=32,
+            answer_temperature=0.25,
+            answer_cfg_scale=1.5,
+        )
+        self.assertEqual(engine.answer_steps, 7)
+        self.assertEqual(engine.answer_block_length, 32)
+        self.assertEqual(engine.answer_temperature, 0.25)
+        self.assertEqual(engine.answer_cfg_scale, 1.5)
+
+    def test_shared_lumina_engine_is_attached(self):
+        engine = object()
+
+        class _Generator:
+            def engine(self):
+                return engine
+
+        evaluator = LuminaNativeEvaluator()
+        self.assertTrue(attach_lumina_native_engine_if_available(_Generator(), evaluator))
+        self.assertIs(evaluator.engine, engine)
+
+    def test_json_probe_reports_parse_rate(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            image_path = Path(temp_dir) / "grid.ppm"
+            _write_mock_ppm(image_path, [[row + col for col in range(4)] for row in range(4)], image_size=32)
+            args = _Args()
+            args.image = [str(image_path)]
+            args.prompt = ["a green bench and a blue bowl"]
+            args.output_dir = str(Path(temp_dir) / "probe")
+            args.checkpoint_path = "models/lumina-dimoo"
+            args.repo_path = None
+            args.device = "cuda"
+            args.image_size = 1024
+            args.grid_size = 4
+            args.max_selected_cells = 6
+            args.max_new_tokens = 64
+            args.answer_steps = 8
+            args.answer_block_length = 16
+            args.answer_temperature = 0.0
+            args.answer_cfg_scale = 0.0
+            args.prompt_variant = None
+            summary = run_lumina_json_probe(args, engine=_ProbeEngine())
+            self.assertEqual(summary["row_count"], 3)
+            self.assertEqual(summary["parsed_count"], 1)
+            rows = [json.loads(line) for line in (Path(temp_dir) / "probe" / "probe_rows.jsonl").read_text(encoding="utf-8").splitlines()]
+            self.assertIn("abstained_malformed_json", {row["status"] for row in rows})
+
+    def test_lumina_native_benchmark_manifest_is_neutral(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            prompts = Path(temp_dir) / "prompts.txt"
+            prompts.write_text("red cube left of blue sphere\n", encoding="utf-8")
+            args = _Args()
+            args.prompts = str(prompts)
+            args.domain = "unit"
+            args.output_dir = str(Path(temp_dir) / "bench")
+            args.config = None
+            args.generator = "mock"
+            args.limit = None
+            args.shard_index = 0
+            args.shard_count = 1
+            args.max_iterations = 1
+            args.run_name = "unit_native_bench"
+            args.keep_going = False
+
+            class _FakeLoop:
+                def run(self, prompt, project_root="."):
+                    return {
+                        "initial_decoded_image": "initial.ppm",
+                        "initial_grid_image": "initial-grid.ppm",
+                        "final_decoded_image": "selected.ppm",
+                        "final_grid_image": "selected-grid.ppm",
+                        "raw_final_decoded_image": "raw-final.ppm",
+                        "raw_final_grid_image": "raw-final-grid.ppm",
+                        "stop_reason": "semantic_evaluator_abstained",
+                        "evaluator_calls": 1,
+                        "iterations_recorded": 0,
+                        "revision_records": [],
+                        "artifact_root": "artifact-root",
+                        "trace_path": "trace.jsonl",
+                        "fallback_applied": False,
+                        "final_selection_policy": "last_candidate",
+                    }
+
+            with mock.patch("ascr.benchmarks.lumina_native_benchmark.build_loop", return_value=_FakeLoop()):
+                run_lumina_native_benchmark(args)
+            manifest = [json.loads(line) for line in (Path(temp_dir) / "bench" / "manifest.jsonl").read_text(encoding="utf-8").splitlines()]
+            self.assertEqual(manifest[0]["evaluator_backend"], "lumina_native_evaluator")
+            self.assertNotIn("student_model", manifest[0])
+            self.assertEqual(manifest[0]["before_image"], "initial.ppm")
+            self.assertEqual(manifest[0]["after_image"], "raw-final.ppm")
 
     def test_prepare_lumina_sft_dataset(self):
         with tempfile.TemporaryDirectory() as temp_dir:

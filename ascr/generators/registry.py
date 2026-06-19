@@ -23,6 +23,10 @@ def build_generator(name, config):
             generation_timesteps=int(generator_config.get('generation_timesteps', 64)),
             temperature=float(generator_config.get('temperature', 1.0)),
             seed=int(config.get('seed', generator_config.get('seed', 1234))),
+            answer_steps=int(generator_config.get('answer_steps', 64)),
+            answer_block_length=int(generator_config.get('answer_block_length', 128)),
+            answer_temperature=float(generator_config.get('answer_temperature', 0.0)),
+            answer_cfg_scale=float(generator_config.get('answer_cfg_scale', 0.0)),
         )
     if name == 'mmada':
         from ascr.generators.mmada import MMaDAAdapter

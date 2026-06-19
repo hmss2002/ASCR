@@ -63,7 +63,7 @@ def judge_messages(prompt, before_image, after_image):
         f"{COMPACT_JSON_INSTRUCTION}\n"
         f"Prompt: {prompt}\n"
         "Image A is before distillation: the initial generator image. "
-        "Image B is after distillation: the final ASCR image produced by the student localizer loop. "
+        "Image B is after distillation: the final ASCR candidate produced by the evaluator-selector reopen loop. "
         "Score prompt following from 0.0 to 1.0 for each image. "
         "Choose winner as before, after, or tie. Schema: "
         f"{QUALITY_SCHEMA_TEXT}."
@@ -203,6 +203,7 @@ def run_judge(args):
                 "before_image": row.get("before_image"),
                 "after_image": row.get("after_image"),
                 "student_model": row.get("student_model"),
+                "evaluator_backend": row.get("evaluator_backend"),
                 "model": model,
                 "judgment": judgment,
             }
@@ -226,7 +227,7 @@ def run_judge(args):
 
 
 def build_parser():
-    parser = argparse.ArgumentParser(description="Judge before/after student-localizer image benchmark outputs with Qwen3.7/OFOX.")
+    parser = argparse.ArgumentParser(description="Judge before/after ASCR image benchmark outputs with Qwen3.7/OFOX.")
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--model", default=None)

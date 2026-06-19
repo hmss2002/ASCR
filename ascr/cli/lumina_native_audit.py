@@ -54,6 +54,10 @@ def run_audit(args):
         device=args.device,
         image_size=args.image_size,
         token_grid_size=args.token_grid_size,
+        answer_steps=args.answer_steps,
+        answer_block_length=args.answer_block_length,
+        answer_temperature=args.answer_temperature,
+        answer_cfg_scale=args.answer_cfg_scale,
     )
     methods = supported_native_answer_methods(engine)
     report = {
@@ -87,6 +91,10 @@ def run_audit(args):
             image_size=args.image_size,
             max_new_tokens=args.max_new_tokens,
             max_selected_cells=args.max_selected_cells,
+            answer_steps=args.answer_steps,
+            answer_block_length=args.answer_block_length,
+            answer_temperature=args.answer_temperature,
+            answer_cfg_scale=args.answer_cfg_scale,
             engine=engine,
         )
         evaluation = evaluator.evaluate(args.prompt, args.smoke_image, 0)
@@ -117,6 +125,10 @@ def build_parser():
     parser.add_argument("--grid-size", type=int, default=4)
     parser.add_argument("--max-selected-cells", type=int, default=6)
     parser.add_argument("--max-new-tokens", type=int, default=384)
+    parser.add_argument("--answer-steps", type=int, default=64)
+    parser.add_argument("--answer-block-length", type=int, default=128)
+    parser.add_argument("--answer-temperature", type=float, default=0.0)
+    parser.add_argument("--answer-cfg-scale", type=float, default=0.0)
     parser.add_argument("--prompt", default="A red cube left of a blue sphere")
     parser.add_argument("--smoke-image", default=None, help="Optional image/grid path for an evaluator smoke call.")
     parser.add_argument("--scan-repo", action="store_true", help="Search the Lumina checkout for possible MMU/text-output hooks.")

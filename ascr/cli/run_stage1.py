@@ -4,6 +4,7 @@ from pathlib import Path
 
 from ascr.core.config import load_config
 from ascr.core.loop import ASCRLoop, run_config_from_mapping
+from ascr.evaluators.lumina_native import attach_lumina_native_engine_if_available
 from ascr.evaluators.registry import build_evaluator
 from ascr.generators.registry import build_generator
 from ascr.revision.selector import GridSemanticReopeningSelector
@@ -43,6 +44,7 @@ def main(argv=None):
     config["image_size"] = generator_config["image_size"]
     generator = build_generator(generator_name, generator_config)
     evaluator = build_evaluator(evaluator_name, config)
+    attach_lumina_native_engine_if_available(generator, evaluator)
     selector = GridSemanticReopeningSelector(
         coarse_grid_size=int(config.get("coarse_grid_size", 4)),
         token_grid_size=int(config.get("token_grid_size", 16)),
