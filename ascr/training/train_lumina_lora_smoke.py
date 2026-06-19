@@ -19,16 +19,22 @@ SP = {
 }
 
 
-def _mask_codes(codes, force_mask=False):
+def _mask_codes(codes, mode="random", force_mask=False):
     if not codes:
         return [], []
-    ratio_seed = random.uniform(0, 1)
-    if len(codes) <= 5 and not force_mask:
+    if force_mask or mode == "all":
+        indices = list(range(len(codes)))
+    elif mode != "random":
+        raise ValueError(f"Unknown answer mask mode: {mode}")
+    elif len(codes) <= 5:
         mask_ratio = 1.0
+        count = len(codes)
+        indices = random.sample(range(len(codes)), count)
     else:
+        ratio_seed = random.uniform(0, 1)
         mask_ratio = math.cos(ratio_seed * math.pi / 2)
-    count = max(1, int(len(codes) * mask_ratio))
-    indices = random.sample(range(len(codes)), count)
+        count = max(1, int(len(codes) * mask_ratio))
+        indices = random.sample(range(len(codes)), count)
     masked = list(codes)
     labels = [-100] * len(codes)
     for index in indices:
@@ -124,9 +130,13 @@ def train_lumina_lora_smoke(args):
                 padding=False,
                 return_tensors="pt",
             ).input_ids[0].tolist()
-            answer_ids, answer_labels = _mask_codes(answer_ids)
+            answer_ids, answer_labels = _mask_codes(answer_ids, mode=args.answer_mask_mode)
             pad_len = max(0, int(args.answer_max_length) - len(answer_ids))
-            pad_ids, pad_labels = _mask_codes([SP["padding"]] * pad_len, force_mask=True)
+            if args.ignore_pad_labels:
+                pad_ids = [SP["padding"]] * pad_len
+                pad_labels = [-100] * pad_len
+            else:
+                pad_ids, pad_labels = _mask_codes([SP["padding"]] * pad_len, mode=args.answer_mask_mode, force_mask=True)
             input_ids = inst_ids + [SP["answer_start"]] + answer_ids + pad_ids
             labels = [-100] * len(inst_ids) + [-100] + answer_labels + pad_labels
             if len(input_ids) > int(args.max_seq_len):
@@ -164,6 +174,8 @@ def train_lumina_lora_smoke(args):
         "lora_r": int(args.lora_r),
         "lora_alpha": int(args.lora_alpha),
         "lora_dropout": float(args.lora_dropout),
+        "answer_mask_mode": str(args.answer_mask_mode),
+        "ignore_pad_labels": bool(args.ignore_pad_labels),
         "device": device,
         "losses": losses,
         "final_loss": losses[-1]["loss"] if losses else None,
@@ -191,6 +203,18 @@ def build_parser():
     parser.add_argument("--lora-alpha", type=int, default=16)
     parser.add_argument("--lora-dropout", type=float, default=0.05)
     parser.add_argument("--target-modules", default="q_proj,v_proj,k_proj,o_proj,gate_proj,up_proj,down_proj")
+    parser.add_argument(
+        "--answer-mask-mode",
+        choices=["random", "all"],
+        default="random",
+        help="Masking strategy for answer tokens. Use 'all' to match Lumina answer generation more closely.",
+    )
+    parser.add_argument(
+        "--ignore-pad-labels",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Do not train loss on synthetic answer padding slots.",
+    )
     parser.add_argument("--seed", type=int, default=0)
     return parser
 

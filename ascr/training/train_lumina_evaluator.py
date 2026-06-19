@@ -3,17 +3,18 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 
-from ascr.core.schemas import safe_parse_semantic_evaluation
+from ascr.core.schemas import canonical_semantic_evaluation_payload
 from ascr.evaluators.lumina_native import native_eval_prompt
 from ascr.training.localizer_model import read_jsonl, resolve_training_image
 
 
 def _target_from_localization(localization, grid_size=4, max_selected_cells=6):
     payload = localization.get("evaluation", {})
-    evaluation = safe_parse_semantic_evaluation(payload, grid_size=grid_size, max_selected_cells=max_selected_cells)
-    target = evaluation.to_dict()
-    target.pop("raw", None)
-    return target
+    return canonical_semantic_evaluation_payload(
+        payload,
+        grid_size=grid_size,
+        max_selected_cells=max_selected_cells,
+    )
 
 
 def iter_sft_examples(dataset_path, image_root=None, project_root=None, grid_size=4, max_selected_cells=6, limit=None):
@@ -30,7 +31,7 @@ def iter_sft_examples(dataset_path, image_root=None, project_root=None, grid_siz
                 "image_exists": bool(image_path and Path(image_path).exists()),
                 "input_text": native_eval_prompt(prompt, grid_size=grid_size, max_selected_cells=max_selected_cells),
                 "target_json": target,
-                "target_text": json.dumps(target, ensure_ascii=False, sort_keys=True),
+                "target_text": json.dumps(target, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
                 "source": localization.get("source", row.get("source", "")),
                 "domain": localization.get("domain", row.get("domain", "")),
             }
@@ -79,6 +80,7 @@ def prepare_sft_dataset(
     write_jsonl(sft_path, examples)
     manifest = {
         "schema_version": "ascr.lumina_native_evaluator_sft_dataset.v1",
+        "target_schema": "canonical_semantic_evaluation_v1",
         "created_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
         "dataset": str(dataset),
         "image_root": str(image_root) if image_root else None,

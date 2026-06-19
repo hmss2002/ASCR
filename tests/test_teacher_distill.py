@@ -278,10 +278,13 @@ class TeacherDistillTests(unittest.TestCase):
     def test_compute_training_scripts_do_not_reference_ofox(self):
         repo = Path(__file__).resolve().parents[1]
         script = (repo / "scripts" / "training" / "run_cell_prior.sh").read_text(encoding="utf-8")
+        lora_script = (repo / "scripts" / "training" / "run_lumina_lora_smoke.sh").read_text(encoding="utf-8")
         sbatch = (repo / "jobs" / "training" / "stage2_cell_prior_baseline.sbatch").read_text(encoding="utf-8")
         self.assertNotIn("OFOX", script)
+        self.assertNotIn("OFOX", lora_script)
         self.assertNotIn("OFOX", sbatch)
         self.assertIn("--task cell-prior", script)
+        self.assertIn("--answer-mask-mode", lora_script)
 
     def test_prune_resolved_errors_drops_resolved_rows_and_dedupes(self):
         with tempfile.TemporaryDirectory() as temp_dir:

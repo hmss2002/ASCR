@@ -6,11 +6,13 @@ from unittest import mock
 
 from ascr.benchmarks.lumina_native_benchmark import run_benchmark as run_lumina_native_benchmark
 from ascr.cli.lumina_native_json_probe import run_probe as run_lumina_json_probe
+from ascr.core.schemas import canonical_semantic_evaluation_payload
 from ascr.evaluators.lumina_native import LuminaNativeEvaluator
 from ascr.evaluators.lumina_native import attach_lumina_native_engine_if_available
 from ascr.generators.base import _write_mock_ppm
 from ascr.generators.lumina_native import LuminaNativeEngine, align_answer_generation_lengths
 from ascr.training.prepare_lumina_sft_data import convert_sft_examples
+from ascr.training.train_lumina_lora_smoke import _mask_codes
 from ascr.training.train_lumina_evaluator import prepare_sft_dataset
 
 
@@ -107,6 +109,30 @@ class LuminaNativeStage2Tests(unittest.TestCase):
         gen_len, block_len, steps = align_answer_generation_lengths(10, 128, 1)
         self.assertEqual(gen_len, 128)
         self.assertEqual(steps, 1)
+
+    def test_canonical_semantic_payload_omits_runtime_fields(self):
+        payload = canonical_semantic_evaluation_payload({
+            "has_error": True,
+            "summary": "wrong relation",
+            "regions": [{
+                "cells": [{"label": "B2"}],
+                "reason": "wrong relation",
+                "confidence": 0.8,
+                "error_type": "semantic",
+                "action": "reopen",
+            }],
+            "correction_instruction": "Fix the relation.",
+            "raw": {"debug": True},
+            "parser_error": "debug only",
+            "should_abstain": False,
+        })
+        self.assertEqual(set(payload), {"has_error", "summary", "regions", "correction_instruction"})
+        self.assertEqual(payload["regions"][0]["cells"], [{"label": "B2"}])
+
+    def test_all_answer_mask_mode_masks_every_target_token(self):
+        masked, labels = _mask_codes([10, 11, 12], mode="all")
+        self.assertEqual(masked, [126336, 126336, 126336])
+        self.assertEqual(labels, [10, 11, 12])
 
     def test_shared_lumina_engine_is_attached(self):
         engine = object()
@@ -219,6 +245,9 @@ class LuminaNativeStage2Tests(unittest.TestCase):
             rows = [json.loads(line) for line in (output / "sft_examples.jsonl").read_text(encoding="utf-8").splitlines()]
             self.assertIn("Return exactly one compact JSON object", rows[0]["input_text"])
             self.assertEqual(rows[0]["target_json"]["regions"][0]["cells"][0]["label"], "B2")
+            self.assertNotIn("raw", rows[0]["target_json"])
+            self.assertNotIn("parser_error", rows[0]["target_json"])
+            self.assertNotIn("should_abstain", rows[0]["target_json"])
 
     def test_convert_lumina_sft_data_skips_missing_images(self):
         with tempfile.TemporaryDirectory() as temp_dir:

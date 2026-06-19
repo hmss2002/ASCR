@@ -223,20 +223,21 @@ class LuminaNativeEngine:
         img_tokens = iu.add_break_line(img_tokens, token_grid_h, token_grid_w, new_number=NEWLINE_TOKEN_ID)
 
         # --- build prompt -------------------------------------------------
-        input_prompt = pu.generate_multimodal_understanding_prompt(question)
-        input_ids = self._tokenizer(input_prompt)["input_ids"]
-        input_token = input_ids[:-1] + img_tokens + input_ids[-1:]
-        code_start = len(input_token) + 1
-        input_token = input_token + [ANSWER_START] + [MASK_TOKEN_ID] * int(max_new_tokens) + [ANSWER_END]
-        device = next(self._model.parameters()).device
-        input_ids_t = self._torch.tensor(input_token, device=device).unsqueeze(0)
-
-        # --- generate text ------------------------------------------------
         gen_len, block_len, steps = align_answer_generation_lengths(
             max_new_tokens,
             self.answer_block_length,
             self.answer_steps,
         )
+
+        input_prompt = pu.generate_multimodal_understanding_prompt(question)
+        input_ids = self._tokenizer(input_prompt)["input_ids"]
+        input_token = input_ids[:-1] + img_tokens + input_ids[-1:]
+        code_start = len(input_token) + 1
+        input_token = input_token + [ANSWER_START] + [MASK_TOKEN_ID] * gen_len + [ANSWER_END]
+        device = next(self._model.parameters()).device
+        input_ids_t = self._torch.tensor(input_token, device=device).unsqueeze(0)
+
+        # --- generate text ------------------------------------------------
         out = generate_text_understanding(
             self._model, input_ids_t,
             steps=steps, gen_length=gen_len, block_length=block_len,

@@ -194,3 +194,34 @@ def safe_parse_semantic_evaluation(payload, grid_size=4, max_selected_cells=16):
         return parse_semantic_evaluation(payload, grid_size=grid_size, max_selected_cells=max_selected_cells)
     except Exception as exc:
         return SemanticEvaluation.abstain(str(exc), raw=payload)
+
+
+def canonical_semantic_evaluation_payload(payload, grid_size=4, max_selected_cells=16):
+    """Return the compact target schema used for native evaluator distillation.
+
+    This intentionally omits parser/runtime bookkeeping fields such as
+    ``raw``, ``parser_error`` and ``should_abstain``. Those fields are useful in
+    ASCR traces, but they add noise when teaching a model to emit the evaluator
+    contract itself.
+    """
+    evaluation = safe_parse_semantic_evaluation(
+        payload,
+        grid_size=grid_size,
+        max_selected_cells=max_selected_cells,
+    )
+    regions = []
+    if evaluation.has_error and not evaluation.should_abstain:
+        for region in evaluation.regions:
+            regions.append({
+                "cells": [{"label": cell.to_label()} for cell in region.cells],
+                "reason": region.reason,
+                "confidence": region.confidence,
+                "error_type": region.error_type,
+                "action": region.action,
+            })
+    return {
+        "has_error": bool(evaluation.has_error and not evaluation.should_abstain),
+        "summary": evaluation.summary,
+        "regions": regions,
+        "correction_instruction": evaluation.correction_instruction,
+    }

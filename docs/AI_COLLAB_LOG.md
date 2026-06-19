@@ -1522,7 +1522,7 @@ Next server action:
 - reason: parse_rate == 0.0 per decision rule
 
 ### Analysis
-- 10 epochs of LoRA training converged well (loss 5.0→0.085)
+- 10 epochs of LoRA training converged well (loss 5.0 to 0.085)
 - Model outputs JSON-like text but with severe formatting issues:
   - Nested/duplicate braces
   - Missing colons and commas
@@ -1534,3 +1534,43 @@ Next server action:
 - Consider changing training target format: instead of masked token prediction on full JSON, try teacher-forcing with proper causal masking
 - Or add a JSON repair/sanitization post-processing step for Lumina outputs
 - Or increase dataset size beyond 16 examples for better JSON structure learning
+
+---
+
+## 2026-06-19: Local Codex v3 plan after LoRA JSON malformed outputs
+
+### Reviewed server result
+- Merged `feat/lumina-lora-json-v2-server` into local `main`.
+- Accepted the server conclusion: LoRA v2 training was technically successful, but output was not parseable JSON.
+- Key metrics from server:
+  - call_error_count: 0
+  - malformed_count: 3
+  - parsed_count: 0
+  - parse_rate: 0.0
+- Raw previews showed nested quotes, repeated keys, missing values, and invalid delimiters.
+- Formal before/after benchmark remains blocked.
+
+### Local code changes prepared
+- Added canonical `SemanticEvaluation` training payload generation.
+- Removed runtime/debug fields from Lumina evaluator SFT targets:
+  - `raw`
+  - `parser_error`
+  - `should_abstain`
+- Fixed `LuminaNativeEngine.answer_image()` so the aligned answer length is used when constructing the mask region.
+- Added LoRA trainer options:
+  - `--answer-mask-mode random|all`
+  - `--ignore-pad-labels`
+- Recommended v3 default is `--answer-mask-mode all --ignore-pad-labels`.
+
+### Scientific assessment
+- The 16-example v2 run was too small to teach stable JSON syntax or semantic localization.
+- The v2 target format also contained fields that should not be part of the student evaluator contract.
+- The next experiment should expand Qwen3.7-plus teacher localization data and train on clean canonical JSON targets.
+
+### Next server task
+- Read `docs/SERVER_AI_TASK_LUMINA_LORA_JSON_V3_DATA_EXPANSION.md`.
+- Create branch `feat/lumina-lora-json-v3-data-server` from latest `main`.
+- On login node, use Qwen3.7-plus to expand teacher localization labels, starting with `LIMIT=128` or `LIMIT=256`.
+- On GPU node, train LoRA v3 using clean targets and all-mask answer training.
+- Run JSON probe.
+- Do not run formal benchmark unless JSON probe parse rate is materially above zero and parsed outputs pass `safe_parse_semantic_evaluation`.

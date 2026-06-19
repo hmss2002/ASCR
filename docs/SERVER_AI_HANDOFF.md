@@ -16,7 +16,23 @@ without SSH access.
 
 - Repository: https://github.com/hmss2002/ASCR.git
 - Branch: main
-- Expected minimum commit: latest `origin/main`; must include `ascr.cli.lumina_native_json_probe`
+- Expected minimum commit: latest `origin/main`; must include
+  `docs/SERVER_AI_TASK_LUMINA_LORA_JSON_V3_DATA_EXPANSION.md`
+
+## Current Priority Override
+
+Read and follow this file for the next Stage-2 server pass:
+
+```text
+docs/SERVER_AI_TASK_LUMINA_LORA_JSON_V3_DATA_EXPANSION.md
+```
+
+The old `grid-localizer-v0/v1` workflow below is historical scaffold context.
+Do not run it as the formal distilled-student benchmark. The current blocker is
+Lumina-native evaluator JSON compliance: LoRA v2 learned JSON-like text but
+still had `parse_rate=0.0`. The next server task is Qwen3.7 teacher-data
+expansion plus LoRA v3 with clean canonical targets and all-mask answer
+training.
 
 For new server-side work, create a branch from updated `main`:
 
@@ -25,7 +41,7 @@ cd ASCR
 git fetch origin
 git checkout main
 git pull --ff-only origin main
-git checkout -b feat/lumina-native-json-sft-server
+git checkout -b feat/lumina-lora-json-v3-data-server
 ```
 
 ## Current Stage-2 Priority

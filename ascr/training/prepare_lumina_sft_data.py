@@ -9,7 +9,8 @@ from pathlib import Path
 SYSTEM_PROMPT = (
     "You are the ASCR semantic evaluator for a generated image. Compare the "
     "current image against the original prompt. Return exactly one compact JSON "
-    "object. No markdown. No analysis."
+    "object. No markdown. No analysis. Do not output a quoted JSON string or "
+    "escaped JSON; output the object itself."
 )
 
 
@@ -120,6 +121,7 @@ def convert_sft_examples(
             handle.write("\n")
     manifest = {
         "schema_version": "ascr.lumina_sft_data.v2",
+        "target_schema": "canonical_semantic_evaluation_v1",
         "created_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
         "sft_examples": str(sft_examples),
         "checkpoint_path": str(checkpoint_path),

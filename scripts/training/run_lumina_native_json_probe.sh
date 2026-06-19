@@ -8,6 +8,10 @@ DATASET="${DATASET:-outputs/teacher_distill/hard64_lumina_qwen_qwen37_compact/da
 IMAGE_ROOT="${IMAGE_ROOT:-outputs/lumina_qwen_hard64}"
 OUTPUT_DIR="${OUTPUT_DIR:-outputs/stage2_lumina_native/json_probe}"
 MAX_NEW_TOKENS="${MAX_NEW_TOKENS:-384}"
+LORA_ARGS=()
+if [[ -n "${LORA_PATH:-}" ]]; then
+  LORA_ARGS+=(--lora-path "$LORA_PATH")
+fi
 
 if [[ -z "${IMAGE:-}" || -z "${PROMPT:-}" ]]; then
   mapfile -t probe_pair < <(python - "$DATASET" "$IMAGE_ROOT" <<'PY'
@@ -39,4 +43,5 @@ python -m ascr.cli.lumina_native_json_probe \
   --answer-block-length "${ANSWER_BLOCK_LENGTH:-128}" \
   --answer-temperature "${ANSWER_TEMPERATURE:-0.0}" \
   --answer-cfg-scale "${ANSWER_CFG_SCALE:-0.0}" \
+  "${LORA_ARGS[@]}" \
   "$@"
