@@ -135,16 +135,8 @@ def train(args):
             input_ids = input_ids.to(device)
             labels = labels.to(device)
 
-            outputs = model(input_ids=input_ids, labels=None)
-            logits = outputs.logits  # (batch, seq_len, vocab_size)
-            # compute cross-entropy loss on non-masked positions
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            loss = torch.nn.functional.cross_entropy(
-                shift_logits.view(-1, shift_logits.size(-1)),
-                shift_labels.view(-1),
-                ignore_index=-100,
-            )
+            # Lumina expects list-of-lists: [seq of token ids]
+            loss = model(input_ids=input_ids.tolist(), labels=labels.tolist())
 
             optimizer.zero_grad()
             loss.backward()
