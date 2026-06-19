@@ -1,0 +1,3 @@
+META:
+  - path: outputs/stage2_lumina_native/sft_smoke/lumina_format/train.jsonl
+    type: default
