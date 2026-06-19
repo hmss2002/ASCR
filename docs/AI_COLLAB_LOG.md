@@ -1388,3 +1388,19 @@ Server next action:
 3. Design Stage-2 Lumina-native LoRA/DDP training
 4. Do NOT run formal before/after benchmark until evaluator smoke is confirmed
 
+
+### Evaluator smoke test update (job 70759)
+- Test 1 (direct answer_image): ✅ SUCCESS - returned natural language image description
+- Test 2 (call_native_answer): ✅ SUCCESS - method=answer_image, returned text
+- Test 3 (full evaluator): ⚠️ ABSTAIN - Lumina returned natural language, not JSON
+  - Root cause: `extract_json_object` expects JSON, but Lumina outputs descriptive text
+  - The `native_eval_prompt` asks for JSON but Lumina's MMU doesn't reliably follow the schema
+  - This is a prompt-engineering issue, not a hook availability issue
+  - The `answer_image` hook itself is fully functional
+
+### Conclusion
+- **Audit: PASSED** - Lumina-DiMOO has working image-conditioned text generation
+- **answer_image hook: WORKING** - confirmed via direct call and call_native_answer
+- **JSON compliance: NEEDS WORK** - Lumina MMU outputs natural language, not structured JSON
+- Next step: either improve the evaluator prompt or add a JSON repair step for Lumina outputs
+
