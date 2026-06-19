@@ -125,12 +125,7 @@ def train(args):
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
 
     # Optimizer - use SGD instead of AdamW to save memory (no momentum buffers)
-    # Only optimize trainable params
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.wd)
-    
-    # Enable gradient checkpointing to save memory
-    if hasattr(model, 'gradient_checkpointing_enable'):
-        model.gradient_checkpointing_enable()
 
     # Training loop
     print(f"Training {len(dataset)} examples, {args.epochs} epochs...")
