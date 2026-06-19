@@ -1,0 +1,15 @@
+{
+  "answer_block_length": 128,
+  "answer_cfg_scale": 0.0,
+  "answer_steps": 64,
+  "answer_temperature": 0.0,
+  "call_error_count": 0,
+  "created_at_utc": "2026-06-19T12:08:33Z",
+  "lora_path": "outputs/stage2_lumina_native/lora_v2",
+  "malformed_count": 3,
+  "output_dir": "outputs/stage2_lumina_native/json_probe_lora_v2",
+  "parse_rate": 0.0,
+  "parsed_count": 0,
+  "row_count": 3,
+  "schema_version": "ascr.lumina_native_json_probe.summary.v1"
+}

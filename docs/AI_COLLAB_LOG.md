@@ -1472,3 +1472,65 @@ Next server action:
 5. Report parse rate, raw previews, parser errors, loss curve, and memory use.
 6. Do not run formal benchmark unless output parses as valid
    `SemanticEvaluation` JSON.
+
+---
+
+## 2026-06-19: Lumina LoRA JSON v2 server pass (Server AI)
+
+### Git
+- Branch: `feat/lumina-lora-json-v2-server`
+- Base commit: `6dc6792f2a17b67ff588dc94eb3cf876953028d0`
+- Final commit: (this entry)
+
+### Environment
+- Host: hpcr4300a
+- GPU node/job id: SPGL-1-12 (jobs 70787, 70788, 70789)
+- Python env: `.venv-lumina`
+- LUMINA_REPO: `third_party/Lumina-DiMOO`
+- LUMINA_MODEL_PATH: `models/lumina-dimoo`
+- peft version: 0.19.1
+
+### Data Conversion
+- command: `DATASET=... OUTPUT_DIR=... python -m ascr.training.prepare_lumina_sft_data --limit 16`
+- example_count: 16
+- skipped_count: 0
+- output path: `outputs/stage2_lumina_native/lumina_sft_data_v2/train.jsonl`
+
+### LoRA Training
+- command: `python -m ascr.training.train_lumina_lora_smoke --epochs 10 --lr 5e-5 --image-size 512 --max-seq-len 2048 --lora-r 8 --lora-alpha 16 --seed 0`
+- hyperparameters: lr=5e-5, epochs=10, batch_size=1, lora_r=8, lora_alpha=16, image_size=512, max_seq_len=2048
+- loss curve: started ~5.0, converged to ~0.08 by epoch 9
+- final_loss: 0.085
+- memory/OOM notes: No OOM, fit in 45GB GPU
+- adapter output path: `outputs/stage2_lumina_native/lora_v2/`
+
+### JSON Probe
+- command: `python -m ascr.cli.lumina_native_json_probe --lora-path ... --image ... --prompt ...`
+- row_count: 3
+- parsed_count: 0
+- malformed_count: 3
+- call_error_count: 0
+- parse_rate: 0.0
+- raw_preview examples:
+  1. `{"{"has_error":false,"summary":":false","regions":":false"...}` - nested braces, malformed
+  2. `{"{"{"{"has_error":{"":"":"...` - deeply nested, completely broken
+  3. `{"{"has_error":,"":"":"...` - missing values, malformed
+- parser errors: "Expecting ':' delimiter", "Expecting ',' delimiter"
+
+### Benchmark
+- ran: NO
+- reason: parse_rate == 0.0 per decision rule
+
+### Analysis
+- 10 epochs of LoRA training converged well (loss 5.0→0.085)
+- Model outputs JSON-like text but with severe formatting issues:
+  - Nested/duplicate braces
+  - Missing colons and commas
+  - Repeated key patterns
+- This suggests the masked token prediction training format may not be ideal for teaching clean JSON generation
+- The model learns to output `{` and `has_error` tokens but cannot maintain proper JSON structure
+
+### Next Action For Local Codex
+- Consider changing training target format: instead of masked token prediction on full JSON, try teacher-forcing with proper causal masking
+- Or add a JSON repair/sanitization post-processing step for Lumina outputs
+- Or increase dataset size beyond 16 examples for better JSON structure learning
