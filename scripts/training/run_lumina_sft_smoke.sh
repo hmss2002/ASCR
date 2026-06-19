@@ -15,7 +15,7 @@ MAX_SEQ_LEN="${MAX_SEQ_LEN:-4096}"
 
 mkdir -p "$OUTPUT_DIR"
 
-export PYTHONPATH="$LUMINA_REPO:$PYTHONPATH"
+export PYTHONPATH="${LUMINA_REPO}:${PYTHONPATH:-}"
 
 python -u "$LUMINA_REPO/train/train.py" \
   --init_from "$CHECKPOINT" \
