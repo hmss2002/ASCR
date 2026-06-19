@@ -1453,3 +1453,27 @@ Next server action:
 
 ### Next step
 - Load LoRA adapter and run JSON probe to check if parse_rate improved
+
+---
+
+## 2026-06-19 (part 4): LoRA JSON probe result (Server AI)
+
+### Result
+- parse_rate: 0.0 (8 samples)
+- call_error_count: 1
+- malformed_count: 7
+- parsed_count: 0
+
+### Analysis
+- LoRA merged model loaded successfully
+- `call_native_answer` returned empty strings for all samples
+- Possible causes:
+  1. `merge_and_unload` untied embeddings (warning observed)
+  2. 512x512 resolution may break the MMU pipeline
+  3. LoRA training on masked token prediction may not transfer to MMU text generation
+  4. The `answer_image` path uses `generate_text_understanding` which may need the original (unmerged) model
+
+### Next step
+- Try inference WITHOUT merge_and_unload (use PeftModel directly)
+- Or re-train at 1024x1024 resolution
+- Or use the LoRA adapter only on the language head, not attention layers
