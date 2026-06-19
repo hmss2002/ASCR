@@ -202,9 +202,12 @@ class LuminaNativeEngine:
         input_ids_t = self._torch.tensor(input_token, device=device).unsqueeze(0)
 
         # --- generate text ------------------------------------------------
+        gen_len = int(max_new_tokens)
+        block_len = 128
+        steps = 64
         out = generate_text_understanding(
             self._model, input_ids_t,
-            steps=128, gen_length=int(max_new_tokens), block_length=min(256, int(max_new_tokens)),
+            steps=steps, gen_length=gen_len, block_length=block_len,
             temperature=0.0, cfg_scale=0.0, remasking="low_confidence",
             code_start=code_start,
         )
