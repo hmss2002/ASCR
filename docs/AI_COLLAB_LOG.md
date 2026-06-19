@@ -1428,3 +1428,28 @@ Next server action:
 4. If JSON probe parse rate is poor, implement LoRA/SFT smoke before any formal image benchmark.
 5. If JSON probe or SFT smoke yields valid `SemanticEvaluation` JSON, run the formal Lumina-native image benchmark and login-node Qwen3.7 judge.
 6. Append exact commands, job ids, GPU node, parse counts, output paths, blocker status, and commit hash to this file.
+
+---
+
+## 2026-06-19 (part 3): LoRA SFT smoke SUCCESS (Server AI)
+
+### Git
+- Branch: `feat/lumina-lora-smoke-20260619`
+- Base commit: `7679f462da947e11e6f106b0c146bd9e4a5071fd`
+
+### LoRA Training Result
+- **Status: SUCCESS** ✅
+- Job: 70779
+- Script: `scripts/training/run_lumina_lora_smoke.py`
+- Config: r=8, alpha=16, lr=1e-4, epochs=5, batch_size=1, image_size=512
+- Loss progression: epoch 0: 0.94 → epoch 4: 0.91 (converging)
+- Memory: fit in single 45GB GPU with LoRA (only ~1% trainable params)
+- Output: `outputs/stage2_lumina_native/sft_smoke/lora_checkpoint/`
+
+### Key enablers
+- LoRA (peft): reduced trainable params from 8B to ~8M
+- Lower resolution: 512x512 instead of 1024x1024
+- Used pre-tokenized images from previous data prep step
+
+### Next step
+- Load LoRA adapter and run JSON probe to check if parse_rate improved
