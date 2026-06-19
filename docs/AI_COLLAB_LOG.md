@@ -1493,3 +1493,30 @@ Next server action:
 - Direct `generate_text_understanding` with LoRA works ✅  
 - `LuminaNativeEngine.answer_image()` wrapper is incompatible with externally-set model (it calls `_load()` which reloads base model)
 - Need to either: fix `answer_image()` to accept pre-loaded model, or use `generate_text_understanding` directly in probe
+
+---
+
+## 2026-06-19 (part 6): Direct LoRA probe v2 - JSON output confirmed! (Server AI)
+
+### Result
+- **call_error_count: 0** ✅ (all 8 samples generated text)
+- malformed_count: 8 (all JSON-like but invalid)
+- parse_rate: 0.0
+
+### Key finding
+- LoRA model IS outputting JSON format! Example:
+  `{"has_error": false, "summary": "a green bench": false, ...}`
+- This is a HUGE improvement over base model which output natural language
+- JSON structure is present but malformed (duplicate keys, missing commas)
+- The LoRA training successfully shifted output from descriptions → JSON
+
+### Comparison
+| Metric | Base Model | LoRA Model |
+|--------|-----------|------------|
+| call_error | 3/3 | 0/8 |
+| output type | natural language | JSON-like |
+| has_error key | absent | present |
+
+### Next step
+- More training epochs or lower LR for cleaner JSON
+- Or add JSON repair step for Lumina outputs
