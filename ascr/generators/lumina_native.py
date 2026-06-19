@@ -211,9 +211,21 @@ class LuminaNativeEngine:
 
         # --- generate text ------------------------------------------------
         gen_len = int(max_new_tokens)
+        block_len = self.answer_block_length
+        # ensure gen_len is divisible by block_len
+        gen_len = (gen_len // block_len) * block_len
+        if gen_len < block_len:
+            gen_len = block_len
+        num_blocks = gen_len // block_len
+        # ensure steps is divisible by num_blocks
+        steps = self.answer_steps
+        if steps % num_blocks != 0:
+            steps = (steps // num_blocks) * num_blocks
+            if steps < num_blocks:
+                steps = num_blocks
         out = generate_text_understanding(
             self._model, input_ids_t,
-            steps=self.answer_steps, gen_length=gen_len, block_length=self.answer_block_length,
+            steps=steps, gen_length=gen_len, block_length=block_len,
             temperature=self.answer_temperature, cfg_scale=self.answer_cfg_scale, remasking="low_confidence",
             code_start=code_start,
         )
