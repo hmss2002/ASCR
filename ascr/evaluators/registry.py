@@ -169,6 +169,7 @@ def build_evaluator(name, config):
         return LuminaNativeEvaluator(
             checkpoint_path=evaluator_config.get("checkpoint_path", generator_config.get("checkpoint_path", "models/lumina-dimoo")),
             repo_path=evaluator_config.get("repo_path", generator_config.get("repo_path")),
+            lora_path=evaluator_config.get("lora_path", generator_config.get("lora_path")),
             device=evaluator_config.get("device", generator_config.get("device", "cuda")),
             grid_size=int(config.get("coarse_grid_size", evaluator_config.get("grid_size", 4))),
             image_size=int(config.get("image_size", evaluator_config.get("image_size", generator_config.get("image_size", 1024)))),

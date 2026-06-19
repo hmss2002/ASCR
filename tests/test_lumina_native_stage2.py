@@ -9,7 +9,8 @@ from ascr.cli.lumina_native_json_probe import run_probe as run_lumina_json_probe
 from ascr.evaluators.lumina_native import LuminaNativeEvaluator
 from ascr.evaluators.lumina_native import attach_lumina_native_engine_if_available
 from ascr.generators.base import _write_mock_ppm
-from ascr.generators.lumina_native import LuminaNativeEngine
+from ascr.generators.lumina_native import LuminaNativeEngine, align_answer_generation_lengths
+from ascr.training.prepare_lumina_sft_data import convert_sft_examples
 from ascr.training.train_lumina_evaluator import prepare_sft_dataset
 
 
@@ -86,15 +87,26 @@ class LuminaNativeStage2Tests(unittest.TestCase):
 
     def test_answer_generation_settings_are_stored_without_load(self):
         engine = LuminaNativeEngine(
+            lora_path="outputs/stage2_lumina_native/lora_v2",
             answer_steps=7,
             answer_block_length=32,
             answer_temperature=0.25,
             answer_cfg_scale=1.5,
         )
+        self.assertEqual(engine.lora_path, "outputs/stage2_lumina_native/lora_v2")
         self.assertEqual(engine.answer_steps, 7)
         self.assertEqual(engine.answer_block_length, 32)
         self.assertEqual(engine.answer_temperature, 0.25)
         self.assertEqual(engine.answer_cfg_scale, 1.5)
+
+    def test_answer_generation_alignment_satisfies_lumina_blocks(self):
+        gen_len, block_len, steps = align_answer_generation_lengths(384, 128, 64)
+        self.assertEqual(gen_len, 384)
+        self.assertEqual(block_len, 128)
+        self.assertEqual(steps % (gen_len // block_len), 0)
+        gen_len, block_len, steps = align_answer_generation_lengths(10, 128, 1)
+        self.assertEqual(gen_len, 128)
+        self.assertEqual(steps, 1)
 
     def test_shared_lumina_engine_is_attached(self):
         engine = object()
@@ -116,6 +128,7 @@ class LuminaNativeStage2Tests(unittest.TestCase):
             args.prompt = ["a green bench and a blue bowl"]
             args.output_dir = str(Path(temp_dir) / "probe")
             args.checkpoint_path = "models/lumina-dimoo"
+            args.lora_path = "outputs/stage2_lumina_native/lora_v2"
             args.repo_path = None
             args.device = "cuda"
             args.image_size = 1024
@@ -130,6 +143,7 @@ class LuminaNativeStage2Tests(unittest.TestCase):
             summary = run_lumina_json_probe(args, engine=_ProbeEngine())
             self.assertEqual(summary["row_count"], 3)
             self.assertEqual(summary["parsed_count"], 1)
+            self.assertEqual(summary["lora_path"], "outputs/stage2_lumina_native/lora_v2")
             rows = [json.loads(line) for line in (Path(temp_dir) / "probe" / "probe_rows.jsonl").read_text(encoding="utf-8").splitlines()]
             self.assertIn("abstained_malformed_json", {row["status"] for row in rows})
 
@@ -205,6 +219,39 @@ class LuminaNativeStage2Tests(unittest.TestCase):
             rows = [json.loads(line) for line in (output / "sft_examples.jsonl").read_text(encoding="utf-8").splitlines()]
             self.assertIn("Return exactly one compact JSON object", rows[0]["input_text"])
             self.assertEqual(rows[0]["target_json"]["regions"][0]["cells"][0]["label"], "B2")
+
+    def test_convert_lumina_sft_data_skips_missing_images(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            image = root / "grid.ppm"
+            _write_mock_ppm(image, [[row + col for col in range(4)] for row in range(4)], image_size=32)
+            examples = root / "sft_examples.jsonl"
+            write_jsonl(examples, [
+                {
+                    "sample_id": "ok",
+                    "prompt": "a green bench",
+                    "image_path": str(image),
+                    "input_text": "Return exactly one compact JSON object.",
+                    "target_json": {"has_error": False, "summary": "ok", "regions": [], "correction_instruction": ""},
+                },
+                {
+                    "sample_id": "missing",
+                    "prompt": "missing image",
+                    "image_path": str(root / "missing.ppm"),
+                    "target_json": {"has_error": False, "summary": "ok", "regions": [], "correction_instruction": ""},
+                },
+            ])
+
+            def fake_tokenizer(path):
+                return {"input_ids": [1, 2, 3, 4], "height": 32, "width": 32}
+
+            manifest = convert_sft_examples(examples, root / "lumina_format", image_tokenizer=fake_tokenizer)
+            self.assertEqual(manifest["example_count"], 1)
+            self.assertEqual(manifest["skipped_count"], 1)
+            rows = [json.loads(line) for line in (root / "lumina_format" / "train.jsonl").read_text(encoding="utf-8").splitlines()]
+            self.assertEqual(rows[0]["sample_id"], "ok")
+            self.assertIn('"has_error":false', rows[0]["answer_text"])
+            self.assertNotIn("/grp01/", rows[0]["user_image"])
 
 
 if __name__ == "__main__":

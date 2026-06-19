@@ -23,6 +23,7 @@ class LuminaAdapter(GeneratorAdapter):
         self,
         checkpoint_path=None,
         repo_path=None,
+        lora_path=None,
         device="cuda",
         token_grid_size=64,
         image_size=1024,
@@ -37,6 +38,7 @@ class LuminaAdapter(GeneratorAdapter):
     ):
         self.checkpoint_path = checkpoint_path or "models/lumina-dimoo"
         self.repo_path = repo_path
+        self.lora_path = lora_path
         self.device = device
         self.token_grid_size = int(token_grid_size)
         self.image_size = int(image_size)
@@ -55,6 +57,7 @@ class LuminaAdapter(GeneratorAdapter):
             self._engine = LuminaNativeEngine(
                 checkpoint_path=self.checkpoint_path,
                 repo_path=self.repo_path,
+                lora_path=self.lora_path,
                 device=self.device,
                 image_size=self.image_size,
                 token_grid_size=self.token_grid_size,

@@ -100,6 +100,7 @@ class LuminaNativeEvaluator:
         self,
         checkpoint_path=None,
         repo_path=None,
+        lora_path=None,
         device="cuda",
         grid_size=4,
         image_size=1024,
@@ -123,6 +124,7 @@ class LuminaNativeEvaluator:
         self.engine = engine
         self.checkpoint_path = checkpoint_path
         self.repo_path = repo_path
+        self.lora_path = lora_path
         self.device = device
         self.image_size = int(image_size)
 
@@ -133,6 +135,7 @@ class LuminaNativeEvaluator:
             self.engine = LuminaNativeEngine(
                 checkpoint_path=self.checkpoint_path or "models/lumina-dimoo",
                 repo_path=self.repo_path,
+                lora_path=self.lora_path,
                 device=self.device,
                 image_size=self.image_size,
                 answer_steps=self.answer_steps,
@@ -185,6 +188,7 @@ class LuminaNativeEvaluator:
                 "answer_block_length": self.answer_block_length,
                 "answer_temperature": self.answer_temperature,
                 "answer_cfg_scale": self.answer_cfg_scale,
+                "lora_path": self.lora_path,
             }
             return parsed
         except Exception as exc:

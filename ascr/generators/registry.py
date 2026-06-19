@@ -16,6 +16,7 @@ def build_generator(name, config):
         return LuminaAdapter(
             repo_path=generator_config.get('repo_path'),
             checkpoint_path=generator_config.get('checkpoint_path'),
+            lora_path=generator_config.get('lora_path'),
             device=generator_config.get('device', 'cuda'),
             token_grid_size=int(config.get('token_grid_size', generator_config.get('token_grid_size', 64))),
             image_size=int(config.get('image_size', generator_config.get('image_size', 1024))),

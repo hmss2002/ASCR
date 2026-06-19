@@ -87,6 +87,7 @@ def run_probe(args, engine=None):
         engine = LuminaNativeEngine(
             checkpoint_path=args.checkpoint_path,
             repo_path=args.repo_path,
+            lora_path=args.lora_path,
             device=args.device,
             image_size=args.image_size,
             answer_steps=args.answer_steps,
@@ -152,6 +153,7 @@ def run_probe(args, engine=None):
         "answer_block_length": int(args.answer_block_length),
         "answer_temperature": float(args.answer_temperature),
         "answer_cfg_scale": float(args.answer_cfg_scale),
+        "lora_path": str(args.lora_path) if args.lora_path else None,
     }
     write_jsonl(output_dir / "probe_rows.jsonl", rows)
     write_json(output_dir / "summary.json", summary)
@@ -165,6 +167,7 @@ def build_parser():
     parser.add_argument("--output-dir", default="outputs/stage2_lumina_native/json_probe")
     parser.add_argument("--repo-path", default=None)
     parser.add_argument("--checkpoint-path", default="models/lumina-dimoo")
+    parser.add_argument("--lora-path", default=None, help="Optional PEFT LoRA adapter path.")
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--image-size", type=int, default=1024)
     parser.add_argument("--grid-size", type=int, default=4)

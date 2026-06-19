@@ -1428,3 +1428,47 @@ Next server action:
 4. If JSON probe parse rate is poor, implement LoRA/SFT smoke before any formal image benchmark.
 5. If JSON probe or SFT smoke yields valid `SemanticEvaluation` JSON, run the formal Lumina-native image benchmark and login-node Qwen3.7 judge.
 6. Append exact commands, job ids, GPU node, parse counts, output paths, blocker status, and commit hash to this file.
+
+---
+
+## 2026-06-19: Lumina LoRA server branch review and mainline integration (local Codex)
+
+Context:
+- Reviewed server branches:
+  - `feat/lumina-native-json-sft-server`
+  - `feat/lumina-sft-smoke-20260619`
+  - `feat/lumina-lora-smoke-20260619`
+- These branches were not merged directly because they were non-linear and
+  included one-off debug scripts, a hard-coded server path, and small formatting
+  issues.
+
+Accepted server findings:
+- Prompt-only Lumina-native JSON compliance failed: base model produced
+  malformed or natural-language output with `parse_rate=0.0`.
+- Full-parameter single-GPU SFT is not feasible on the observed 45GB GPU because
+  the model forward/backward path OOMs.
+- LoRA SFT is feasible on a single 45GB GPU.
+- The first LoRA smoke shifted output from natural language toward JSON-like
+  text, but parseable `SemanticEvaluation` JSON is not solved yet.
+
+Mainline changes made locally:
+- Integrated the `answer_image` generation length/step alignment bugfix.
+- Added lazy `lora_path` support to `LuminaNativeEngine` and
+  `LuminaNativeEvaluator` so PEFT adapters can be loaded without manually
+  patching private engine fields.
+- Added `peft` to Lumina dependencies.
+- Added a mainline SFT data converter:
+  `ascr.training.prepare_lumina_sft_data`.
+- Added a mainline single-GPU LoRA smoke trainer:
+  `ascr.training.train_lumina_lora_smoke`.
+- Extended `ascr.cli.lumina_native_json_probe` with `--lora-path`.
+- Added `docs/SERVER_AI_TASK_LUMINA_LORA_JSON_V2.md` for the next server pass.
+
+Next server action:
+1. Pull latest `main` and create branch `feat/lumina-lora-json-v2-server`.
+2. Convert the existing 16 SFT examples into Lumina-format data.
+3. Train LoRA v2 with lower LR / more epochs.
+4. Probe with `--lora-path` through the normal `LuminaNativeEngine` path.
+5. Report parse rate, raw previews, parser errors, loss curve, and memory use.
+6. Do not run formal benchmark unless output parses as valid
+   `SemanticEvaluation` JSON.

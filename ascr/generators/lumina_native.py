@@ -31,11 +31,28 @@ CODEBOOK_SIZE = 8192
 VAE_SCALE = 16
 
 
+def align_answer_generation_lengths(max_new_tokens, block_length, steps):
+    """Return Lumina text-generation lengths that satisfy block constraints."""
+    block_len = max(1, int(block_length))
+    gen_len = max(1, int(max_new_tokens))
+    gen_len = (gen_len // block_len) * block_len
+    if gen_len < block_len:
+        gen_len = block_len
+    num_blocks = max(1, gen_len // block_len)
+    aligned_steps = max(1, int(steps))
+    if aligned_steps % num_blocks != 0:
+        aligned_steps = (aligned_steps // num_blocks) * num_blocks
+        if aligned_steps < num_blocks:
+            aligned_steps = num_blocks
+    return gen_len, block_len, aligned_steps
+
+
 class LuminaNativeEngine:
     def __init__(
         self,
         checkpoint_path="models/lumina-dimoo",
         repo_path=None,
+        lora_path=None,
         device="cuda",
         image_size=1024,
         token_grid_size=64,
@@ -49,6 +66,7 @@ class LuminaNativeEngine:
     ):
         self.checkpoint_path = str(checkpoint_path)
         self.repo_path = str(repo_path or os.environ.get("LUMINA_REPO", "third_party/Lumina-DiMOO"))
+        self.lora_path = str(lora_path) if lora_path else None
         self.device = device
         self.image_size = int(image_size)
         self.token_grid_size = int(token_grid_size)
@@ -93,6 +111,10 @@ class LuminaNativeEngine:
         self._model = LLaDAForMultiModalGeneration.from_pretrained(
             self.checkpoint_path, torch_dtype=self._torch.bfloat16, device_map="auto",
         )
+        if self.lora_path:
+            from peft import PeftModel
+
+            self._model = PeftModel.from_pretrained(self._model, self.lora_path)
         self._model.eval()
         self._vqvae = VQModel.from_pretrained(self.checkpoint_path, subfolder="vqvae").to(self.device)
 
@@ -210,10 +232,14 @@ class LuminaNativeEngine:
         input_ids_t = self._torch.tensor(input_token, device=device).unsqueeze(0)
 
         # --- generate text ------------------------------------------------
-        gen_len = int(max_new_tokens)
+        gen_len, block_len, steps = align_answer_generation_lengths(
+            max_new_tokens,
+            self.answer_block_length,
+            self.answer_steps,
+        )
         out = generate_text_understanding(
             self._model, input_ids_t,
-            steps=self.answer_steps, gen_length=gen_len, block_length=self.answer_block_length,
+            steps=steps, gen_length=gen_len, block_length=block_len,
             temperature=self.answer_temperature, cfg_scale=self.answer_cfg_scale, remasking="low_confidence",
             code_start=code_start,
         )
