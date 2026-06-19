@@ -124,8 +124,13 @@ def train(args):
     dataset = ASCR_SFT_Dataset(args.data_jsonl, tokenizer, vqvae, max_seq_len=args.max_seq_len)
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
 
-    # Optimizer
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.wd)
+    # Optimizer - use SGD instead of AdamW to save memory (no momentum buffers)
+    # Only optimize trainable params
+    optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.wd)
+    
+    # Enable gradient checkpointing to save memory
+    if hasattr(model, 'gradient_checkpointing_enable'):
+        model.gradient_checkpointing_enable()
 
     # Training loop
     print(f"Training {len(dataset)} examples, {args.epochs} epochs...")
