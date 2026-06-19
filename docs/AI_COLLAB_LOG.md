@@ -1477,3 +1477,19 @@ Next server action:
 - Try inference WITHOUT merge_and_unload (use PeftModel directly)
 - Or re-train at 1024x1024 resolution
 - Or use the LoRA adapter only on the language head, not attention layers
+
+---
+
+## 2026-06-19 (part 5): LoRA direct answer debug (Server AI)
+
+### Key finding
+- LoRA model (PeftModel, no merge) CAN generate text via `generate_text_understanding`
+- Output: "The image shows a set of green plastic chairs with a blue backrest..."
+- The probe script's `call_native_answer` path returns empty because the manually-built `LuminaNativeEngine` attributes don't match what `answer_image()` expects internally
+- **Root cause**: probe script manually sets `engine._model`, `engine._tokenizer`, `engine._lumina` etc., but `answer_image()` calls `self._load()` which re-initializes these from scratch, overwriting the LoRA model
+
+### Conclusion
+- LoRA training is functional ✅
+- Direct `generate_text_understanding` with LoRA works ✅  
+- `LuminaNativeEngine.answer_image()` wrapper is incompatible with externally-set model (it calls `_load()` which reloads base model)
+- Need to either: fix `answer_image()` to accept pre-loaded model, or use `generate_text_understanding` directly in probe
