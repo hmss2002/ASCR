@@ -135,7 +135,7 @@ def train(args):
             input_ids = input_ids.to(device)
             labels = labels.to(device)
 
-            outputs = model(input_ids=input_ids, labels=labels)
+            outputs = model(input_ids=input_ids.tolist(), labels=labels.tolist())
             loss = outputs.loss
 
             optimizer.zero_grad()
