@@ -1428,3 +1428,92 @@ Next server action:
 4. If JSON probe parse rate is poor, implement LoRA/SFT smoke before any formal image benchmark.
 5. If JSON probe or SFT smoke yields valid `SemanticEvaluation` JSON, run the formal Lumina-native image benchmark and login-node Qwen3.7 judge.
 6. Append exact commands, job ids, GPU node, parse counts, output paths, blocker status, and commit hash to this file.
+
+---
+
+## 2026-06-19: Lumina-native JSON/SFT server pass (Server AI)
+
+### Git
+- Branch: `feat/lumina-native-json-sft-server`
+- Base commit: `7679f462da947e11e6f106b0c146bd9e4a5071fd`
+- Final commit: `361339c` (fix: align answer_image gen_len/steps with block_length constraints)
+
+### Environment
+- Host/login node: hpcr4300a
+- GPU node(s): SPGL-1-12 (jobs 70760, 70761, 70762)
+- Python env: `.venv-lumina`
+- LUMINA_REPO: `third_party/Lumina-DiMOO`
+- LUMINA_MODEL_PATH: `models/lumina-dimoo`
+- HF_HOME: `.hf_home`
+- Offline/cache env: HF_HUB_OFFLINE=1, TRANSFORMERS_OFFLINE=1
+- API env names set/unset, without values: (none used on GPU nodes)
+
+### Commands
+
+**Step A - Audit:**
+- command: `sbatch ... jobs/training/lumina_native_evaluator_audit.sbatch --load-model` (job 70760)
+- Result: model_loaded=true, wrapper_supports_native_eval=true, wrapper_supported_methods=["answer_image"]
+- Output path: `outputs/stage2_lumina_native/audit/audit.json`
+
+**Step B - JSON Probe (first attempt, job 70761):**
+- command: `sbatch ... run_lumina_native_json_probe.sh`
+- Result: call_error_count=3, parse_rate=0.0
+- Root cause: AssertionError - gen_length=384, block_length=128, steps=64 → 64 % (384/128) = 64 % 3 ≠ 0
+- Fix: added parameter alignment in answer_image() to ensure gen_len % block_len == 0 and steps % num_blocks == 0
+
+**Step B - JSON Probe (second attempt, job 70762):**
+- command: `sbatch ... run_lumina_native_json_probe.sh` (after fix)
+- Result: call_error_count=0, malformed_count=3, parse_rate=0.0
+- Lumina DOES attempt JSON output (```json ...), but format is invalid:
+  - `"has_error":,` (missing value)
+  - `"regions"` structure incorrect (flat cells instead of grouped)
+- Output path: `outputs/stage2_lumina_native/json_probe/summary.json`
+
+**Step C - SFT Prep:**
+- command: `DATASET=... IMAGE_ROOT=... OUTPUT_DIR=... LIMIT=16 bash scripts/training/prepare_lumina_native_sft.sh`
+- Result: example_count=16, missing_images=0
+- Output paths: `outputs/stage2_lumina_native/sft_smoke/sft_examples.jsonl`, `manifest.json`
+
+### Audit Result
+- model_loaded: true
+- wrapper_supported_methods: ["answer_image"]
+- smoke status: not run (skipped for time; previous run showed abstain due to JSON parsing)
+- raw output type: natural language / malformed JSON
+
+### JSON Probe Result
+- row_count: 3
+- parsed_count: 0
+- malformed_count: 3
+- call_error_count: 0 (after fix)
+- parse_rate: 0.0
+- best prompt variant: all 3 variants produced malformed JSON
+- answer settings: steps=64, block_length=128, temperature=0.0, cfg_scale=0.0
+
+### SFT Prep Result
+- example_count: 16
+- missing_images: 0
+- output paths: `outputs/stage2_lumina_native/sft_smoke/`
+
+### SFT/LoRA Feasibility
+- feasible now: YES - Lumina-DiMOO has complete SFT infrastructure
+- files inspected:
+  - `third_party/Lumina-DiMOO/train/train.py` - SFT training script with masked token prediction
+  - `third_party/Lumina-DiMOO/train/train.sh` - Slurm launcher (8 nodes × 8 GPUs)
+  - `third_party/Lumina-DiMOO/xllmx/solvers/finetune/finetune.py` - FinetuneSolverBase
+  - `third_party/Lumina-DiMOO/xllmx/data/dataset.py` - FinetuneConversationDataset
+  - `third_party/Lumina-DiMOO/xllmx/data/item_processor.py` - ItemProcessorBase
+- blocker, if any: Need to adapt ASCR SFT data format to Lumina's expected format; need data config YAML
+- next code change needed: Create data config for ASCR SFT examples; write minimal SFT smoke script
+
+### Benchmark/Judge Result
+- ran benchmark: NO
+- reason if not run: JSON probe parse_rate = 0.0 → prompt-only JSON compliance not viable
+- Decision: proceed to SFT/LoRA route per decision rule
+
+### Files committed
+- docs: `docs/AI_COLLAB_LOG.md`
+- code: `ascr/generators/lumina_native.py` (parameter alignment fix)
+- small JSON outputs: `outputs/stage2_lumina_native/sft_smoke/manifest.json`
+
+### Next action for local Codex
+- Implement minimal Lumina-native SFT smoke: convert sft_examples.jsonl to Lumina training format, create data config, run single-GPU SFT smoke to produce an adapter that outputs valid SemanticEvaluation JSON
