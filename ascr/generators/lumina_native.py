@@ -167,3 +167,47 @@ class LuminaNativeEngine:
             Path(output_path).parent.mkdir(parents=True, exist_ok=True)
             img.convert("RGB").save(str(output_path))
         return img
+
+
+    # ----------------------------------------------------------- mmu / answer
+    def answer_image(self, question, image_path, max_new_tokens=384):
+        """Image-conditioned text generation via Lumina native MMU pipeline.
+
+        Uses the official Lumina-DiMOO generate_text_understanding path:
+        encode image -> build MMU prompt -> masked diffusion text generation.
+        """
+        self._load()
+        iu = self._lumina["image_utils"]
+        pu = self._lumina["prompt_utils"]
+        from generators.text_understanding_generator import generate_text_understanding
+
+        # --- encode image -------------------------------------------------
+        from PIL import Image
+        img = Image.open(str(image_path)).convert("RGB")
+        crop_size_list = iu.generate_crop_size_list((self.image_size // 32) ** 2, 32)
+        img = iu.var_center_crop(img, crop_size_list=crop_size_list)
+        iw, ih = img.size
+        vae_scale = 2 ** (len(self._vqvae.config.block_out_channels) - 1)
+        seq_len, newline_every, token_grid_h, token_grid_w = iu.calculate_vq_params(ih, iw, vae_scale)
+        img_tokens = iu.encode_img_with_breaks(img, vqvae=self._vqvae)
+        img_tokens = iu.add_break_line(img_tokens, token_grid_h, token_grid_w, new_number=NEWLINE_TOKEN_ID)
+
+        # --- build prompt -------------------------------------------------
+        input_prompt = pu.generate_multimodal_understanding_prompt(question)
+        input_ids = self._tokenizer(input_prompt)["input_ids"]
+        input_token = input_ids[:-1] + img_tokens + input_ids[-1:]
+        code_start = len(input_token) + 1
+        input_token = input_token + [ANSWER_START] + [MASK_TOKEN_ID] * int(max_new_tokens) + [ANSWER_END]
+        device = next(self._model.parameters()).device
+        input_ids_t = self._torch.tensor(input_token, device=device).unsqueeze(0)
+
+        # --- generate text ------------------------------------------------
+        out = generate_text_understanding(
+            self._model, input_ids_t,
+            steps=128, gen_length=int(max_new_tokens), block_length=min(256, int(max_new_tokens)),
+            temperature=0.0, cfg_scale=0.0, remasking="low_confidence",
+            code_start=code_start,
+        )
+        text = self._tokenizer.batch_decode(out[:, code_start:-1], skip_special_tokens=True)[0]
+        return text.strip()
+
