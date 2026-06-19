@@ -1337,3 +1337,54 @@ Server next action:
 5. If the audit reports no native evaluator hook, stop and report the blocker.
    Do not run formal Stage-2 image benchmarks with the external shallow
    localizer as the main student.
+
+---
+
+## 2026-06-19: Lumina-native evaluator feasibility audit (Server AI)
+
+### Git commit
+- Branch: `feat/lumina-native-audit-20260619`
+- Base: `ee9048fac4352a209d1ec9caf390b1bcf896ae0c` (main)
+- Commits:
+  - `18519d6` feat: add answer_image MMU hook to LuminaNativeEngine
+  - `b4d8828` fix: reduce answer_image steps and fix block_length for MMU inference
+
+### Environment
+- `.venv-lumina` (existing, activated)
+- `LUMINA_REPO=third_party/Lumina-DiMOO`
+- `LUMINA_MODEL_PATH=models/lumina-dimoo`
+- `HF_HOME=.hf_home`
+- `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`
+
+### What was done
+1. Synced code from GitHub main, created branch `feat/lumina-native-audit-20260619`
+2. Discovered Lumina-DiMOO has official MMU pipeline at `inference/inference_mmu.py` using `generate_text_understanding`
+3. Implemented `answer_image()` method in `LuminaNativeEngine` that:
+   - Encodes image via VQ-VAE
+   - Builds MMU prompt using `generate_multimodal_understanding_prompt`
+   - Calls `generate_text_understanding` for masked diffusion text generation
+4. Ran audit without model load: `wrapper_supports_native_eval: true`, `wrapper_supported_methods: ["answer_image"]`
+5. Ran GPU model load test (Slurm job 70754): `model_loaded: true`
+6. Ran direct `answer_image` test (Slurm job 70757): **SUCCESS** - returned detailed image description
+7. Submitted full evaluator smoke test (Slurm job 70759): running
+
+### Key findings
+- **`answer_image` hook: FOUND and WORKING** ✅
+- Lumina-DiMOO can read prompt + image and output text via native MMU pipeline
+- The `generate_text_understanding` function in `generators/text_understanding_generator.py` is the official image-conditioned text generation path
+- `answer_vq_tokens`: NOT YET implemented (can be added later if needed for token-level evaluation)
+
+### Blocker status
+- **No blocker.** The native evaluator hook (`answer_image`) is functional.
+- Evaluator smoke test (full SemanticEvaluation JSON output) is still running.
+
+### Output paths
+- Audit JSON: `outputs/stage2_lumina_native/audit/audit.json`
+- Slurm logs: `logs/ascr-lumina-native-audit-*.out`, `logs/debug-answer-image-*.out`
+
+### Next steps (for next AI)
+1. Check evaluator smoke test result (job 70759)
+2. If smoke passes: prepare SFT smoke data via `scripts/training/prepare_lumina_native_sft.sh`
+3. Design Stage-2 Lumina-native LoRA/DDP training
+4. Do NOT run formal before/after benchmark until evaluator smoke is confirmed
+
