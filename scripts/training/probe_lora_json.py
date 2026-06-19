@@ -35,8 +35,7 @@ def main():
         args.base_model, torch_dtype=torch.bfloat16, device_map="auto",
     )
     model = PeftModel.from_pretrained(model, args.lora_path)
-    model = model.merge_and_unload()
-    print("LoRA merged.")
+    print("LoRA loaded (no merge).")
 
     # Build engine with merged model
     engine = LuminaNativeEngine(
