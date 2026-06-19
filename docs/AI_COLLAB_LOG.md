@@ -1428,3 +1428,56 @@ Next server action:
 4. If JSON probe parse rate is poor, implement LoRA/SFT smoke before any formal image benchmark.
 5. If JSON probe or SFT smoke yields valid `SemanticEvaluation` JSON, run the formal Lumina-native image benchmark and login-node Qwen3.7 judge.
 6. Append exact commands, job ids, GPU node, parse counts, output paths, blocker status, and commit hash to this file.
+
+---
+
+## 2026-06-19 (part 2): Lumina-native SFT smoke attempt (Server AI)
+
+### Git
+- Branch: `feat/lumina-sft-smoke-20260619`
+- Base commit: `7679f462da947e11e6f106b0c146bd9e4a5071fd`
+- Final commit: `f619399`
+
+### What was done
+1. Analyzed Lumina-DiMOO training data format from `train/train.py`:
+   - Understanding Data: `user_image` (pickle) + `system_prompt` + `user_prompt` + `answer_text`
+   - Images must be pre-tokenized to VQ codes via VQ-VAE
+2. Created `scripts/training/prepare_lumina_sft_data.py` - converts ASCR SFT examples to Lumina format
+   - Successfully converted 16 examples (job 70763)
+3. Created `scripts/training/run_lumina_sft_smoke_simple.py` - minimal training script bypassing xllmx/fairscale/tensorboard
+4. Iteratively fixed multiple issues:
+   - PYTHONPATH unbound variable
+   - Tensor/list type mismatches in model forward
+   - Loss computation (model returns scalar loss, not logits)
+   - Gradient checkpointing not supported
+5. Final blocker: **CUDA OOM on single GPU**
+
+### Blocker details
+- Model: Lumina-DiMOO 8B (LLaDAForMultiModalGeneration)
+- GPU: 44.39 GiB total
+- Model forward alone uses ~43.7 GiB
+- Both AdamW and SGD optimizers OOM during first backward pass
+- Gradient checkpointing not supported by LLaDAForMultiModalGeneration
+- GPU nodes cannot access internet (pypi.org DNS fails) - cannot install tensorboard/fairscale for official training script
+
+### SFT/LoRA Feasibility Assessment
+- **Full-parameter SFT on single GPU: NOT FEASIBLE** (OOM)
+- **LoRA on single GPU: LIKELY FEASIBLE** (only ~1% trainable params)
+- **Multi-GPU full SFT: FEASIBLE** using official `train/train.sh` (8 nodes × 8 GPUs) but needs fairscale+tensorboard installed
+- Lumina-DiMOO has complete SFT infrastructure: `train/train.py`, `xllmx/solvers/finetune/`, `FinetuneConversationDataset`
+
+### Recommended next step
+- Implement LoRA fine-tuning using `peft` library on single GPU
+- Or install fairscale+tensorboard on .venv-lumina (requires internet on login node) and use official multi-GPU training
+
+### Files created
+- `scripts/training/prepare_lumina_sft_data.py` - data conversion
+- `scripts/training/run_lumina_sft_smoke.sh` - official training wrapper (blocked by deps)
+- `scripts/training/run_lumina_sft_smoke_simple.py` - simplified training (blocked by OOM)
+- `configs/stage2/lumina/sft_smoke_data.yaml` - data config
+- `outputs/stage2_lumina_native/sft_smoke/lumina_format/` - converted data (16 examples + image tokens)
+
+### Data artifacts ready for next AI
+- 16 SFT examples in Lumina format: `outputs/stage2_lumina_native/sft_smoke/lumina_format/train.jsonl`
+- Pre-tokenized images: `outputs/stage2_lumina_native/sft_smoke/lumina_format/image_tokens/`
+- Teacher targets: valid SemanticEvaluation JSON from Qwen3.7-plus
