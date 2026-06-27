@@ -1,5 +1,5 @@
 dataset: outputs/stage3_self_corrupt/datasets/locality_hard64_v1/dataset.jsonl
-output_dir: outputs/stage4_self_corrupt/mmu_lora_hard64/sft
+output_dir: outputs/stage4_self_corrupt/mmu_lora_hard64_dual/decoded_image/sft
 grid_size: 16
 max_selected_cells: 16
 eval_mode: holdout
@@ -7,5 +7,5 @@ train_ratio: 0.75
 seed: 0
 limit: null
 project_root: .
-input_mode: vq_tokens
+input_mode: decoded_image
 target_schema: localization_cells

@@ -57,6 +57,44 @@ Slurm equivalent:
 sbatch jobs/stage4/train_mmu_lora.sbatch
 ```
 
+Schema-aligned dual-path route after the 2026-06-28 local update:
+
+```bash
+# Full-capacity config: 1024 image tokens, full LoRA target module set.
+bash scripts/training/run_stage4_mmu_lora_dual.sh
+
+# L40S fallback matching the previous successful memory profile.
+PROFILE=l40s bash scripts/training/run_stage4_mmu_lora_dual.sh
+```
+
+`PROFILE=l40s` is a memory fallback for schema-learning and parse-rate recovery.
+It uses 512-token/image cropping and two LoRA target modules, so use the full
+1024 config whenever bf16 + gradient checkpointing fits for final localization
+metrics.
+
+Parallel Slurm array route:
+
+```bash
+PROFILE=l40s sbatch jobs/stage4/train_mmu_lora_dual.sbatch
+
+# After both array tasks finish, generate the comparison report.
+python -m ascr.cli.stage4_compare_input_modes \
+  --vq-tokens-probe outputs/stage4_self_corrupt/mmu_lora_hard64_dual/vq_tokens/probe_lora_l40s_eval/summary.json \
+  --decoded-image-probe outputs/stage4_self_corrupt/mmu_lora_hard64_dual/decoded_image/probe_lora_l40s_eval/summary.json \
+  --output-dir outputs/stage4_self_corrupt/mmu_lora_hard64_dual/input_mode_comparison_l40s
+```
+
+Important schema note:
+
+- Stage-4 self-corruption localization now trains the compact
+  `localization_cells` target schema:
+  `{"has_error": boolean, "corrupted_cells_4x4": [], "corrupted_cells_8x8": [], "corrupted_cells_16x16": []}`.
+- The probe and `LuminaNativeEvaluator` normalize this schema back into ASCR
+  `SemanticEvaluation` internally before scoring or selector/reopen use.
+- The probe still accepts legacy `SemanticEvaluation` outputs and also makes a
+  best-effort recovery from the old bad pattern where cell-like integers were
+  emitted in `correction_instruction`.
+
 Manual route:
 
 ```bash
@@ -106,6 +144,15 @@ outputs/stage4_self_corrupt/mmu_lora_hard64/
 
 Do not commit generated outputs or adapter weights.
 
+Dual-path outputs are written under:
+
+```text
+outputs/stage4_self_corrupt/mmu_lora_hard64_dual/
+  vq_tokens/{sft,lumina_sft,lora,lora_l40s,probe_zero_sample16,probe_lora_eval,probe_lora_l40s_eval}
+  decoded_image/{sft,lumina_sft,lora,lora_l40s,probe_zero_sample16,probe_lora_eval,probe_lora_l40s_eval}
+  input_mode_comparison*/{comparison.json,comparison.md}
+```
+
 ## Report Back In `docs/AI_COLLAB_LOG.md`
 
 Append a dated server entry with:
@@ -119,6 +166,9 @@ Append a dated server entry with:
 - whether direct VQ-token MMU input worked;
 - blockers, if any;
 - recommendation for the next Phase-4/Phase-5 step.
+- for the dual-path run, include both `vq_tokens` and `decoded_image` metrics,
+  the winner from `comparison.md`, and whether either path should become the
+  Phase-5 default.
 
 Commit only `docs/AI_COLLAB_LOG.md` and push the feature branch.
 

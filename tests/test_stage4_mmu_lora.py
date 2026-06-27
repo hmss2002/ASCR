@@ -9,7 +9,9 @@ from ascr.training.stage4_mmu_lora import (
     mmu_localization_prompt,
     prepare_mmu_sft_dataset,
     run_mmu_localization_probe,
+    safe_parse_mmu_localization_payload,
 )
+from ascr.cli.stage4_compare_input_modes import compare_probe_summaries, write_comparison
 
 
 def write_jsonl(path, rows):
@@ -27,23 +29,24 @@ class _TokenAnswerEngine:
     def answer_vq_tokens(self, question, vq_ids, max_new_tokens=384):
         return json.dumps({
             "has_error": True,
-            "summary": "self-corruption in A1",
-            "regions": [{
-                "cells": [{"label": "A1"}],
-                "reason": "localized artifact",
-                "confidence": 1.0,
-                "error_type": "self_corruption",
-                "action": "reopen",
-            }],
-            "correction_instruction": "Reopen A1.",
+            "corrupted_cells_2x2": ["A1"],
+        })
+
+
+class _ImageAnswerEngine:
+    def answer_image(self, question, image_path, max_new_tokens=384):
+        return json.dumps({
+            "has_error": True,
+            "corrupted_cells_2x2": ["A1"],
         })
 
 
 class Stage4MmuLoraTests(unittest.TestCase):
-    def test_prompt_requests_canonical_reopen_json(self):
+    def test_prompt_requests_localization_cell_json(self):
         prompt = mmu_localization_prompt("a red cube", grid_size=2, max_selected_cells=2)
         self.assertIn("Return exactly one compact JSON object", prompt)
-        self.assertIn('"action": "reopen"', prompt)
+        self.assertIn('"corrupted_cells_2x2": string[]', prompt)
+        self.assertIn("Do not put cell lists inside correction_instruction", prompt)
         self.assertIn("A1, A2, B1, B2", prompt)
 
     def test_prepare_mmu_sft_dataset_writes_vq_backed_canonical_targets(self):
@@ -74,8 +77,10 @@ class Stage4MmuLoraTests(unittest.TestCase):
         self.assertEqual(manifest["missing_vq_ids"], 0)
         self.assertFalse(rows[0]["image_exists"])
         self.assertTrue(rows[0]["vq_ids_exists"])
-        self.assertEqual(set(target), {"has_error", "summary", "regions", "correction_instruction"})
-        self.assertEqual(target["regions"][0]["cells"], [{"label": "A1"}])
+        self.assertEqual(rows[0]["input_mode"], "vq_tokens")
+        self.assertEqual(rows[0]["target_schema"], "localization_cells")
+        self.assertEqual(set(target), {"has_error", "corrupted_cells_2x2"})
+        self.assertEqual(target["corrupted_cells_2x2"], ["A1"])
 
     def test_lumina_sft_conversion_can_use_vq_tokens_without_image_tokenizer(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -109,6 +114,43 @@ class Stage4MmuLoraTests(unittest.TestCase):
         self.assertEqual(payload["height"], 64)
         self.assertEqual(payload["input_ids"][0], 126356)
 
+    def test_lumina_sft_conversion_honors_decoded_image_mode(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            tokens = root / "corrupt.json"
+            image = root / "corrupt.ppm"
+            write_tokens(tokens)
+            image.write_text("fake image placeholder", encoding="utf-8")
+            examples = root / "sft_examples.jsonl"
+            write_jsonl(examples, [{
+                "sample_id": "p0000_c000",
+                "input_mode": "decoded_image",
+                "vq_ids_path": str(tokens),
+                "image_path": str(image),
+                "image_size": 64,
+                "token_grid_size": 4,
+                "input_text": "Locate corruption.",
+                "target_json": {"has_error": True, "corrupted_cells_2x2": ["A1"]},
+            }])
+
+            def fake_tokenizer(path):
+                self.assertEqual(Path(path), image)
+                return {"input_ids": [1, 2, 3, 4], "height": 32, "width": 32}
+
+            manifest = convert_sft_examples(
+                examples,
+                root / "lumina_sft",
+                image_tokenizer=fake_tokenizer,
+                image_size=64,
+            )
+            train_rows = [json.loads(line) for line in Path(manifest["train_jsonl"]).read_text(encoding="utf-8").splitlines()]
+            with Path(train_rows[0]["user_image"]).open("rb") as handle:
+                payload = pickle.load(handle)
+        self.assertEqual(manifest["direct_vq_example_count"], 0)
+        self.assertEqual(manifest["image_encoded_example_count"], 1)
+        self.assertEqual(train_rows[0]["input_mode"], "decoded_image")
+        self.assertEqual(payload["input_ids"], [1, 2, 3, 4])
+
     def test_mmu_probe_scores_fake_token_answer(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -135,8 +177,74 @@ class Stage4MmuLoraTests(unittest.TestCase):
                 use_vq_tokens=True,
             )
         self.assertEqual(summary["parse_rate"], 1.0)
+        self.assertEqual(summary["input_mode"], "vq_tokens")
         self.assertEqual(summary["metrics"]["hit_any_rate"], 1.0)
         self.assertEqual(summary["metrics"]["mean_iou"], 1.0)
+
+    def test_mmu_probe_scores_fake_image_answer(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            image = root / "corrupt.ppm"
+            image.write_text("fake image placeholder", encoding="utf-8")
+            dataset = root / "dataset.jsonl"
+            write_jsonl(dataset, [{
+                "sample_id": "p0000_c000",
+                "prompt": "a red cube",
+                "corrupted_image": str(image),
+                "corruption_indices": [[0, 0]],
+                "corruption_type": "block_2x2_random_replace",
+                "token_grid_size": 4,
+                "image_size": 64,
+            }])
+            summary = run_mmu_localization_probe(
+                dataset,
+                root / "probe",
+                grid_size=2,
+                max_selected_cells=4,
+                top_k=1,
+                engine=_ImageAnswerEngine(),
+                input_mode="decoded_image",
+            )
+        self.assertEqual(summary["parse_rate"], 1.0)
+        self.assertEqual(summary["input_mode"], "decoded_image")
+        self.assertEqual(summary["metrics"]["hit_any_rate"], 1.0)
+
+    def test_parser_recovers_numeric_cells_from_correction_instruction(self):
+        evaluation, normalised = safe_parse_mmu_localization_payload(
+            {"has_error": True, "correction_instruction": "0, 1"},
+            grid_size=2,
+            max_selected_cells=4,
+        )
+        self.assertFalse(evaluation.should_abstain)
+        self.assertEqual([cell.to_label() for cell in evaluation.regions[0].cells], ["A1", "A2"])
+        self.assertEqual(normalised["regions"][0]["cells"], [{"label": "A1"}, {"label": "A2"}])
+
+    def test_compare_input_modes_writes_outputs(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            vq = root / "vq" / "summary.json"
+            image = root / "image" / "summary.json"
+            vq.parent.mkdir(parents=True)
+            image.parent.mkdir(parents=True)
+            vq.write_text(json.dumps({
+                "input_mode": "vq_tokens",
+                "parse_rate": 0.5,
+                "malformed_count": 1,
+                "call_error_count": 0,
+                "metrics": {"hit_any_rate": 0.25, "mean_iou": 0.1},
+            }), encoding="utf-8")
+            image.write_text(json.dumps({
+                "input_mode": "decoded_image",
+                "parse_rate": 0.75,
+                "malformed_count": 0,
+                "call_error_count": 0,
+                "metrics": {"hit_any_rate": 0.5, "mean_iou": 0.2},
+            }), encoding="utf-8")
+            comparison = compare_probe_summaries([vq, image])
+            outputs = write_comparison(root / "compare", comparison)
+            self.assertEqual(comparison["metrics"][1]["winner"], "decoded_image")
+            self.assertTrue(Path(outputs["comparison_json"]).exists())
+            self.assertTrue(Path(outputs["comparison_md"]).exists())
 
 
 if __name__ == "__main__":

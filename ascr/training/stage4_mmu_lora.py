@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import random
+import re
+import time
 
 from ascr.core.schemas import GridCell, safe_parse_semantic_evaluation
 from ascr.distill.teacher import extract_json_object
@@ -23,6 +25,51 @@ from ascr.training.stage3_selectors import (
 
 SFT_ROW_SCHEMA = "ascr.stage4.mmu_lora_sft.row.v1"
 PROBE_ROW_SCHEMA = "ascr.stage4.mmu_localization_probe.row.v1"
+INPUT_MODE_VQ_TOKENS = "vq_tokens"
+INPUT_MODE_DECODED_IMAGE = "decoded_image"
+INPUT_MODE_BOTH = "both"
+TARGET_SCHEMA_SEMANTIC_EVALUATION = "semantic_evaluation"
+TARGET_SCHEMA_LOCALIZATION_CELLS = "localization_cells"
+
+
+def normalise_input_mode(value, allow_both=False):
+    mode = str(value or INPUT_MODE_VQ_TOKENS).strip().lower().replace("-", "_")
+    aliases = {
+        "vq": INPUT_MODE_VQ_TOKENS,
+        "tokens": INPUT_MODE_VQ_TOKENS,
+        "vq_token": INPUT_MODE_VQ_TOKENS,
+        "vq_tokens": INPUT_MODE_VQ_TOKENS,
+        "image": INPUT_MODE_DECODED_IMAGE,
+        "decoded": INPUT_MODE_DECODED_IMAGE,
+        "decoded_image": INPUT_MODE_DECODED_IMAGE,
+        "rgb": INPUT_MODE_DECODED_IMAGE,
+        "both": INPUT_MODE_BOTH,
+    }
+    mode = aliases.get(mode, mode)
+    allowed = {INPUT_MODE_VQ_TOKENS, INPUT_MODE_DECODED_IMAGE}
+    if allow_both:
+        allowed.add(INPUT_MODE_BOTH)
+    if mode not in allowed:
+        raise ValueError(f"Unsupported Stage-4 input_mode: {value!r}")
+    return mode
+
+
+def normalise_target_schema(value):
+    schema = str(value or TARGET_SCHEMA_LOCALIZATION_CELLS).strip().lower().replace("-", "_")
+    aliases = {
+        "semantic": TARGET_SCHEMA_SEMANTIC_EVALUATION,
+        "semantic_evaluation": TARGET_SCHEMA_SEMANTIC_EVALUATION,
+        "canonical": TARGET_SCHEMA_SEMANTIC_EVALUATION,
+        "canonical_semantic_evaluation": TARGET_SCHEMA_SEMANTIC_EVALUATION,
+        "localization": TARGET_SCHEMA_LOCALIZATION_CELLS,
+        "localization_cells": TARGET_SCHEMA_LOCALIZATION_CELLS,
+        "cell_labels": TARGET_SCHEMA_LOCALIZATION_CELLS,
+        "corrupted_cells": TARGET_SCHEMA_LOCALIZATION_CELLS,
+    }
+    schema = aliases.get(schema, schema)
+    if schema not in {TARGET_SCHEMA_SEMANTIC_EVALUATION, TARGET_SCHEMA_LOCALIZATION_CELLS}:
+        raise ValueError(f"Unsupported Stage-4 target_schema: {value!r}")
+    return schema
 
 
 def created_at_utc():
@@ -33,8 +80,43 @@ def _cell_labels(grid_size):
     return [GridCell(row, col).to_label() for row in range(int(grid_size)) for col in range(int(grid_size))]
 
 
-def mmu_localization_prompt(prompt, grid_size=16, max_selected_cells=16):
+def _target_grid_sizes(primary_grid_size):
+    primary_grid_size = int(primary_grid_size)
+    standard = [4, 8, 16]
+    if primary_grid_size in standard:
+        return [size for size in standard if size <= primary_grid_size]
+    return [primary_grid_size]
+
+
+def mmu_localization_prompt(
+    prompt,
+    grid_size=16,
+    max_selected_cells=16,
+    target_schema=TARGET_SCHEMA_LOCALIZATION_CELLS,
+):
+    target_schema = normalise_target_schema(target_schema)
     cells = ", ".join(_cell_labels(grid_size))
+    if target_schema == TARGET_SCHEMA_LOCALIZATION_CELLS:
+        schema_keys = [
+            f'"corrupted_cells_{size}x{size}": string[]'
+            for size in _target_grid_sizes(grid_size)
+        ]
+        return (
+            "You are the ASCR native Lumina-MMU corruption localizer.\n"
+            "The input image is a generated image whose internal VQ image tokens may "
+            "have been artificially corrupted in a small local region.\n"
+            "Use the text prompt and the image evidence to identify corrupted grid cells.\n"
+            "Return exactly one compact JSON object. No markdown. No analysis.\n"
+            "Use exact key names and put only grid-cell labels in the arrays.\n"
+            "Do not put cell lists inside correction_instruction.\n"
+            "Schema: {\"has_error\": boolean, "
+            + ", ".join(schema_keys)
+            + "}\n"
+            f"Allowed {int(grid_size)}x{int(grid_size)} grid cells: {cells}.\n"
+            f"Use at most {int(max_selected_cells)} selected cells for the {int(grid_size)}x{int(grid_size)} grid.\n"
+            "If no corrupted region is visible, output has_error=false and all corrupted_cells arrays as [].\n"
+            f"Original prompt: {prompt}"
+        )
     return (
         "You are the ASCR native Lumina-MMU corruption localizer.\n"
         "The input image is a generated image whose internal VQ image tokens may "
@@ -52,7 +134,29 @@ def mmu_localization_prompt(prompt, grid_size=16, max_selected_cells=16):
     )
 
 
-def repair_target_payload(row, grid_size=16, max_selected_cells=16):
+def localization_target_payload(row, grid_size=16, max_selected_cells=16):
+    payload = {"has_error": False}
+    for size in _target_grid_sizes(grid_size):
+        labels = target_cells(row, size)[: int(max_selected_cells)]
+        payload[f"corrupted_cells_{size}x{size}"] = labels
+        if labels:
+            payload["has_error"] = True
+    return payload
+
+
+def repair_target_payload(
+    row,
+    grid_size=16,
+    max_selected_cells=16,
+    target_schema=TARGET_SCHEMA_SEMANTIC_EVALUATION,
+):
+    target_schema = normalise_target_schema(target_schema)
+    if target_schema == TARGET_SCHEMA_LOCALIZATION_CELLS:
+        return localization_target_payload(
+            row,
+            grid_size=grid_size,
+            max_selected_cells=max_selected_cells,
+        )
     labels = target_cells(row, grid_size)
     labels = labels[: int(max_selected_cells)]
     cells = [{"label": label} for label in labels]
@@ -106,15 +210,34 @@ def _normalised_path(raw_path, project_root=None):
     return str(resolved), resolved.exists()
 
 
-def sft_example_from_row(row, grid_size=16, max_selected_cells=16, project_root=None, split=None):
+def sft_example_from_row(
+    row,
+    grid_size=16,
+    max_selected_cells=16,
+    project_root=None,
+    split=None,
+    input_mode=INPUT_MODE_VQ_TOKENS,
+    target_schema=TARGET_SCHEMA_LOCALIZATION_CELLS,
+):
+    input_mode = normalise_input_mode(input_mode)
+    target_schema = normalise_target_schema(target_schema)
     image_path, image_exists = _normalised_path(row.get("corrupted_image"), project_root=project_root)
     vq_ids_path, vq_ids_exists = _normalised_path(row.get("corrupted_vq_ids_path"), project_root=project_root)
-    target = repair_target_payload(row, grid_size=grid_size, max_selected_cells=max_selected_cells)
+    target = repair_target_payload(
+        row,
+        grid_size=grid_size,
+        max_selected_cells=max_selected_cells,
+        target_schema=target_schema,
+    )
     full_targets = target_cells(row, grid_size)
+    sample_id = row.get("sample_id")
     return {
         "schema_version": SFT_ROW_SCHEMA,
-        "sample_id": row.get("sample_id"),
+        "sample_id": sample_id,
+        "example_id": f"{sample_id}:{input_mode}" if sample_id is not None else input_mode,
         "split": split,
+        "input_mode": input_mode,
+        "target_schema": target_schema,
         "prompt": row.get("prompt", ""),
         "image_path": image_path,
         "image_exists": bool(image_exists),
@@ -124,6 +247,7 @@ def sft_example_from_row(row, grid_size=16, max_selected_cells=16, project_root=
             row.get("prompt", ""),
             grid_size=grid_size,
             max_selected_cells=max_selected_cells,
+            target_schema=target_schema,
         ),
         "target_json": target,
         "target_text": json.dumps(target, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
@@ -147,7 +271,12 @@ def prepare_mmu_sft_dataset(
     eval_mode="holdout",
     limit=None,
     project_root=None,
+    input_mode=INPUT_MODE_VQ_TOKENS,
+    target_schema=TARGET_SCHEMA_LOCALIZATION_CELLS,
 ):
+    input_mode = normalise_input_mode(input_mode, allow_both=True)
+    target_schema = normalise_target_schema(target_schema)
+    input_modes = [INPUT_MODE_VQ_TOKENS, INPUT_MODE_DECODED_IMAGE] if input_mode == INPUT_MODE_BOTH else [input_mode]
     rows = read_jsonl(dataset)
     if limit is not None:
         rows = rows[: int(limit)]
@@ -158,18 +287,38 @@ def prepare_mmu_sft_dataset(
     eval_set = set(eval_indices)
     examples = []
     for index, row in enumerate(rows):
-        split = "train" if index in train_set else "eval" if index in eval_set else "unused"
-        examples.append(
-            sft_example_from_row(
-                row,
-                grid_size=grid_size,
-                max_selected_cells=max_selected_cells,
-                project_root=project_root,
-                split=split,
+        if index in train_set and index in eval_set:
+            split = "train_eval"
+        elif index in train_set:
+            split = "train"
+        elif index in eval_set:
+            split = "eval"
+        else:
+            split = "unused"
+        for mode in input_modes:
+            examples.append(
+                sft_example_from_row(
+                    row,
+                    grid_size=grid_size,
+                    max_selected_cells=max_selected_cells,
+                    project_root=project_root,
+                    split=split,
+                    input_mode=mode,
+                    target_schema=target_schema,
+                )
             )
-        )
-    train_examples = [examples[index] for index in train_indices]
-    eval_examples = [examples[index] for index in eval_indices]
+    train_ids = {str(rows[index].get("sample_id")) for index in train_indices}
+    eval_ids = {str(rows[index].get("sample_id")) for index in eval_indices}
+    train_examples = [
+        example
+        for example in examples
+        if str(example.get("sample_id")) in train_ids and example.get("split") in {"train", "train_eval"}
+    ]
+    eval_examples = [
+        example
+        for example in examples
+        if str(example.get("sample_id")) in eval_ids and example.get("split") in {"eval", "train_eval"}
+    ]
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     sft_path = output_dir / "sft_examples.jsonl"
@@ -186,30 +335,61 @@ def prepare_mmu_sft_dataset(
         "train_ratio": float(train_ratio),
         "seed": int(seed),
         "row_count": len(rows),
+        "input_mode": input_mode,
+        "input_modes": input_modes,
+        "target_schema": target_schema,
         "train_indices": train_indices,
         "eval_indices": eval_indices,
-        "train_sample_ids": [row.get("sample_id") for row in train_examples],
-        "eval_sample_ids": [row.get("sample_id") for row in eval_examples],
+        "train_sample_ids": [rows[index].get("sample_id") for index in train_indices],
+        "eval_sample_ids": [rows[index].get("sample_id") for index in eval_indices],
     }
     write_json(split_path, split_manifest)
+    mode_counts = {
+        mode: sum(1 for example in examples if example.get("input_mode") == mode)
+        for mode in input_modes
+    }
+    missing_required_inputs = sum(
+        1
+        for example in examples
+        if (
+            example.get("input_mode") == INPUT_MODE_VQ_TOKENS
+            and not example.get("vq_ids_exists")
+        )
+        or (
+            example.get("input_mode") == INPUT_MODE_DECODED_IMAGE
+            and not example.get("image_exists")
+        )
+    )
     manifest = {
         "schema_version": "ascr.stage4.mmu_lora_sft_manifest.v1",
         "created_at_utc": created_at_utc(),
         "dataset": str(dataset),
         "output_dir": str(output_dir),
+        "input_mode": input_mode,
+        "input_modes": input_modes,
+        "input_mode_counts": mode_counts,
+        "target_schema": target_schema,
         "grid_size": int(grid_size),
         "max_selected_cells": int(max_selected_cells),
+        "source_row_count": len(rows),
         "row_count": len(examples),
+        "example_count": len(examples),
         "train_rows": len(train_examples),
         "eval_rows": len(eval_examples),
         "missing_images": sum(1 for example in examples if not example["image_exists"]),
         "missing_vq_ids": sum(1 for example in examples if not example["vq_ids_exists"]),
+        "missing_required_inputs": missing_required_inputs,
         "sft_examples": str(sft_path),
         "train_sft_examples": str(train_path),
         "eval_sft_examples": str(eval_path),
         "split_manifest": str(split_path),
-        "target_schema": "canonical_semantic_evaluation_v1",
-        "preferred_training_input": "vq_ids_path",
+        "preferred_training_input": (
+            "vq_ids_path"
+            if input_mode == INPUT_MODE_VQ_TOKENS
+            else "image_path"
+            if input_mode == INPUT_MODE_DECODED_IMAGE
+            else "mixed"
+        ),
     }
     write_json(output_dir / "manifest.json", manifest)
     return manifest
@@ -229,6 +409,138 @@ def _selected_cells_from_evaluation(evaluation, grid_size):
     return sorted(set(selected))
 
 
+def _bool_from_any(value, default=False):
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    if isinstance(value, (int, float)):
+        return bool(value)
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "y"}:
+        return True
+    if text in {"0", "false", "no", "n"}:
+        return False
+    return default
+
+
+def _cell_label_from_index(index, grid_size):
+    index = int(index)
+    grid_size = int(grid_size)
+    if 0 <= index < grid_size * grid_size:
+        row, col = divmod(index, grid_size)
+        return GridCell(row, col).to_label()
+    if 1 <= index <= grid_size * grid_size:
+        row, col = divmod(index - 1, grid_size)
+        return GridCell(row, col).to_label()
+    raise ValueError(f"Cell index {index} is outside {grid_size}x{grid_size}")
+
+
+def _coerce_cell_labels(raw_cells, grid_size, max_selected_cells=None):
+    if raw_cells is None:
+        return []
+    if isinstance(raw_cells, str):
+        text = raw_cells.strip()
+        if not text:
+            return []
+        if text.startswith("["):
+            try:
+                raw_cells = json.loads(text)
+            except Exception:
+                raw_cells = None
+        if raw_cells is None:
+            upper = text.upper()
+            if re.search(r"[A-Z]", upper):
+                raw_cells = re.findall(r"[A-Z]\d+|R\d+C\d+", upper)
+            else:
+                raw_cells = re.findall(r"-?\d+", text)
+    elif isinstance(raw_cells, dict):
+        raw_cells = [raw_cells]
+    elif not isinstance(raw_cells, (list, tuple, set)):
+        raw_cells = [raw_cells]
+
+    labels = []
+    for value in raw_cells:
+        try:
+            if isinstance(value, int) or (isinstance(value, str) and re.fullmatch(r"-?\d+", value.strip())):
+                label = _cell_label_from_index(int(value), grid_size)
+            else:
+                label = GridCell.from_any(value, grid_size).to_label()
+        except Exception:
+            continue
+        if label not in labels:
+            labels.append(label)
+        if max_selected_cells is not None and len(labels) >= int(max_selected_cells):
+            break
+    return labels
+
+
+def localization_payload_to_semantic_payload(payload, grid_size=16, max_selected_cells=16):
+    """Map Stage-4 localization-cell JSON into the ASCR SemanticEvaluation contract."""
+    if not isinstance(payload, dict):
+        return payload
+    if payload.get("regions") is not None:
+        return payload
+    key = f"corrupted_cells_{int(grid_size)}x{int(grid_size)}"
+    source_key = None
+    raw_cells = None
+    for candidate in (
+        key,
+        "corrupted_cells",
+        "cells",
+        "selected_cells",
+        "grid_cells",
+    ):
+        if candidate in payload:
+            raw_cells = payload.get(candidate)
+            source_key = candidate
+            break
+    if raw_cells is None and payload.get("correction_instruction"):
+        recovered = _coerce_cell_labels(
+            payload.get("correction_instruction"),
+            grid_size,
+            max_selected_cells=max_selected_cells,
+        )
+        if recovered:
+            raw_cells = recovered
+            source_key = "correction_instruction"
+    labels = _coerce_cell_labels(
+        raw_cells,
+        grid_size,
+        max_selected_cells=max_selected_cells,
+    )
+    has_error = _bool_from_any(payload.get("has_error"), default=bool(labels))
+    if not has_error:
+        labels = []
+    return {
+        "has_error": bool(has_error),
+        "summary": str(payload.get("summary", f"Stage-4 localization cells from {source_key or 'empty output'}.")),
+        "regions": [
+            {
+                "cells": [{"label": label} for label in labels],
+                "reason": str(payload.get("reason", "self-corruption localization")),
+                "confidence": float(payload.get("confidence", 1.0)),
+                "error_type": "self_corruption",
+                "action": "reopen",
+            }
+        ] if labels else [],
+        "correction_instruction": str(payload.get("correction_instruction", "Reopen the selected corrupted image-token region.")),
+    }
+
+
+def safe_parse_mmu_localization_payload(payload, grid_size=16, max_selected_cells=16):
+    normalised = localization_payload_to_semantic_payload(
+        payload,
+        grid_size=grid_size,
+        max_selected_cells=max_selected_cells,
+    )
+    return safe_parse_semantic_evaluation(
+        normalised,
+        grid_size=grid_size,
+        max_selected_cells=max_selected_cells,
+    ), normalised
+
+
 def run_mmu_localization_probe(
     dataset,
     output_dir,
@@ -239,7 +551,9 @@ def run_mmu_localization_probe(
     sample_ids=None,
     split_manifest=None,
     split="eval",
-    use_vq_tokens=True,
+    input_mode=None,
+    use_vq_tokens=None,
+    target_schema=TARGET_SCHEMA_LOCALIZATION_CELLS,
     lora_path=None,
     engine=None,
     repo_path="third_party/Lumina-DiMOO",
@@ -252,6 +566,11 @@ def run_mmu_localization_probe(
     answer_temperature=0.0,
     answer_cfg_scale=0.0,
 ):
+    target_schema = normalise_target_schema(target_schema)
+    if input_mode is None:
+        input_mode = INPUT_MODE_VQ_TOKENS if use_vq_tokens is not False else INPUT_MODE_DECODED_IMAGE
+    input_mode = normalise_input_mode(input_mode)
+    use_vq_tokens = input_mode == INPUT_MODE_VQ_TOKENS
     rows = read_jsonl(dataset)
     wanted = set(str(value) for value in sample_ids or [])
     if split_manifest:
@@ -283,7 +602,12 @@ def run_mmu_localization_probe(
     malformed_count = 0
     for row in rows:
         sample_id = row.get("sample_id")
-        question = mmu_localization_prompt(row.get("prompt", ""), grid_size=grid_size, max_selected_cells=max_selected_cells)
+        question = mmu_localization_prompt(
+            row.get("prompt", ""),
+            grid_size=grid_size,
+            max_selected_cells=max_selected_cells,
+            target_schema=target_schema,
+        )
         probe_row = {
             "schema_version": PROBE_ROW_SCHEMA,
             "created_at_utc": created_at_utc(),
@@ -291,14 +615,18 @@ def run_mmu_localization_probe(
             "prompt": row.get("prompt", ""),
             "corruption_type": row.get("corruption_type", "unknown"),
             "grid_size": int(grid_size),
+            "input_mode": input_mode,
+            "target_schema": target_schema,
             "target_cells": target_cells(row, grid_size),
             "use_vq_tokens": bool(use_vq_tokens),
             "lora_path": str(lora_path) if lora_path else None,
             "status": "not_run",
         }
+        started = time.perf_counter()
         try:
             if use_vq_tokens:
-                vq_ids = json.loads(Path(row["corrupted_vq_ids_path"]).read_text(encoding="utf-8"))
+                vq_ids_path = resolve_path(row["corrupted_vq_ids_path"])
+                vq_ids = json.loads(Path(vq_ids_path).read_text(encoding="utf-8"))
                 raw_text, method = call_native_answer(
                     engine,
                     question,
@@ -306,20 +634,23 @@ def run_mmu_localization_probe(
                     max_new_tokens=max_new_tokens,
                 )
             else:
+                image_path = resolve_path(row.get("corrupted_image"))
                 raw_text, method = call_native_answer(
                     engine,
                     question,
-                    image_path=row.get("corrupted_image"),
+                    image_path=image_path,
                     max_new_tokens=max_new_tokens,
                 )
             probe_row["method"] = method
             probe_row["raw_text"] = raw_text
             payload = extract_json_object(raw_text)
-            evaluation = safe_parse_semantic_evaluation(
+            probe_row["parsed_payload"] = payload
+            evaluation, normalised_payload = safe_parse_mmu_localization_payload(
                 payload,
                 grid_size=grid_size,
                 max_selected_cells=max_selected_cells,
             )
+            probe_row["normalised_payload"] = normalised_payload
             probe_row["parsed"] = evaluation.to_dict()
             if evaluation.should_abstain:
                 probe_row["status"] = "abstained_malformed_json"
@@ -338,6 +669,8 @@ def run_mmu_localization_probe(
             else:
                 malformed_count += 1
             predicted = []
+        finally:
+            probe_row["latency_ms"] = round((time.perf_counter() - started) * 1000.0, 3)
         probe_row["predicted_cells"] = predicted
         prediction_map[str(sample_id)] = predicted
         probe_rows.append(probe_row)
@@ -371,10 +704,13 @@ def run_mmu_localization_probe(
         "grid_size": int(grid_size),
         "max_selected_cells": int(max_selected_cells),
         "top_k": int(top_k),
+        "input_mode": input_mode,
+        "target_schema": target_schema,
         "use_vq_tokens": bool(use_vq_tokens),
         "split_manifest": str(split_manifest) if split_manifest else None,
         "split": split if split_manifest else None,
         "lora_path": str(lora_path) if lora_path else None,
+        "mean_latency_ms": sum(row.get("latency_ms", 0.0) for row in probe_rows) / row_count if row_count else None,
         "metrics": metrics,
     }
     write_jsonl(output_dir / "probe_rows.jsonl", probe_rows)

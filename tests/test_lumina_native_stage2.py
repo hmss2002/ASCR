@@ -41,6 +41,11 @@ class _NaturalLanguageEngine:
         return "The image appears to contain a bench and a bowl."
 
 
+class _LocalizationAnswerEngine:
+    def answer_image(self, question, image_path, max_new_tokens=384):
+        return json.dumps({"has_error": True, "corrupted_cells_4x4": ["B2"]})
+
+
 class _ProbeEngine:
     def answer_image(self, question, image_path, max_new_tokens=384):
         if "Return JSON only" in question:
@@ -76,6 +81,21 @@ class LuminaNativeStage2Tests(unittest.TestCase):
             self.assertTrue(evaluation.has_error)
             self.assertEqual(evaluation.regions[0].cells[0].to_label(), "B2")
             self.assertEqual(evaluation.raw["method"], "answer_image")
+
+    def test_native_evaluator_parses_localization_cells_answer(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            image_path = Path(temp_dir) / "grid.ppm"
+            _write_mock_ppm(image_path, [[row + col for col in range(4)] for row in range(4)], image_size=32)
+            evaluator = LuminaNativeEvaluator(
+                engine=_LocalizationAnswerEngine(),
+                grid_size=4,
+                max_selected_cells=2,
+                target_schema="localization_cells",
+            )
+            evaluation = evaluator.evaluate("a red cube left of a blue sphere", str(image_path), 0)
+            self.assertTrue(evaluation.has_error)
+            self.assertEqual(evaluation.regions[0].cells[0].to_label(), "B2")
+            self.assertEqual(evaluation.raw["target_schema"], "localization_cells")
 
     def test_malformed_native_answer_abstains(self):
         with tempfile.TemporaryDirectory() as temp_dir:

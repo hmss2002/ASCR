@@ -288,7 +288,8 @@ Main research version:
 ```text
 prompt + corrupted image tokens
 -> Lumina native MMU answer path
--> structured SemanticEvaluation JSON
+-> compact localization_cells JSON
+-> normalized SemanticEvaluation
 -> existing selector/reopen contract
 ```
 
@@ -300,8 +301,9 @@ used as a baseline or diagnostic.
 Training order:
 
 1. Probe zero-training Lumina MMU localization on self-corrupted Hard64 rows.
-2. Prepare MMU SFT pairs from corrupted VQ tokens and canonical
-   `SemanticEvaluation` targets.
+2. Prepare MMU SFT pairs from corrupted VQ tokens and compact
+   `localization_cells` targets, then normalize them into `SemanticEvaluation`
+   internally for ASCR scoring and selector/reopen integration.
 3. Train a lightweight LoRA adapter on Lumina's MMU answer path.
 4. Evaluate the LoRA adapter against Phase-3 external selector baselines.
 5. If useful, plug the LoRA-backed evaluator into the existing ASCR loop.
@@ -708,6 +710,37 @@ Without waiting for any new code, the server AI can:
   proven to work)
 - The Hard64 dataset (128 rows) and probe outputs are intact and
   verified
+
+### Phase 4 Local Follow-up Implemented (2026-06-28)
+
+Windows Codex integrated the server branch into `main` and implemented the
+highest-priority follow-ups from the Phase-4 result:
+
+- Stage-4 SFT now defaults to the compact `localization_cells` target schema:
+  `has_error` plus `corrupted_cells_4x4`, `corrupted_cells_8x8`, and
+  `corrupted_cells_16x16` when the primary grid is 16x16.
+- `safe_parse_mmu_localization_payload()` normalizes `localization_cells`,
+  legacy `SemanticEvaluation`, and the old bad `correction_instruction`
+  integer-list pattern into ASCR `SemanticEvaluation` before scoring.
+- `LuminaNativeEvaluator` can parse the compact localization schema and can be
+  configured with `target_schema: localization_cells` for Stage-4 ASCR-loop
+  smoke tests while Stage-2 remains on `semantic_evaluation` by default.
+- SFT prep and probe CLIs now expose explicit
+  `--input-mode {vq_tokens,decoded_image,both}` / `--target-schema` flags.
+- `prepare_lumina_sft_data` now honors per-row `input_mode`; decoded-image SFT
+  examples no longer silently fall back to direct VQ-token caches when
+  `vq_ids_path` is also present.
+- Added paired vq-token and decoded-image configs under
+  `configs/stage4/self_corrupt/`, including L40S fallback configs that use
+  `image_size=512`, `max_seq_len=2048`, and `q_proj,v_proj`.
+- Added `ascr.cli.stage4_compare_input_modes` and
+  `ascr.cli.stage4_image_mmu_smoke`.
+- Added `scripts/training/run_stage4_mmu_lora_dual.sh` and
+  `jobs/stage4/train_mmu_lora_dual.sbatch`.
+
+The next server run should rerun SFT prep and LoRA training from scratch; do
+not reuse the previous adapter because it was trained against the old target
+schema.
 
 ## Phase 5: ASCR Loop Integration
 

@@ -25,7 +25,9 @@ def build_parser():
     parser.add_argument("--sample-ids-file", default=None)
     parser.add_argument("--split-manifest", default=None)
     parser.add_argument("--split", choices=["train", "eval"], default="eval")
+    parser.add_argument("--input-mode", choices=["vq_tokens", "decoded_image"], default=None)
     parser.add_argument("--use-vq-tokens", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--target-schema", choices=["localization_cells", "semantic_evaluation"], default="localization_cells")
     parser.add_argument("--lora-path", default=None)
     parser.add_argument("--repo-path", default=os.environ.get("LUMINA_REPO", "third_party/Lumina-DiMOO"))
     parser.add_argument("--checkpoint-path", default=os.environ.get("LUMINA_MODEL_PATH", "models/lumina-dimoo"))
@@ -52,7 +54,9 @@ def main(argv=None):
         sample_ids=config.get("sample_ids", _read_sample_ids(args.sample_ids_file)),
         split_manifest=config.get("split_manifest", args.split_manifest),
         split=config.get("split", args.split),
+        input_mode=config.get("input_mode", args.input_mode),
         use_vq_tokens=bool(config.get("use_vq_tokens", args.use_vq_tokens)),
+        target_schema=config.get("target_schema", args.target_schema),
         lora_path=config.get("lora_path", args.lora_path),
         repo_path=config.get("repo_path", args.repo_path),
         checkpoint_path=config.get("checkpoint_path", args.checkpoint_path),

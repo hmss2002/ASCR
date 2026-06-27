@@ -2543,3 +2543,91 @@ This is a **training schema mismatch** between the SFT data generator and the pr
 4. **Simplify target format further.** Current target includes 16×16 cell labels. Consider starting with 4×4 first (easier, fewer cells), then progressing to 8×8 and 16×16.
 
 The LoRA learned to change its output distribution from natural language toward structured localization — this is real progress. The schema mismatch and limited capacity likely explain the gap to usable localization accuracy.
+
+## 2026-06-28: Windows Codex follow-up after Phase 4 MMU LoRA server results
+
+### Remote sync
+- Fetched `origin/feat/stage4-mmu-lora-server`.
+- Fast-forwarded local `main` from `afeaa09` to include server commits through
+  `08d8418`.
+- Server branch had documentation/log updates only; no model outputs or
+  adapters were merged.
+
+### Analysis
+- The previous Stage-4 code trained canonical `SemanticEvaluation` targets, but
+  the server result showed the adapter drifting toward a compact localization
+  schema and sometimes placing numeric cell-like lists inside
+  `correction_instruction`.
+- The correct architecture is to make Stage-4 localization use one compact
+  localizer schema at the MMU boundary, then normalize it into ASCR
+  `SemanticEvaluation` internally for scoring and selector/reopen integration.
+- The decoded-image comparison path also needed a hard guard: the Lumina SFT
+  converter used VQ ids whenever they existed, which would have polluted
+  decoded-image experiments.
+
+### Local implementation
+- Added explicit Stage-4 input modes:
+  `vq_tokens`, `decoded_image`, and `both`.
+- Added explicit Stage-4 target schemas:
+  `localization_cells` and `semantic_evaluation`.
+- Made Stage-4 SFT default to `localization_cells`:
+  `has_error`, `corrupted_cells_4x4`, `corrupted_cells_8x8`, and
+  `corrupted_cells_16x16` for the 16x16 primary grid.
+- Added parser normalization so the probe accepts compact `corrupted_cells_*`
+  outputs, legacy `SemanticEvaluation` outputs, and best-effort recovery from
+  the previous bad pattern where numbers appeared in `correction_instruction`.
+- Updated `LuminaNativeEvaluator` so Stage-4 LoRA ASCR-loop smoke can request
+  and parse `localization_cells`, while Stage-2 stays on `semantic_evaluation`
+  by default.
+- Updated `prepare_lumina_sft_data` to honor per-example `input_mode`.
+- Added `ascr.cli.stage4_compare_input_modes`.
+- Added `ascr.cli.stage4_image_mmu_smoke`.
+- Added dual-path configs for vq-token and decoded-image SFT, LoRA train, zero
+  probe, LoRA probe, and L40S fallback profiles.
+- Added `scripts/training/run_stage4_mmu_lora_dual.sh`.
+- Added `jobs/stage4/train_mmu_lora_dual.sbatch`.
+
+### Validation run locally
+- Focused tests:
+  `python -m unittest tests.test_stage4_mmu_lora tests.test_lumina_native_stage2`
+  passed locally after implementation.
+- Full smoke:
+  `python scripts/smoke_test.py` passed locally with 169 tests. The warnings
+  about missing torch/Lumina/Qwen assets are expected on the Windows laptop.
+
+### Next server task
+- Pull latest `main` after Windows Codex pushes this follow-up.
+- Do not reuse the previous Stage-4 LoRA adapter; it was trained on the old
+  target contract.
+- First run a decoded-image smoke:
+
+```bash
+python -m ascr.cli.stage4_image_mmu_smoke \
+  --dataset outputs/stage3_self_corrupt/datasets/locality_hard64_v1/dataset.jsonl \
+  --limit 8 \
+  --output-dir outputs/stage4_self_corrupt/image_mmu_smoke
+```
+
+- Then rerun schema-aligned dual-path training. On the L40S node, start with:
+
+```bash
+PROFILE=l40s bash scripts/training/run_stage4_mmu_lora_dual.sh
+```
+
+- Or run the two paths as a Slurm array:
+
+```bash
+PROFILE=l40s sbatch jobs/stage4/train_mmu_lora_dual.sbatch
+```
+
+- After both array tasks complete, compare:
+
+```bash
+python -m ascr.cli.stage4_compare_input_modes \
+  --vq-tokens-probe outputs/stage4_self_corrupt/mmu_lora_hard64_dual/vq_tokens/probe_lora_l40s_eval/summary.json \
+  --decoded-image-probe outputs/stage4_self_corrupt/mmu_lora_hard64_dual/decoded_image/probe_lora_l40s_eval/summary.json \
+  --output-dir outputs/stage4_self_corrupt/mmu_lora_hard64_dual/input_mode_comparison_l40s
+```
+
+- Commit only the appended server result in this log. Do not commit
+  `outputs/`, adapters, checkpoints, token caches, or datasets.

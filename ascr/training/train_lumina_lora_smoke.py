@@ -84,7 +84,24 @@ def train_lumina_lora_smoke(args):
     random.seed(int(args.seed))
     device = "cuda" if torch.cuda.is_available() else "cpu"
     tokenizer = AutoTokenizer.from_pretrained(args.checkpoint_path, trust_remote_code=True)
-    model = model_cls.from_pretrained(args.checkpoint_path, torch_dtype=torch.bfloat16, device_map="auto")
+    dtype_name = str(args.torch_dtype).lower()
+    dtype_map = {
+        "auto": "auto",
+        "float32": torch.float32,
+        "fp32": torch.float32,
+        "bfloat16": torch.bfloat16,
+        "bf16": torch.bfloat16,
+        "float16": torch.float16,
+        "fp16": torch.float16,
+    }
+    if dtype_name not in dtype_map:
+        raise ValueError(f"Unsupported torch_dtype: {args.torch_dtype}")
+    model = model_cls.from_pretrained(args.checkpoint_path, torch_dtype=dtype_map[dtype_name], device_map="auto")
+    if args.gradient_checkpointing:
+        if hasattr(model, "gradient_checkpointing_enable"):
+            model.gradient_checkpointing_enable()
+        else:
+            print("warning: model does not expose gradient_checkpointing_enable(); continuing without it")
     lora_config = LoraConfig(
         task_type=TaskType.CAUSAL_LM,
         r=int(args.lora_r),
@@ -176,6 +193,8 @@ def train_lumina_lora_smoke(args):
         "lora_dropout": float(args.lora_dropout),
         "answer_mask_mode": str(args.answer_mask_mode),
         "ignore_pad_labels": bool(args.ignore_pad_labels),
+        "torch_dtype": str(args.torch_dtype),
+        "gradient_checkpointing": bool(args.gradient_checkpointing),
         "device": device,
         "losses": losses,
         "final_loss": losses[-1]["loss"] if losses else None,
@@ -203,6 +222,8 @@ def build_parser():
     parser.add_argument("--lora-alpha", type=int, default=16)
     parser.add_argument("--lora-dropout", type=float, default=0.05)
     parser.add_argument("--target-modules", default="q_proj,v_proj,k_proj,o_proj,gate_proj,up_proj,down_proj")
+    parser.add_argument("--torch-dtype", default="bfloat16", choices=["auto", "float32", "fp32", "bfloat16", "bf16", "float16", "fp16"])
+    parser.add_argument("--gradient-checkpointing", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument(
         "--answer-mask-mode",
         choices=["random", "all"],

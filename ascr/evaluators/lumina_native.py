@@ -24,11 +24,27 @@ ANSWER_TOKEN_METHODS = (
 )
 
 
-def native_eval_prompt(original_prompt, grid_size=4, max_selected_cells=6):
+def native_eval_prompt(original_prompt, grid_size=4, max_selected_cells=6, target_schema="semantic_evaluation"):
     cells = []
     for row in range(int(grid_size)):
         for col in range(int(grid_size)):
             cells.append(f"{chr(ord('A') + row)}{col + 1}")
+    if str(target_schema).strip().lower().replace("-", "_") in {"localization", "localization_cells", "corrupted_cells"}:
+        return (
+            "You are the ASCR semantic evaluator for a generated image.\n"
+            "Compare the current image against the original prompt and localize any visible error.\n"
+            "Return exactly one compact JSON object. No markdown. No analysis.\n"
+            "Use exact key names and put only grid-cell labels in the array.\n"
+            "Schema:\n"
+            "{"
+            "\"has_error\": boolean, "
+            f"\"corrupted_cells_{int(grid_size)}x{int(grid_size)}\": string[]"
+            "}\n"
+            f"Allowed grid cells: {', '.join(cells)}.\n"
+            f"Use at most {int(max_selected_cells)} selected cells.\n"
+            "If the image already matches the prompt, set has_error=false and the corrupted_cells array to [].\n"
+            f"Original prompt: {original_prompt}"
+        )
     return (
         "You are the ASCR semantic evaluator for a generated image.\n"
         "Compare the current image against the original prompt.\n"
@@ -112,6 +128,7 @@ class LuminaNativeEvaluator:
         answer_cfg_scale=0.0,
         unsupported_policy="abstain",
         engine=None,
+        target_schema="semantic_evaluation",
     ):
         self.grid_size = int(grid_size)
         self.max_new_tokens = int(max_new_tokens)
@@ -121,6 +138,7 @@ class LuminaNativeEvaluator:
         self.answer_temperature = float(answer_temperature)
         self.answer_cfg_scale = float(answer_cfg_scale)
         self.unsupported_policy = str(unsupported_policy)
+        self.target_schema = str(target_schema)
         self.engine = engine
         self.checkpoint_path = checkpoint_path
         self.repo_path = repo_path
@@ -147,7 +165,12 @@ class LuminaNativeEvaluator:
 
     def evaluate(self, original_prompt, grid_image_path, iteration, current_prompt=None):
         prompt = current_prompt or original_prompt
-        question = native_eval_prompt(prompt, grid_size=self.grid_size, max_selected_cells=self.max_selected_cells)
+        question = native_eval_prompt(
+            prompt,
+            grid_size=self.grid_size,
+            max_selected_cells=self.max_selected_cells,
+            target_schema=self.target_schema,
+        )
         try:
             raw_text, method_name = call_native_answer(
                 self._engine(),
@@ -174,21 +197,33 @@ class LuminaNativeEvaluator:
 
         try:
             payload = extract_json_object(raw_text)
-            parsed = safe_parse_semantic_evaluation(
-                payload,
-                grid_size=self.grid_size,
-                max_selected_cells=self.max_selected_cells,
-            )
+            normalised_payload = payload
+            try:
+                from ascr.training.stage4_mmu_lora import safe_parse_mmu_localization_payload
+
+                parsed, normalised_payload = safe_parse_mmu_localization_payload(
+                    payload,
+                    grid_size=self.grid_size,
+                    max_selected_cells=self.max_selected_cells,
+                )
+            except Exception:
+                parsed = safe_parse_semantic_evaluation(
+                    payload,
+                    grid_size=self.grid_size,
+                    max_selected_cells=self.max_selected_cells,
+                )
             parsed.raw = {
                 "backend": "lumina_native_evaluator",
                 "method": method_name,
                 "raw_text": raw_text,
                 "parsed": payload,
+                "normalised_payload": normalised_payload,
                 "answer_steps": self.answer_steps,
                 "answer_block_length": self.answer_block_length,
                 "answer_temperature": self.answer_temperature,
                 "answer_cfg_scale": self.answer_cfg_scale,
                 "lora_path": self.lora_path,
+                "target_schema": self.target_schema,
             }
             return parsed
         except Exception as exc:

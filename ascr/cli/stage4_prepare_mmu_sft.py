@@ -17,6 +17,8 @@ def build_parser():
     parser.add_argument("--eval-mode", choices=["holdout", "resubstitution"], default="holdout")
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--project-root", default=".")
+    parser.add_argument("--input-mode", choices=["vq_tokens", "decoded_image", "both"], default="vq_tokens")
+    parser.add_argument("--target-schema", choices=["localization_cells", "semantic_evaluation"], default="localization_cells")
     return parser
 
 
@@ -33,6 +35,8 @@ def main(argv=None):
         eval_mode=config.get("eval_mode", args.eval_mode),
         limit=config.get("limit", args.limit),
         project_root=config.get("project_root", args.project_root),
+        input_mode=config.get("input_mode", args.input_mode),
+        target_schema=config.get("target_schema", args.target_schema),
     )
     print(json.dumps(manifest, indent=2, sort_keys=True))
     return 0

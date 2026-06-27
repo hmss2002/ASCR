@@ -180,6 +180,7 @@ def build_evaluator(name, config):
             answer_temperature=float(evaluator_config.get("answer_temperature", generator_config.get("answer_temperature", 0.0))),
             answer_cfg_scale=float(evaluator_config.get("answer_cfg_scale", generator_config.get("answer_cfg_scale", 0.0))),
             unsupported_policy=evaluator_config.get("unsupported_policy", "abstain"),
+            target_schema=evaluator_config.get("target_schema", "semantic_evaluation"),
         )
     if name in {"local_vlm", "local-vlm"}:
         evaluator_config = config.get("evaluator", config)

@@ -1,7 +1,7 @@
 repo_path: third_party/Lumina-DiMOO
 checkpoint_path: models/lumina-dimoo
-data_jsonl: outputs/stage4_self_corrupt/mmu_lora_hard64/lumina_sft/train.jsonl
-output_dir: outputs/stage4_self_corrupt/mmu_lora_hard64/lora
+data_jsonl: outputs/stage4_self_corrupt/mmu_lora_hard64_dual/vq_tokens/lumina_sft/train.jsonl
+output_dir: outputs/stage4_self_corrupt/mmu_lora_hard64_dual/vq_tokens/lora
 epochs: 15
 limit: null
 lr: 3.0e-5

@@ -14,6 +14,29 @@ SYSTEM_PROMPT = (
     "escaped JSON; output the object itself."
 )
 
+INPUT_MODE_VQ_TOKENS = "vq_tokens"
+INPUT_MODE_DECODED_IMAGE = "decoded_image"
+
+
+def _normalise_input_mode(value, has_vq_ids=False):
+    if not value:
+        return INPUT_MODE_VQ_TOKENS if has_vq_ids else INPUT_MODE_DECODED_IMAGE
+    mode = str(value).strip().lower().replace("-", "_")
+    aliases = {
+        "vq": INPUT_MODE_VQ_TOKENS,
+        "tokens": INPUT_MODE_VQ_TOKENS,
+        "vq_token": INPUT_MODE_VQ_TOKENS,
+        "vq_tokens": INPUT_MODE_VQ_TOKENS,
+        "image": INPUT_MODE_DECODED_IMAGE,
+        "decoded": INPUT_MODE_DECODED_IMAGE,
+        "decoded_image": INPUT_MODE_DECODED_IMAGE,
+        "rgb": INPUT_MODE_DECODED_IMAGE,
+    }
+    mode = aliases.get(mode, mode)
+    if mode not in {INPUT_MODE_VQ_TOKENS, INPUT_MODE_DECODED_IMAGE}:
+        raise ValueError(f"Unsupported Lumina SFT input_mode: {value!r}")
+    return mode
+
 
 def read_jsonl(path):
     for line in Path(path).read_text(encoding="utf-8").splitlines():
@@ -94,6 +117,7 @@ def convert_sft_examples(
     rows = []
     skipped = []
     direct_vq_count = 0
+    decoded_image_count = 0
     for index, example in enumerate(read_jsonl(sft_examples)):
         if limit is not None and index >= int(limit):
             break
@@ -103,12 +127,23 @@ def convert_sft_examples(
         vq_ids_path = Path(raw_vq_ids_path) if raw_vq_ids_path else None
         has_image = bool(image_path and image_path.exists())
         has_vq_ids = bool(vq_ids_path and vq_ids_path.exists())
-        if not has_image and not has_vq_ids:
+        input_mode = _normalise_input_mode(example.get("input_mode"), has_vq_ids=has_vq_ids)
+        if input_mode == INPUT_MODE_VQ_TOKENS and not has_vq_ids:
             skipped.append({
                 "sample_id": example.get("sample_id"),
                 "image_path": str(image_path) if image_path else None,
                 "vq_ids_path": str(vq_ids_path) if vq_ids_path else None,
-                "reason": "missing_image_or_vq_ids",
+                "input_mode": input_mode,
+                "reason": "missing_vq_ids",
+            })
+            continue
+        if input_mode == INPUT_MODE_DECODED_IMAGE and not has_image:
+            skipped.append({
+                "sample_id": example.get("sample_id"),
+                "image_path": str(image_path) if image_path else None,
+                "vq_ids_path": str(vq_ids_path) if vq_ids_path else None,
+                "input_mode": input_mode,
+                "reason": "missing_image",
             })
             continue
         target_text = compact_target_text(example)
@@ -123,7 +158,7 @@ def convert_sft_examples(
         token_path = image_cache_dir / f"img_{len(rows):04d}.pkl"
         if not token_path.exists():
             with token_path.open("wb") as handle:
-                if has_vq_ids:
+                if input_mode == INPUT_MODE_VQ_TOKENS:
                     pickle.dump(
                         _token_payload_from_vq_ids(
                             vq_ids_path,
@@ -136,10 +171,13 @@ def convert_sft_examples(
                     if image_tokenizer is None:
                         image_tokenizer = _load_image_tokenizer(checkpoint_path, device, image_size)
                     pickle.dump(image_tokenizer(image_path), handle)
-        if has_vq_ids:
+        if input_mode == INPUT_MODE_VQ_TOKENS:
             direct_vq_count += 1
+        else:
+            decoded_image_count += 1
         rows.append({
             "sample_id": example.get("sample_id"),
+            "example_id": example.get("example_id"),
             "user_image": str(token_path).replace("\\", "/"),
             "answer_image": "",
             "system_prompt": SYSTEM_PROMPT,
@@ -147,7 +185,8 @@ def convert_sft_examples(
             "answer_text": target_text,
             "source_image": str(image_path).replace("\\", "/") if image_path else None,
             "source_vq_ids": str(vq_ids_path).replace("\\", "/") if vq_ids_path else None,
-            "input_mode": "vq_tokens" if has_vq_ids else "image",
+            "input_mode": input_mode,
+            "target_schema": example.get("target_schema"),
         })
 
     train_path = output_dir / "train.jsonl"
@@ -166,7 +205,11 @@ def convert_sft_examples(
         "example_count": len(rows),
         "skipped_count": len(skipped),
         "direct_vq_example_count": direct_vq_count,
-        "image_encoded_example_count": len(rows) - direct_vq_count,
+        "image_encoded_example_count": decoded_image_count,
+        "input_mode_counts": {
+            INPUT_MODE_VQ_TOKENS: direct_vq_count,
+            INPUT_MODE_DECODED_IMAGE: decoded_image_count,
+        },
         "skipped": skipped,
         "train_jsonl": str(train_path),
         "image_cache_dir": str(image_cache_dir),
