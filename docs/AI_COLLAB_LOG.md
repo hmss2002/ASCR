@@ -1627,3 +1627,98 @@ Next server action:
 - Append exact job id, node, command, output root, row count, aggregate locality metrics,
   heatmap examples, and blockers to this file.
 - Do not train selectors or run hidden-state repair-head work until locality is understood.
+
+## 2026-06-28 01:06 HKT - server AI
+
+Context:
+- Machine: HKU AI server login node hpcr4300a; Slurm compute node SPGL-1-15
+- Branch before: main
+- Commit before: 77b8037c4046a719c4c7c03126c9ba29e7627e4e
+- Branch after: feat/stage3-self-corrupt-locality-server
+- Commit after: 77b8037c4046a719c4c7c03126c9ba29e7627e4e (no code changes; log-only branch)
+
+Files changed:
+- docs/AI_COLLAB_LOG.md: appended this Stage-3 locality probe server entry
+
+Commands run:
+- git fetch origin; git checkout main; git pull --ff-only; git checkout -b feat/stage3-self-corrupt-locality-server
+  Result: passed
+  Notes: synced to main at 77b8037c4046a719c4c7c03126c9ba29e7627e4e. Fast-forwarded 3 commits from faf8601; pulled in all Stage-3 locality tooling (vq_corruptor, token_locality, token_locality_probe CLI, smoke config, sbatch wrapper).
+- sbatch --parsable --export=ALL,OFOX_API_KEY=,OFOX_BASE_URL=,ASCR_TEACHER_MODEL=,ASCR_TEACHER_QUALITY_MAX_TOKENS=,ASCR_TEACHER_LOCALIZATION_MAX_TOKENS=,ASCR_TEACHER_JSON_REPAIR_RETRIES= jobs/stage3/self_corrupt_locality_probe.sbatch
+  Result: passed
+  Notes: submitted job 71441; API env vars explicitly blanked following server precedent to prevent OFOX key leakage into compute-node jobs.
+
+Environment:
+- python: Python 3.11.15 (inside .venv-lumina, activated by the sbatch script)
+- torch: as bundled in .venv-lumina
+- cuda: available on compute node SPGL-1-15 (1x GPU)
+- gpu summary: GPU inferred as 45GB-class node (L40S based on earlier nvidia-smi probes from this server)
+- active env: .venv-lumina (activated inside sbatch)
+- important env vars set/unset, without values:
+  - sbatch script sets LUMINA_REPO=third_party/Lumina-DiMOO, LUMINA_MODEL_PATH=models/lumina-dimoo
+  - OFOX/API env vars explicitly blanked in sbatch --export
+  - HF_HUB_OFFLINE=1, TRANSFORMERS_OFFLINE=1 set in the server environment
+
+Server jobs:
+- job id: 71441
+- mode: Stage-3 token locality probe smoke
+- command: sbatch jobs/stage3/self_corrupt_locality_probe.sbatch
+- exact sbatch: `sbatch --parsable --export=ALL,OFOX_API_KEY=,OFOX_BASE_URL=,ASCR_TEACHER_MODEL=,ASCR_TEACHER_QUALITY_MAX_TOKENS=,ASCR_TEACHER_LOCALIZATION_MAX_TOKENS=,ASCR_TEACHER_JSON_REPAIR_RETRIES= jobs/stage3/self_corrupt_locality_probe.sbatch`
+- output dir: outputs/stage3_self_corrupt/locality_probe_smoke
+- stdout log: logs/ascr-stage3-locality-71441.out
+- stderr log: logs/ascr-stage3-locality-71441.err
+- status: COMPLETED (exit 0:0, elapsed 00:11:22, node SPGL-1-15)
+
+Results:
+- Lumina generation/decode: SUCCEEDED. All 8 prompts generated clean images at 1024x1024, all 24 corruption rows decoded successfully, all analysis metrics computed.
+- output root: outputs/stage3_self_corrupt/locality_probe_smoke/
+- row_count: 24 (from summary.json)
+- prompt_count: 8 (from summary.json)
+- schema_version: ascr.stage3.token_locality_probe.summary.v1
+- corruption_types run: block_2x2_random_replace, block_4x4_random_replace, local_shuffle_4x4
+- analysis_grids: 4, 8, 16
+- token_grid_size: 64, image_size: 1024
+
+Aggregate locality metrics (per corruption type × analysis grid):
+
+```
+Corruption                      Grid   N  inside_frac  in_out_ratio  center_disp  top1  topk  eff_radius(median)
+block_2x2_random_replace          4   8       0.4596        0.9267       0.7381  1.00  1.00    2.5
+block_2x2_random_replace          8   8       0.3075        0.4533       1.4878  1.00  1.00    4.0
+block_2x2_random_replace         16   8       0.1751        0.2163       2.9917  1.00  1.00    8.0
+block_4x4_random_replace          4   8       0.5809        1.6239       0.6481  1.00  1.00    1.5
+block_4x4_random_replace          8   8       0.4919        1.0789       1.1698  1.00  1.00    3.0
+block_4x4_random_replace         16   8       0.4383        0.8408       2.2980  1.00  1.00    5.5
+local_shuffle_4x4                 4   8       0.6344        3.0868       0.6111  1.00  1.00    1.0
+local_shuffle_4x4                 8   8       0.5439        2.3530       1.1843  1.00  1.00    1.0
+local_shuffle_4x4                16   8       0.4181        1.0187       2.3468  1.00  1.00    2.0
+```
+
+Per-corruption aggregate (all grids pooled):
+- block_2x2_random_replace:    n=24  inside_frac=0.3141  top1=1.000  topk=1.000
+- block_4x4_random_replace:    n=24  inside_frac=0.5037  top1=1.000  topk=1.000
+- local_shuffle_4x4:           n=24  inside_frac=0.5322  top1=1.000  topk=1.000
+
+Example heatmap paths:
+- outputs/stage3_self_corrupt/locality_probe_smoke/heatmaps/p0000_c000_grid4.ppm
+- outputs/stage3_self_corrupt/locality_probe_smoke/heatmaps/p0000_c001_grid4.ppm  (block_4x4, inside_frac=0.4972 on 4x4 grid, io_ratio=0.9889)
+- outputs/stage3_self_corrupt/locality_probe_smoke/heatmaps/p0000_c002_grid4.ppm  (local_shuffle_4x4, inside_frac=0.8155 on 4x4 grid, io_ratio=4.4198 — strongest single-row locality)
+- outputs/stage3_self_corrupt/locality_probe_smoke/heatmaps/p0001_c001_grid8.ppm  (block_4x4 on 8x8 grid, inside_frac=0.5596)
+
+Output structure:
+- outputs/stage3_self_corrupt/locality_probe_smoke/manifest.jsonl (24 rows)
+- outputs/stage3_self_corrupt/locality_probe_smoke/summary.json
+- outputs/stage3_self_corrupt/locality_probe_smoke/heatmaps/ (72 .ppm files: 24 rows × 3 grids)
+- outputs/stage3_self_corrupt/locality_probe_smoke/images/ (32 subdirs: 8 clean + 24 corrupted)
+- outputs/stage3_self_corrupt/locality_probe_smoke/tokens/ (48 .json files: 24 clean + 24 corrupted VQ ids)
+
+Problems / blockers:
+- None. Model loaded successfully, all 8 prompts generated clean images, all 24 corruption rows produced valid decoded images, and all 72 analysis metrics computed without errors.
+- The only stderr output was the expected non-fatal warning: "The model weights are not tied. Please use the `tie_weights` method before using the `infer_auto_device` function." — this has appeared in all prior Lumina runs and does not block inference.
+
+Recommendation: **Proceed to self-corruption dataset construction (Phase 2).**
+- Both block_4x4_random_replace and local_shuffle_4x4 show clear locality at 4x4 and 8x8 analysis grids (inside_energy_fraction > 0.49, in/out ratio > 1.0 on 8x8 grids).
+- Top-1 and top-k hit rates are 1.00 across ALL corruption types and grid sizes, confirming that the energy peak consistently falls in the correct coarse cell.
+- block_2x2_random_replace is weaker (inside_frac=0.3075 on 8x8, in/out ratio=0.4533) but still has non-trivial locality above the random baseline of ~0.016 for a single cell on an 8x8 grid.
+- The locality gradient from 4x4 → 8x8 → 16x16 is smooth and expected, supporting a coarse-to-fine repair strategy (start at 4x4 coarse cells, refine to 8x8 or 16x16).
+- No blockers to building the paired clean/corrupted dataset as specified in docs/STAGE3_SELF_CORRUPTED_TOKEN_REPAIR.md Phase 2.
