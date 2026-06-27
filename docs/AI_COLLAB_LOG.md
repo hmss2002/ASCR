@@ -1766,3 +1766,69 @@ Recommendation: **Proceed to self-corruption dataset construction (Phase 2).**
   to this file.
 - Do not commit `outputs/`; commit only the log update.
 - Do not train selectors, inspect hidden states, or run formal benchmarks yet.
+
+## 2026-06-28 01:35 HKT - server AI
+
+Context:
+- Machine: HKU AI server login node hpcr4300a
+- Branch before: main
+- Commit before: 4540285032fee948560ef8c6c1f20da23119fdd5
+- Branch after: feat/stage3-self-corrupt-dataset-server
+- Commit after: 4540285032fee948560ef8c6c1f20da23119fdd5 (no code changes; log-only branch)
+
+Files changed:
+- docs/AI_COLLAB_LOG.md: appended this Stage-3 dataset construction server entry
+
+Commands run:
+- git fetch origin; git checkout main; git pull --ff-only; git checkout -b feat/stage3-self-corrupt-dataset-server
+  Result: passed
+  Notes: synced to main at 4540285. Fast-forwarded 2 commits from 77b8037; pulled in stage3_locality_report CLI, stage3_self_corrupt_dataset CLI, stage3_self_corrupt analysis module, and updated docs.
+  New tools landed: ascr/cli/stage3_locality_report.py, ascr/cli/stage3_self_corrupt_dataset.py, ascr/analysis/stage3_self_corrupt.py, tests/test_stage3_self_corrupt.py.
+- source .venv-lumina/bin/activate && python -m ascr.cli.stage3_locality_report --manifest outputs/stage3_self_corrupt/locality_probe_smoke/manifest.jsonl --summary outputs/stage3_self_corrupt/locality_probe_smoke/summary.json --output-dir outputs/stage3_self_corrupt/locality_probe_smoke/report
+  Result: passed
+  Notes: generated locality_report.json and locality_report.md. Model-light — no Lumina load required.
+- source .venv-lumina/bin/activate && python -m ascr.cli.stage3_self_corrupt_dataset --manifest outputs/stage3_self_corrupt/locality_probe_smoke/manifest.jsonl --summary outputs/stage3_self_corrupt/locality_probe_smoke/summary.json --output-dir outputs/stage3_self_corrupt/datasets/locality_smoke_v1
+  Result: passed
+  Notes: generated dataset.jsonl and dataset_manifest.json. Model-light — no Lumina load required.
+- Verified all referenced clean/corrupted image and token paths exist on disk: 0 missing images, 0 missing tokens.
+  Result: passed
+
+Environment:
+- python: Python 3.11.15 in .venv-lumina
+- torch: not needed for these model-light CLI tools
+- cuda: not needed for this dataset construction step
+- gpu summary: not used; both commands ran on the login node
+- active env: .venv-lumina
+- important env vars set/unset, without values: LUMINA_REPO and LUMINA_MODEL_PATH set in the session but not used by the CLI tools
+
+Server jobs:
+- job id: none (login-node model-light run, no GPU required)
+- mode: Stage-3 Phase-2 dataset construction
+- output dirs:
+  - outputs/stage3_self_corrupt/locality_probe_smoke/report/
+  - outputs/stage3_self_corrupt/datasets/locality_smoke_v1/
+
+Results:
+- Report output paths:
+  - outputs/stage3_self_corrupt/locality_probe_smoke/report/locality_report.json
+  - outputs/stage3_self_corrupt/locality_probe_smoke/report/locality_report.md
+- Dataset output paths:
+  - outputs/stage3_self_corrupt/datasets/locality_smoke_v1/dataset.jsonl (24 rows)
+  - outputs/stage3_self_corrupt/datasets/locality_smoke_v1/dataset_manifest.json
+- Dataset row count: 24
+- Dataset corruption types:
+  - block_2x2_random_replace: 8 rows
+  - block_4x4_random_replace: 8 rows
+  - local_shuffle_4x4: 8 rows
+- Referenced paths: all 96 paths (24 clean images + 24 corrupted images + 24 clean token files + 24 corrupted token files) exist on disk. 0 missing.
+- Prompt count: 8 (from summary.json)
+- Each dataset row includes: sample_id, prompt, clean_image, corrupted_image, clean_vq_ids_path, corrupted_vq_ids_path, corruption_indices, corruption_type, changed_count, coarse_labels_4x4/8x8/16x16, token_grid_size, image_size.
+- Schema version: ascr.stage3.self_corrupt_dataset_manifest.v1
+
+Problems / blockers:
+- None. Both CLIs ran successfully without errors. All referenced paths are valid. The dataset is ready for Phase 3 selector baseline training.
+
+Next action for Stage 3:
+- Phase 3 selector baselines can begin using this dataset.
+- The first baseline should be random and token-prior at 4x4 / 8x8 / 16x16 grids.
+- Do not train neural selectors or inspect hidden states until trivial baselines are established.
