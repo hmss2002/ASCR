@@ -1965,3 +1965,223 @@ Recommendation: **Expand the self-corruption dataset before neural selector work
 - Expand from 8 prompts to at least 64 prompts, keeping block_4x4 and local_shuffle_4x4 as primary corruption types (block_2x2 is too weak per Phase 1 results).
 - After expansion, reassess rgb_localizer at 8x8 and 16x16.
 - Do not proceed to Phase 4 (hidden states / repair head) on the current 24-row dataset.
+
+---
+
+## 2026-06-28 02:30 HKT — Server AI strategic handoff: GPU scale-out plan
+
+### Strategic assessment
+
+The project is bottlenecked on dataset size, not on code correctness. Every Stage-3
+phase has passed its smoke test on the first attempt:
+
+| Phase | Smoke result | Wall time | GPU |
+|-------|-------------|-----------|-----|
+| 1 — Locality probe | 8 prompts, 24 rows, all passed | 11 min | 1× L40S |
+| 2 — Dataset build | 24 rows, all paths valid | <1 sec | none |
+| 3 — Selector baselines | 15 baselines, all ran | <5 sec | none |
+
+But every phase also concluded: **the 24-row smoke dataset is too small for
+scientific conclusions.** The solution is not more code — it is more data. And
+generating that data requires Lumina GPU inference at scale.
+
+### Cluster capacity
+
+```
+8 nodes × 8× L40S = 64 GPUs total
+Realistic availability: 4–6 nodes = 32–48 GPUs at any time
+1 GPU processes 1 prompt (clean + 3 corruptions) in ~82 seconds
+→ ~44 prompts/hour/GPU
+→ 32 GPUs × 44 = ~1,400 prompts/hour
+→ A full Hard64 (64 prompts) takes ~2 min wall time on 32 GPUs
+→ A 256-prompt dataset takes ~6 min wall time
+→ A 1000-prompt dataset takes ~23 min wall time
+```
+
+Currently we use **1 GPU at a time** and wait for it. This leaves 31–47 GPUs
+idle during every Lumina run. With job arrays and parallel wrappers, we can
+run the entire Hard64 set in the time it currently takes to run 8 prompts.
+
+### What the Windows Codex should build
+
+Below is a prioritized list of scripts and tools. Each item has a concrete spec
+so the Windows Codex can implement it without ambiguity. Once built, the server
+AI can run them immediately on the cluster.
+
+---
+
+#### Priority 1 (unblock immediately): Parallel locality probe
+
+**Script A: `jobs/stage3/self_corrupt_locality_probe_array.sbatch`**
+
+Slurm job array that fans prompts across GPUs. Each array task handles a subset.
+```
+#SBATCH --array=0-N    # N = ceil(num_prompts / prompts_per_task)
+#SBATCH --gres=gpu:1   # one GPU per array task
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=64G
+#SBATCH --time=02:00:00
+```
+Each task:
+- Reads `PROMPT_FILE` and `PROMPTS_PER_TASK` from env
+- Computes its slice: `start = TASK_ID * PROMPTS_PER_TASK`, `end = start + PROMPTS_PER_TASK`
+- Runs `ascr.cli.token_locality_probe` with `--prompt-offset` / `--prompt-limit`
+- Writes a per-shard manifest: `outputs/.../manifest_shard_${SLURM_ARRAY_TASK_ID}.jsonl`
+
+**Script B: `ascr/cli/stage3_merge_probe_shards.py`**
+
+Merges per-shard manifests into a single `manifest.jsonl` and `summary.json`.
+- Deduplicates by `sample_id`
+- Validates all referenced paths exist
+- Computes aggregate metrics matching the existing `summary.json` schema
+- CLI: `python -m ascr.cli.stage3_merge_probe_shards --shards outputs/.../manifest_shard_*.jsonl --output-dir outputs/.../`
+
+**Config A: `configs/stage3/self_corrupt/locality_probe_hard64.yaml`**
+
+Same structure as `locality_probe_smoke.yaml` but:
+```yaml
+limit: 64
+prompt_file: configs/benchmarks/prompts/t2i_compbench_hard64.txt
+corruption_types:
+  - block_4x4_random_replace
+  - local_shuffle_4x4
+# block_2x2 removed — it was too weak in Phase 1
+```
+
+**Server run after Codex delivers:**
+```bash
+# Fan out 64 prompts across 8 GPUs (8 prompts each):
+sbatch --array=0-7 --export=ALL,PROMPT_FILE=...,PROMPTS_PER_TASK=8 \
+  jobs/stage3/self_corrupt_locality_probe_array.sbatch
+# After all complete:
+python -m ascr.cli.stage3_merge_probe_shards --shards .../manifest_shard_*.jsonl ...
+# Build dataset:
+python -m ascr.cli.stage3_self_corrupt_dataset --manifest .../manifest.jsonl ...
+# Re-run selectors on larger dataset:
+python -m ascr.cli.stage3_train_selectors --config .../selector_baselines_hard64.yaml
+```
+
+Expected wall time: ~15 min (generation) + 1 min (merge + dataset + selectors).
+
+---
+
+#### Priority 2 (scale further): Multi-corruption-per-prompt dataset configs
+
+**Config set: `configs/stage3/self_corrupt/`**
+
+| Config | Prompts | Corruption types | Grids | Est. GPU-min |
+|--------|---------|-----------------|-------|-------------|
+| `locality_probe_hard64.yaml` | 64 | 2 types | 4,8,16 | ~175 (1 GPU) / ~6 (32 GPU) |
+| `locality_probe_256.yaml` | 256 | 2 types | 4,8,16 | ~700 (1 GPU) / ~22 (32 GPU) |
+| `locality_probe_1k.yaml` | 1024 | 2 types | 4,8,16 | ~2800 (1 GPU) / ~88 (32 GPU) |
+
+Configs should reuse the same YAML structure as the smoke config; only `limit`,
+`prompt_file`, and `corruption_types` differ.
+
+**Dataset expansion plan:**
+1. Hard64 (64 prompts, 128 rows) → re-evaluate selectors
+2. If rgb_localizer at 8×8 still weak → expand to 256 prompts (512 rows)
+3. If still weak → 1024 prompts (2048 rows)
+4. Decision gate at each step before proceeding
+
+---
+
+#### Priority 3 (prepare for neural work): Multi-GPU training infrastructure
+
+**Script C: `jobs/stage3/train_neural_selector_ddp.sbatch`**
+
+For Phase 3 neural selectors (future). Single-node multi-GPU DDP training:
+```bash
+#SBATCH --gres=gpu:8        # all 8 GPUs on one node
+#SBATCH --cpus-per-task=64
+#SBATCH --mem=256G
+torchrun --nproc_per_node=8 -m ascr.cli.stage3_train_neural_selector \
+  --config configs/stage3/self_corrupt/neural_selector_ddp.yaml
+```
+
+**Script D: `jobs/stage3/ascr_self_corrupt_benchmark_array.sbatch`**
+
+Job array for Phase 5 ASCR loop evaluation. Each task runs one prompt through
+the full generate → select → reopen → score loop:
+```bash
+#SBATCH --array=0-N
+#SBATCH --gres=gpu:1
+```
+
+---
+
+#### Priority 4 (quality validation): Automated result auditor
+
+**Script E: `ascr/cli/stage3_audit_dataset.py`**
+
+Validates a Stage-3 dataset without loading Lumina:
+- Checks all referenced paths exist
+- Verifies corruption_indices match coarse_labels
+- Computes per-corruption-type statistics
+- Flags rows with anomalously low/high inside_energy_fraction
+- Output: `audit.json` with pass/fail and per-row issues
+
+Useful as a gate before selector training or before committing to a dataset
+expansion direction.
+
+---
+
+### Architecture decisions the Windows Codex should consider
+
+1. **Manifest shard naming**: Use `manifest_shard_{array_task_id}.jsonl` so the
+   merge tool can glob them. Each shard is a valid partial manifest — the merge
+   tool should not need special parsing.
+
+2. **Prompt offset/limit in CLI**: The existing `token_locality_probe.py` should
+   gain `--prompt-offset` and `--prompt-limit` flags (or read `PROMPT_OFFSET` /
+   `PROMPT_LIMIT` from env) so array tasks can select their slice without
+   creating per-task config files.
+
+3. **Dataset path relativity**: All paths in `dataset.jsonl` are currently
+   relative to the repo root. Keep this convention — it makes manifests
+   portable and avoids per-node path fixups.
+
+4. **Slurm export hygiene**: ALL array/batch scripts must explicitly blank
+   OFOX/API env vars (`OFOX_API_KEY=,OFOX_BASE_URL=,...`) in `--export`. The
+   login node has API keys; compute nodes do not need them and must not receive
+   them.
+
+5. **Error isolation**: If one array task fails (GPU OOM, corrupt model load),
+   the merge tool should still process successful shards and report which
+   `sample_id` ranges are missing. Never fail the whole run because one shard
+   died.
+
+6. **Checkpoint artifacts**: After each major run, commit only the summary JSON
+   and log entry. Never commit images, tokens, or heatmaps. The dataset.jsonl
+   should also stay out of git — it's reproducible from the manifest.
+
+---
+
+### What the server AI can do RIGHT NOW without new code
+
+Without waiting for the Windows Codex, the server AI can:
+
+- **Re-run the smoke probe on a larger prompt set** using the existing single-GPU
+  job (just change `--config` to point at a config with `limit: 64`). This is
+  slow on 1 GPU (~2 hours for 64 prompts) but unblocks the science immediately.
+  Result: a 192-row dataset (64 prompts × 3 corruption types) that the existing
+  selector baselines can train on.
+
+- **Submit multiple single-prompt GPU jobs in parallel** by manually creating
+  sbatch calls with different `--prompt-offset` values, then merge manifests
+  by hand with a Python one-liner. Crude but effective if the array wrapper
+  isn't ready yet.
+
+- **Run selector baselines on any dataset** — the existing
+  `stage3_train_selectors` CLI is model-light and instant.
+
+### Concrete next action for Windows Codex
+
+1. Read this entire section and the server results above.
+2. Implement **Priority 1** (array probe + merge tool + hard64 config).
+3. Push to a branch `feat/stage3-parallel-probe` from latest `main`.
+4. The server AI will then: pull → submit 8-GPU array → merge → build dataset →
+   run selectors → report back in this log.
+
+Total server wall time after Codex delivers Priority 1: **under 20 minutes**
+to go from 0 to a 128-row Hard64 dataset with full selector metrics.
