@@ -2432,3 +2432,114 @@ hidden-state inspection tools — the dataset is ready for either path.
 - Append zero-shot probe metrics, SFT counts, LoRA training loss, LoRA probe
   metrics, and blockers to this file.
 - Do not commit `outputs/` or LoRA adapter weights.
+
+## 2026-06-28 06:45 HKT — Server AI: Phase 4 MMU LoRA results
+
+### Branch and commit
+- Branch: feat/stage4-mmu-lora-server
+- Base commit: afeaa09 (main)
+- No code changes; log-only branch
+
+### Environment
+- Host: hpcr4300a
+- GPU node: SPGL-1-15 (L40S, 45 GB)
+- Python: 3.11.15 in .venv-lumina
+- LUMINA_REPO: third_party/Lumina-DiMOO
+- LUMINA_MODEL_PATH: models/lumina-dimoo
+
+### Step 4a — Zero-shot MMU probe
+- Job: 71460 (within pipeline)
+- Command: `python -m ascr.cli.stage4_mmu_localization_probe --config configs/stage4/self_corrupt/mmu_probe_zero_hard64.yaml`
+- limit: 16, use_vq_tokens: true, grid_size: 16
+- Results:
+  - parse_rate: **0.0** (0/16)
+  - malformed_count: 16
+  - call_error_count: 0
+  - hit_any_rate: 0.0
+- Conclusion: Zero-shot Lumina MMU outputs malformed/natural-language text, not structured JSON. Confirms the June 2025 finding.
+
+### Step 4b — SFT data preparation
+- Command: `python -m ascr.cli.stage4_prepare_mmu_sft --config configs/stage4/self_corrupt/mmu_sft_hard64.yaml`
+- Run on: login node (no GPU)
+- train_rows: 96, eval_rows: 32
+- missing_images: 0, missing_vq_ids: 0
+- preferred_training_input: vq_ids_path
+
+### Step 4b2 — Lumina SFT conversion
+- Command: `python -m ascr.training.prepare_lumina_sft_data --sft-examples .../train_sft_examples.jsonl --output-dir .../lumina_sft --image-size 1024`
+- Run on: login node (no GPU — direct VQ-token path, no VQ-VAE needed)
+- example_count: 96, skipped: 0
+
+### Step 4c — LoRA training
+- Job: 71464
+- Config: .runtime/mmu_lora_train_hard64_512_bf16.yaml (memory-optimized)
+- Memory optimizations applied:
+  - image_size: 1024 → **512** (original 1024 OOMed on 45GB)
+  - max_seq_len: 6144 → **2048**
+  - target_modules: 7 → **2** (q_proj, v_proj only)
+  - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+- Results:
+  - epochs: 15, all completed
+  - loss curve: 9.75 → 0.197 (epoch 14 avg_loss: 0.157)
+  - adapter: adapter_model.safetensors (16.8 MB)
+  - elapsed: 12:30
+  - no OOM
+- Note: Model loaded in float32. The L40S fits DiMOO at 1024 for inference but training adds optimizer states + gradients. With 7 LoRA target modules at seq_len 6144, peak memory exceeded 45GB. Reducing to 2 modules + seq_len 2048 + image_size 512 resolved the OOM.
+
+### Step 4d — LoRA evaluation
+- Job: 71465
+- Command: `python -m ascr.cli.stage4_mmu_localization_probe --config configs/stage4/self_corrupt/mmu_probe_lora_hard64.yaml`
+- split: eval (32 rows)
+- Results:
+  - parse_rate: **0.156** (5/32 parsed, up from 0.0 zero-shot)
+  - malformed_count: 27 (84% still malformed)
+  - hit_any_rate: **0.0** (parsed outputs don't contain correct cell labels)
+  - call_error_count: 0
+  - elapsed: 28:43
+
+### Root cause analysis
+
+Inspected raw LoRA outputs from probe_rows.jsonl:
+
+```json
+{"correction_instruction": "11, 12, 13, 14, 15, 16, 17, 18, 19, ..."}
+```
+
+The LoRA learned to output structured JSON with spatial coordinates, but:
+1. **Wrong key name**: `correction_instruction` instead of expected `corrupted_cells_16x16`
+2. **Wrong value format**: comma-separated integers (raw token coordinates?) instead of cell labels like `["J10", "J9"]`
+3. **Target was**: `["J10", "J9"]` — grid cell labels, not integer coordinates
+
+This is a **training schema mismatch** between the SFT data generator and the probe parser. The LoRA DID learn meaningful behavior (outputting spatial coordinates instead of natural language), but the output format doesn't match what the parser expects.
+
+### Comparison: Zero-shot vs LoRA
+
+| Metric | Zero-shot | LoRA | Delta |
+|--------|-----------|------|-------|
+| parse_rate | 0.0 | 0.156 | +0.156 |
+| hit_any_rate | 0.0 | 0.0 | 0.0 |
+| malformed_count | 16/16 | 27/32 | improved ratio |
+| output style | natural language / malformed JSON | structured JSON with coordinates | qualitatively different |
+
+### Phase 4 gate status
+
+| Gate | Threshold | Actual | Status |
+|------|-----------|--------|--------|
+| Parse rate > 0.5 | 0.5 | 0.156 | ❌ Not passed |
+| hit_any > external baseline (0.875) | 0.875 | 0.0 | ❌ Not passed |
+| LoRA improves over zero-shot | > 0 | +0.156 parse_rate | ✅ Partial |
+
+### Recommendation
+
+1. **Fix the training schema mismatch.** The LoRA outputs `correction_instruction` with integer lists while the probe parser expects `corrupted_cells_16x16` with cell labels. Align the SFT target JSON format with the probe parser's expected schema.
+
+2. **Increase LoRA capacity.** With only 2 target modules (q_proj, v_proj) at image_size=512, the LoRA has limited ability to learn spatial reasoning. To regain memory for more modules:
+   - Use bfloat16 mixed precision training
+   - Or use gradient checkpointing
+   - Target: 4+ modules at image_size=1024
+
+3. **Consider image-based MMU input.** The current path uses `answer_vq_tokens()` (direct VQ token input). If VQ-token spatial relationships are hard to learn, try `answer_image()` on decoded corrupted images instead — the model may already understand image-space localization better than VQ-token-space.
+
+4. **Simplify target format further.** Current target includes 16×16 cell labels. Consider starting with 4×4 first (easier, fewer cells), then progressing to 8×8 and 16×16.
+
+The LoRA learned to change its output distribution from natural language toward structured localization — this is real progress. The schema mismatch and limited capacity likely explain the gap to usable localization accuracy.
