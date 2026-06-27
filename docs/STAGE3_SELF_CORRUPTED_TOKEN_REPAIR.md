@@ -377,10 +377,109 @@ coordinates, proving the approach is viable. Next steps:
    cell-label format that the probe parser expects.
 2. **Recover training capacity** — use bf16 mixed precision + gradient
    checkpointing to train at image_size=1024 with more target modules.
-3. **Consider image-space MMU** — `answer_image()` on decoded corrupted images
-   may be easier for the model than `answer_vq_tokens()` on raw VQ tokens.
-4. **Coarse-first curriculum** — train on 4×4 grid localization first, then
+3. **Coarse-first curriculum** — train on 4×4 grid localization first, then
    progress to 8×8 and 16×16.
+4. **Run the dual-path comparison below.**
+
+### Phase 4a: answer_vq_tokens vs answer_image — dual-path comparison
+
+There are two ways to feed corrupted data into Lumina's MMU. Both should be
+kept as first-class paths; the goal is to understand which one works better
+and whether they complement each other.
+
+**Path A — `answer_vq_tokens()` (discrete token input):**
+
+```
+clean VQ tokens → corrupt → corrupted VQ tokens
+                                ↓
+                  Lumina MMU (token space)
+                                ↓
+                  "which cells are corrupted?"
+```
+
+- Input: 64×64 grid of discrete token IDs (integers from VQ codebook)
+- Pros: no decode/encode round-trip, lossless, preserves exact token identity,
+  faster (no image generation step)
+- Cons: model's MMU was pretrained on RGB images, not raw token grids;
+  spatial relationships in token space may be harder to learn
+- Current status: parse_rate=0.156 after LoRA (schema mismatch fix pending)
+
+**Path B — `answer_image()` (decoded image input):**
+
+```
+clean VQ tokens → corrupt → corrupted VQ tokens
+                                ↓
+                          VQ-VAE decode
+                                ↓
+                          corrupted image (RGB)
+                                ↓
+                  Lumina MMU (image space)
+                                ↓
+                  "which region has artifacts?"
+```
+
+- Input: 1024×1024 RGB image (decoded from corrupted tokens)
+- Pros: uses the model's native vision encoder (pretrained on natural images),
+  spatial relationships are visually grounded, may leverage existing
+  object/scene understanding
+- Cons: adds VQ-VAE decode step (~1-2 sec per image), decode may smooth
+  or hide subtle token-level corruptions
+- Current status: **not yet tested on self-corruption data** (was verified
+  working in June 2025 for general image description, not localization)
+
+**Comparison experiment design (for Windows Codex):**
+
+The SFT data pipeline should produce paired training examples for both paths
+from the same corruption rows, so every LoRA experiment can be run on both
+modalities and compared head-to-head.
+
+| What to build | Purpose |
+|---------------|---------|
+| `--input-mode vq_tokens|decoded_image|both` flag on the SFT prep CLI | Generate training data for either or both paths from the same dataset |
+| `--input-mode` flag on the localization probe CLI | Evaluate either path with the same metric suite |
+| Per-sample `input_mode` field in probe_rows.jsonl | Track which path produced each prediction |
+| Dual-path LoRA config | Train two LoRA adapters from the same SFT split, differing only in input modality |
+| Comparison report CLI | Given two probe outputs (vq_tokens vs decoded_image), produce side-by-side metrics |
+
+**Comparison metrics to report:**
+
+| Metric | Why |
+|--------|-----|
+| parse_rate | Which path produces more parseable JSON |
+| hit_any_rate, mean_iou | Which path localizes more accurately |
+| mean_center_displacement | Which path gets closer to true corruption center |
+| call_error_count | Which path has fewer model failures |
+| inference_latency_ms per sample | Trade-off between speed and accuracy |
+| GPU memory at inference | Both paths need to fit on one L40S |
+
+**Decision rule after comparison:**
+
+- If one path clearly dominates → make it the primary, keep the other as
+  fallback/ablations
+- If they complement (e.g., vq_tokens better at fine grids, image better at
+  coarse grids) → design a fusion strategy
+- If both are weak → revisit prompt engineering or training data before
+  either path
+- In all cases, **keep both code paths maintained** — the token-space path
+  is unique to this project and may become important as Lumina's MMU evolves
+
+**Server execution plan after Codex delivers:**
+
+```bash
+# Train on BOTH paths with matching SFT data
+python -m ascr.cli.stage4_train_mmu_lora --config ...vq_tokens.yaml
+python -m ascr.cli.stage4_train_mmu_lora --config ...decoded_image.yaml
+
+# Evaluate both
+python -m ascr.cli.stage4_mmu_localization_probe --config ...probe_vq_tokens.yaml
+python -m ascr.cli.stage4_mmu_localization_probe --config ...probe_decoded_image.yaml
+
+# Compare
+python -m ascr.cli.stage4_compare_input_modes \
+  --vq-tokens-probe .../probe_vq_tokens/summary.json \
+  --decoded-image-probe .../probe_decoded_image/summary.json \
+  --output-dir .../input_mode_comparison
+```
 
 ## Phase 5: ASCR Loop Integration
 
