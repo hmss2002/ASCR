@@ -1,0 +1,9 @@
+features: outputs/stage4_self_corrupt/hidden_features_hard64_grid16/hidden_features.jsonl
+output_dir: outputs/stage4_self_corrupt/repair_head_hard64_grid16
+eval_mode: holdout
+train_ratio: 0.8
+seed: 0
+top_k: 4
+epochs: 120
+learning_rate: 0.08
+l2: 0.001

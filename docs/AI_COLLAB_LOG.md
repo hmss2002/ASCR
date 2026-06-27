@@ -2313,3 +2313,60 @@ But the science is no longer blocked on dataset size. The 128-row Hard64
 dataset produces clear, interpretable selector metrics. Windows Codex can
 choose to either build the parallel infra first, or jump straight to Phase 4
 hidden-state inspection tools — the dataset is ready for either path.
+
+---
+
+## 2026-06-28: Stage 4 hidden-state repair scaffold (Windows Codex)
+
+### Reviewed server result
+- Fetched and fast-forwarded server branch
+  `origin/feat/stage3-self-corrupt-selectors-server` into local `main`.
+- Accepted the Hard64 Phase-3 conclusion:
+  - 128-row dataset is ready at
+    `outputs/stage3_self_corrupt/datasets/locality_hard64_v1/dataset.jsonl`.
+  - `prompt_rgb_localizer` reached 0.875 hit_any at 16x16.
+  - Phase-3 gate is cleared; Phase 4 hidden-state probing is justified.
+
+### Local changes prepared
+- Added Phase-4 helper module `ascr/training/stage4_repair.py`.
+- Added `python -m ascr.cli.stage4_hidden_state_probe`.
+- Added `python -m ascr.cli.stage4_extract_hidden_features`.
+- Added `python -m ascr.cli.stage4_train_repair_head`.
+- Added Phase-4 configs under `configs/stage4/self_corrupt/`.
+- Added shell wrappers:
+  - `scripts/training/run_stage4_hidden_probe.sh`
+  - `scripts/training/run_stage4_repair_head.sh`
+- Added Slurm wrappers:
+  - `jobs/stage4/hidden_state_probe.sbatch`
+  - `jobs/stage4/train_repair_head.sbatch`
+- Added tests in `tests/test_stage4_repair.py`.
+- Registered Phase-4 CLIs in `pyproject.toml`.
+- Added `docs/SERVER_AI_TASK_STAGE4_HIDDEN_REPAIR_HEAD.md`.
+- Updated the Stage-3 design and Windows handoff docs.
+
+### Phase-4 execution model
+- Step 1 probes whether `LLaDAForMultiModalGeneration.forward` returns
+  `hidden_states` with `output_hidden_states=True`.
+- Step 2 extracts projected hidden features per 16x16 selector cell from
+  corrupted image-token prompts.
+- Step 3 trains a lightweight per-cell logistic repair head from the extracted
+  hidden features.
+- Lumina stays frozen. This is not LoRA and not full ASCR-loop integration yet.
+
+### Next server task
+- Read `docs/SERVER_AI_TASK_STAGE4_HIDDEN_REPAIR_HEAD.md`.
+- Create branch `feat/stage4-hidden-repair-server` from latest `main`.
+- First run:
+  `python -m ascr.cli.stage4_hidden_state_probe --config configs/stage4/self_corrupt/hidden_probe_hard64.yaml`
+- If `supports_hidden_states` is true, run:
+  `python -m ascr.cli.stage4_extract_hidden_features --config configs/stage4/self_corrupt/hidden_features_hard64_grid16.yaml`
+- Then run:
+  `python -m ascr.cli.stage4_train_repair_head --config configs/stage4/self_corrupt/repair_head_hard64_grid16.yaml`
+- Or run the Slurm wrappers:
+  `sbatch jobs/stage4/hidden_state_probe.sbatch`
+  and then `sbatch jobs/stage4/train_repair_head.sbatch`.
+- Append hidden-state shapes, feature extraction counts, repair-head metrics,
+  and blockers to this file.
+- Do not commit `outputs/`; commit only the log update.
+- Do not fine-tune Lumina or add LoRA until this hidden-feature repair-head
+  probe is understood.

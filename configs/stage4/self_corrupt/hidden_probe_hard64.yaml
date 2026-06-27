@@ -1,0 +1,8 @@
+dataset: outputs/stage3_self_corrupt/datasets/locality_hard64_v1/dataset.jsonl
+output_dir: outputs/stage4_self_corrupt/hidden_probe_hard64
+limit: 1
+repo_path: third_party/Lumina-DiMOO
+checkpoint_path: models/lumina-dimoo
+device: cuda
+image_size: 1024
+token_grid_size: 64

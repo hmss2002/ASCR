@@ -270,6 +270,17 @@ Notes:
   token-prior on holdout, expand the self-corruption dataset before hidden-state
   repair-head work.
 
+Server Hard64 result:
+
+- Manual 8-shard GPU scale-out produced a 128-row dataset
+  (`locality_hard64_v1`).
+- Locality remained stable: inside energy fractions were about 0.51/0.52 for
+  `block_4x4_random_replace` and `local_shuffle_4x4`, with top-1/top-k at 1.0.
+- Phase-3 selector gate cleared:
+  `prompt_rgb_localizer` reached 0.875 hit_any on 16x16, substantially above
+  random and token-prior.
+- Proceed to Phase 4 hidden-state probing.
+
 ## Phase 4: Internal Repair Head
 
 Main research version:
@@ -292,6 +303,31 @@ Server AI must first inspect whether
 `LLaDAForMultiModalGeneration.forward(output_hidden_states=True)` works in the
 actual Lumina checkout. If not, this phase should pause rather than forcing a
 large invasive model patch.
+
+Implemented Phase-4 scaffold:
+
+```bash
+python -m ascr.cli.stage4_hidden_state_probe \
+  --config configs/stage4/self_corrupt/hidden_probe_hard64.yaml
+
+python -m ascr.cli.stage4_extract_hidden_features \
+  --config configs/stage4/self_corrupt/hidden_features_hard64_grid16.yaml
+
+python -m ascr.cli.stage4_train_repair_head \
+  --config configs/stage4/self_corrupt/repair_head_hard64_grid16.yaml
+```
+
+Slurm wrappers:
+
+```bash
+sbatch jobs/stage4/hidden_state_probe.sbatch
+sbatch jobs/stage4/train_repair_head.sbatch
+```
+
+The first Phase-4 repair head freezes Lumina, extracts projected hidden features
+from corrupted image-token prompts, and trains a lightweight per-cell logistic
+head. This is intentionally a capability and signal probe, not yet a full ASCR
+loop integration.
 
 ## Phase 5: ASCR Loop Integration
 
