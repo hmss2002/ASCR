@@ -1,5 +1,9 @@
 # Server AI Task: Stage 3 Self-Corruption Dataset Build
 
+Status: completed by server branch `feat/stage3-self-corrupt-dataset-server`.
+Keep this file as provenance. The next server task is
+`docs/SERVER_AI_TASK_STAGE3_SELF_CORRUPT_SELECTORS.md`.
+
 You are the server-side AI for ASCR. The Stage-3 locality smoke has passed, so
 your next task is to convert the existing locality probe output into a
 repeatable report and Phase-2 self-corruption dataset.

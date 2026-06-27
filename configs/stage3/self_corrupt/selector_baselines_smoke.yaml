@@ -1,0 +1,21 @@
+run_name: stage3_self_corrupt_selector_baselines_smoke
+dataset: outputs/stage3_self_corrupt/datasets/locality_smoke_v1/dataset.jsonl
+output_dir: outputs/stage3_self_corrupt/selectors/locality_smoke_v1
+grid_sizes:
+  - 4
+  - 8
+  - 16
+baselines:
+  - random
+  - token_prior
+  - rgb_diff_oracle
+  - rgb_localizer
+  - prompt_rgb_localizer
+eval_mode: holdout
+train_ratio: 0.75
+seed: 0
+top_k: null
+prompt_hash_dims: 16
+epochs: 120
+learning_rate: 0.08
+l2: 0.001

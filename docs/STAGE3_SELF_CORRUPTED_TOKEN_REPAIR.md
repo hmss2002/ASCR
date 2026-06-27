@@ -235,6 +235,41 @@ Metrics:
 Only proceed to internal hidden-state work if synthetic corruption labels are
 learnable above trivial baselines.
 
+Implemented model-light baseline tooling:
+
+```bash
+python -m ascr.cli.stage3_train_selectors \
+  --config configs/stage3/self_corrupt/selector_baselines_smoke.yaml
+```
+
+Equivalent wrappers:
+
+```bash
+bash scripts/training/run_stage3_selector_baselines.sh
+sbatch jobs/stage3/train_self_corrupt_selectors.sbatch
+```
+
+Default output:
+
+```text
+outputs/stage3_self_corrupt/selectors/locality_smoke_v1/
+  summary.json
+  grid4/<baseline>/{selector_model.json,metrics.json,predictions.jsonl}
+  grid8/<baseline>/{selector_model.json,metrics.json,predictions.jsonl}
+  grid16/<baseline>/{selector_model.json,metrics.json,predictions.jsonl}
+```
+
+Notes:
+
+- `rgb_diff_oracle` uses clean-vs-corrupted image differences and is an upper
+  bound, not a deployable selector.
+- `rgb_localizer` and `prompt_rgb_localizer` train small pure-Python per-cell
+  logistic models over corrupted-image features.
+- The 24-row smoke dataset is enough to validate wiring, but not enough for a
+  paper-level selector conclusion. If learned localizers beat random and
+  token-prior on holdout, expand the self-corruption dataset before hidden-state
+  repair-head work.
+
 ## Phase 4: Internal Repair Head
 
 Main research version:

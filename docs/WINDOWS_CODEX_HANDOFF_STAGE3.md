@@ -191,19 +191,28 @@ The server AI ran the first Stage-3 gate on branch
 token-to-image locality probe for controlled Lumina VQ-token corruption
 ```
 
-Result summary:
+Locality result summary:
 
 - job 71441 completed successfully on one GPU;
 - 8 prompts and 24 corruption rows decoded successfully;
 - `block_4x4_random_replace` and `local_shuffle_4x4` showed clear locality on
   4x4 and 8x8 grids;
 - top-1 and top-k hit rates were 1.00 across tested grids and corruption types;
-- Phase 2 dataset construction is now the next step.
+- Phase 1 passed.
+
+Dataset result summary:
+
+- server branch `feat/stage3-self-corrupt-dataset-server` built
+  `outputs/stage3_self_corrupt/datasets/locality_smoke_v1/dataset.jsonl`;
+- dataset row count is 24;
+- corruption types are `block_2x2_random_replace`,
+  `block_4x4_random_replace`, and `local_shuffle_4x4`;
+- all 96 referenced image/token paths existed on the server.
 
 The next server task document is:
 
 ```text
-docs/SERVER_AI_TASK_STAGE3_SELF_CORRUPT_DATASET.md
+docs/SERVER_AI_TASK_STAGE3_SELF_CORRUPT_SELECTORS.md
 ```
 
 Expected server commands after pulling latest `main`:
@@ -214,20 +223,13 @@ git checkout main
 git pull --ff-only
 source .venv-lumina/bin/activate
 
-python -m ascr.cli.stage3_locality_report \
-  --manifest outputs/stage3_self_corrupt/locality_probe_smoke/manifest.jsonl \
-  --summary outputs/stage3_self_corrupt/locality_probe_smoke/summary.json \
-  --output-dir outputs/stage3_self_corrupt/locality_probe_smoke/report
-
-python -m ascr.cli.stage3_self_corrupt_dataset \
-  --manifest outputs/stage3_self_corrupt/locality_probe_smoke/manifest.jsonl \
-  --summary outputs/stage3_self_corrupt/locality_probe_smoke/summary.json \
-  --output-dir outputs/stage3_self_corrupt/datasets/locality_smoke_v1
+python -m ascr.cli.stage3_train_selectors \
+  --config configs/stage3/self_corrupt/selector_baselines_smoke.yaml
 ```
 
 Server AI should append results to `docs/AI_COLLAB_LOG.md`. It should not yet
-train selectors, inspect hidden states, use Qwen/Gemini teacher labels, or run
-formal before/after ASCR benchmarks.
+inspect hidden states, use Qwen/Gemini teacher labels, or run formal
+before/after ASCR benchmarks.
 
 ## 8. Windows Codex Behavior Rules
 
@@ -286,8 +288,8 @@ Windows Codex can safely do documentation and pure-Python work. Good next tasks:
 1. Read `docs/STAGE3_SELF_CORRUPTED_TOKEN_REPAIR.md`.
 2. Read `docs/AI_COLLAB_LOG.md` from the latest Stage-3 entry.
 3. Verify tests pass locally.
-4. Use the server locality probe result to build the Phase-2 dataset before
-   implementing selector training or hidden-state repair-head work.
+4. Use the server Phase-2 dataset result to run selector baselines before
+   implementing hidden-state repair-head work.
 
 If the user wants local progress before server results, implement only
 model-light utilities such as:

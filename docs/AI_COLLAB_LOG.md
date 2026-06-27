@@ -1832,3 +1832,54 @@ Next action for Stage 3:
 - Phase 3 selector baselines can begin using this dataset.
 - The first baseline should be random and token-prior at 4x4 / 8x8 / 16x16 grids.
 - Do not train neural selectors or inspect hidden states until trivial baselines are established.
+
+---
+
+## 2026-06-28: Stage 3 selector baseline suite (Windows Codex)
+
+### Reviewed server result
+- Fetched and fast-forwarded server branch
+  `origin/feat/stage3-self-corrupt-dataset-server` into local `main`.
+- Accepted the server result: Phase-2 `locality_smoke_v1` dataset is ready.
+- Dataset status from server:
+  - 24 rows;
+  - 8 prompts x 3 corruption types;
+  - all 96 referenced image/token paths exist on the server.
+
+### Local changes prepared
+- Added `ascr/training/stage3_selectors.py` for Stage-3 self-corruption selector
+  baselines.
+- Added `python -m ascr.cli.stage3_train_selectors`.
+- Added config `configs/stage3/self_corrupt/selector_baselines_smoke.yaml`.
+- Added shell wrapper `scripts/training/run_stage3_selector_baselines.sh`.
+- Added Slurm wrapper `jobs/stage3/train_self_corrupt_selectors.sbatch`.
+- Added tests in `tests/test_stage3_selectors.py`.
+- Registered `ascr-stage3-train-selectors` in `pyproject.toml`.
+- Added `docs/SERVER_AI_TASK_STAGE3_SELF_CORRUPT_SELECTORS.md`.
+- Marked `docs/SERVER_AI_TASK_STAGE3_SELF_CORRUPT_DATASET.md` as completed.
+- Updated the Stage-3 design and Windows handoff docs so the next server action
+  is selector baselines, not dataset construction.
+
+### Baselines now implemented
+- `random`: deterministic random cell selector.
+- `token_prior`: frequency prior trained from the Stage-3 self-corruption
+  training split.
+- `rgb_diff_oracle`: clean-vs-corrupted image-difference oracle; upper bound
+  only, not deployable.
+- `rgb_localizer`: small pure-Python per-cell logistic localizer over corrupted
+  image features.
+- `prompt_rgb_localizer`: same localizer with hashed prompt features.
+
+### Next server task
+- Read `docs/SERVER_AI_TASK_STAGE3_SELF_CORRUPT_SELECTORS.md`.
+- Create branch `feat/stage3-self-corrupt-selectors-server` from latest `main`.
+- Run either:
+  `python -m ascr.cli.stage3_train_selectors --config configs/stage3/self_corrupt/selector_baselines_smoke.yaml`
+- Or:
+  `sbatch jobs/stage3/train_self_corrupt_selectors.sbatch`
+- Append `summary.json` metrics to this file:
+  hit_any_rate, mean_f1_at_k, mean_iou, and mean_distance_to_target_cells for
+  each grid and baseline.
+- Do not commit `outputs/`; commit only the log update.
+- Do not inspect Lumina hidden states or add a repair head until these selector
+  baselines are understood.
