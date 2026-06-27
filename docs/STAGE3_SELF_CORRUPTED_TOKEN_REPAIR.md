@@ -481,6 +481,234 @@ python -m ascr.cli.stage4_compare_input_modes \
   --output-dir .../input_mode_comparison
 ```
 
+### Suggested scripts for Windows Codex
+
+> **Important: these are suggestions based on server-side observations.**
+> The Windows Codex should do its own deep analysis of the codebase, the
+> Phase 4 server results, and the dual-path trade-offs before deciding what
+> to implement. The specs below are a starting point, not a requirement
+> list. Skip, modify, or replace anything that doesn't fit the actual
+> code structure.
+
+---
+
+#### Script 1: Fix SFT schema alignment (highest impact, lowest effort)
+
+**Problem observed on server:** The LoRA outputs `{"correction_instruction":
+"11,12,13,..."}` while the probe parser expects `{"corrupted_cells_16x16":
+["J10","J9"]}`. The key name and value format don't match.
+
+**Suggested fix:** Modify `ascr/cli/stage4_prepare_mmu_sft.py` or
+`ascr/training/prepare_lumina_sft_data.py` so the generated SFT target JSON
+uses the exact keys and cell-label format that the probe parser consumes:
+
+```json
+{
+  "corrupted_cells_4x4": ["D3"],
+  "corrupted_cells_8x8": ["H6", "H7"],
+  "corrupted_cells_16x16": ["P12", "P13"]
+}
+```
+
+The coarse labels already exist in the dataset (`coarse_labels_4x4`,
+`coarse_labels_8x8`, `coarse_labels_16x16`) — they just need to be
+propagated into the SFT target in the format the parser expects.
+
+**Server validation after delivery:** Re-run 4b→4c→4d. Expect parse_rate
+to jump from 0.156 to well above 0.5 if the schema fix is the main blocker.
+
+---
+
+#### Script 2: `--input-mode` on SFT prep and probe CLIs
+
+**Existing CLIs to extend:**
+
+`ascr/cli/stage4_prepare_mmu_sft.py` — add:
+```
+--input-mode {vq_tokens,decoded_image,both}  (default: vq_tokens)
+```
+- `vq_tokens`: current behavior, SFT examples use `vq_ids_path`
+- `decoded_image`: SFT examples use `corrupted_image` (decoded RGB path)
+- `both`: generates two sets of SFT examples in one pass
+
+`ascr/cli/stage4_mmu_localization_probe.py` — already has `use_vq_tokens`
+(bool). Add symmetric:
+```
+--input-mode {vq_tokens,decoded_image}  (default: vq_tokens)
+```
+- `vq_tokens`: calls `engine.answer_vq_tokens(corrupted_vq_ids, prompt)`
+- `decoded_image`: calls `engine.answer_image(corrupted_image_path, prompt)`
+- Records `input_mode` in each probe row and summary
+
+---
+
+#### Script 3: Dual-path LoRA training configs
+
+Two new YAML files under `configs/stage4/self_corrupt/`:
+
+`mmu_lora_train_hard64_vq_tokens.yaml`:
+```yaml
+# Same as mmu_lora_train_hard64.yaml but with:
+input_mode: vq_tokens
+# Uses token-space SFT data
+```
+
+`mmu_lora_train_hard64_decoded_image.yaml`:
+```yaml
+# Same structure but:
+input_mode: decoded_image
+# Uses image-space SFT data
+# image_size likely needs to stay at 1024 for vision encoder
+# May need bf16 to fit in 45GB
+```
+
+All other hyperparameters (epochs, lr, lora_r, lora_alpha, seed) identical
+between the two configs so the comparison is controlled.
+
+---
+
+#### Script 4: Comparison CLI
+
+`ascr/cli/stage4_compare_input_modes.py`:
+```bash
+python -m ascr.cli.stage4_compare_input_modes \
+  --probes probe_vq_tokens/summary.json probe_decoded_image/summary.json \
+  --labels "VQ Tokens" "Decoded Image" \
+  --output-dir outputs/stage4_self_corrupt/mmu_lora_hard64/input_mode_comparison
+```
+
+Outputs:
+- `comparison.json` — side-by-side metrics for all evaluation dimensions
+- `comparison.md` — human-readable table
+
+Example output table:
+```
+Metric                  VQ Tokens   Decoded Image   Winner
+parse_rate              0.156       0.XXX           ?
+hit_any_rate (16x16)    0.0         X.XXX           ?
+mean_iou                0.0         X.XXX           ?
+call_error_count        0           X               ?
+mean_latency_ms         1200        XXXX            ?
+```
+
+---
+
+#### Script 5: Dual-path shell runner
+
+`scripts/training/run_stage4_mmu_lora_dual.sh`:
+
+```bash
+# Runs both paths end-to-end:
+# 1. SFT prep with --input-mode both
+# 2. Lumina SFT convert for both
+# 3. LoRA training for both (can be submitted as parallel sbatch jobs)
+# 4. Evaluation for both
+# 5. Comparison report
+```
+
+Supports env-var toggles so the server AI can skip steps that are already
+done:
+```bash
+RUN_VQ_TOKENS=1 RUN_DECODED_IMAGE=1 bash scripts/training/run_stage4_mmu_lora_dual.sh
+```
+
+---
+
+#### Script 6: Parallel dual-path Slurm wrapper
+
+`jobs/stage4/train_mmu_lora_dual.sbatch`:
+
+Heterogeneous job array — two job steps that can run in parallel on
+different GPUs:
+```bash
+#SBATCH --job-name=ascr-s4-dual
+# Two job steps, each 1 GPU
+# Step 1: VQ tokens LoRA training
+# Step 2: Decoded image LoRA training
+# After both: comparison eval
+```
+
+Or simpler: two independent sbatch submissions from the shell runner,
+each with its own job id. The comparison step waits for both.
+
+---
+
+#### Script 7: `answer_image()` smoke test on self-corruption data
+
+Before full dual-path training, verify that `answer_image()` works on
+corrupted images with a localization prompt:
+
+`ascr/cli/stage4_image_mmu_smoke.py`:
+```bash
+python -m ascr.cli.stage4_image_mmu_smoke \
+  --dataset outputs/stage3_self_corrupt/datasets/locality_hard64_v1/dataset.jsonl \
+  --limit 8 \
+  --output-dir outputs/stage4_self_corrupt/image_mmu_smoke
+```
+
+This is a lightweight check — does the model even understand the
+question "where are the artifacts in this image?" when fed a decoded
+corrupted image? If the answer is gibberish even with a simple prompt,
+then the image path may need prompt engineering before LoRA training.
+
+---
+
+#### Script 8 (stretch): BF16 mixed-precision training support
+
+To recover LoRA training at image_size=1024 on 45GB L40S:
+
+In `ascr/training/stage4_mmu_lora.py`:
+- Add `--torch-dtype bfloat16` option
+- Add `--gradient-checkpointing` flag
+- Add `--target-modules` CLI override (so server can tune without
+  editing configs)
+
+Expected memory savings: bf16 model weights ≈ 50% reduction.
+With gradient checkpointing: another ~30% activation memory reduction.
+These together should allow image_size=1024 with 4+ target modules.
+
+---
+
+#### Script 9 (stretch): Coarse-first curriculum configs
+
+Three training stages, each building on the previous:
+
+| Stage | Grid | Target cells | Expected difficulty |
+|-------|------|-------------|-------------------|
+| 1 | 4×4 | 1-2 cells | Easiest (16 cells total) |
+| 2 | 8×8 | 1-4 cells | Medium (64 cells) |
+| 3 | 16×16 | 1-8 cells | Hardest (256 cells) |
+
+Configs: `mmu_lora_train_hard64_grid4.yaml`, `_grid8.yaml`, `_grid16.yaml`
+
+Each stage trains a LoRA on the SFT data filtered to that grid's labels.
+The server can then evaluate all three and see where accuracy degrades.
+
+---
+
+### Suggested priority order
+
+```
+1. Script 7 (image MMU smoke)        ← verify image path works at all
+2. Script 1 (schema fix)             ← unblock parse_rate immediately
+3. Script 2 (--input-mode flags)     ← enable controlled comparison
+4. Script 3 + 5 + 6 (dual configs + runners) ← full comparison pipeline
+5. Script 4 (comparison CLI)         ← quantify the difference
+6. Script 8 (bf16)                   ← recover full-res training
+7. Script 9 (curriculum)             ← improve localization accuracy
+```
+
+### What the server AI can do while waiting
+
+Without waiting for any new code, the server AI can:
+- Run the image MMU smoke test manually by passing `--prompt` and
+  `--image` arguments if the probe CLI supports them
+- Run selector baselines on any new dataset
+- Submit parallel locality probe jobs at scale (manual sharding already
+  proven to work)
+- The Hard64 dataset (128 rows) and probe outputs are intact and
+  verified
+
 ## Phase 5: ASCR Loop Integration
 
 Add a Stage-3 loop only after a selector is useful:
