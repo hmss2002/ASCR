@@ -1883,3 +1883,85 @@ Next action for Stage 3:
 - Do not commit `outputs/`; commit only the log update.
 - Do not inspect Lumina hidden states or add a repair head until these selector
   baselines are understood.
+
+## 2026-06-28 02:00 HKT - server AI
+
+Context:
+- Machine: HKU AI server login node hpcr4300a
+- Branch before: main
+- Commit before: a58dffe9ee29039c1e29842b99d881b4d5f5dfd5
+- Branch after: feat/stage3-self-corrupt-selectors-server
+- Commit after: a58dffe9ee29039c1e29842b99d881b4d5f5dfd5 (no code changes; log-only branch)
+
+Files changed:
+- docs/AI_COLLAB_LOG.md: appended this Stage-3 selector baselines server entry
+
+Commands run:
+- git fetch origin; git checkout main; git pull --ff-only; git checkout -b feat/stage3-self-corrupt-selectors-server
+  Result: passed
+  Notes: synced to main at a58dffe. Fast-forwarded 2 commits from 4540285; pulled in stage3_train_selectors CLI, stage3_selectors training module, selector_baselines_smoke config, sbatch wrapper, shell runner, and updated docs.
+- source .venv-lumina/bin/activate && python -m ascr.cli.stage3_train_selectors --config configs/stage3/self_corrupt/selector_baselines_smoke.yaml
+  Result: passed
+  Notes: model-light login-node run. All 15 selector baselines (5 baselines x 3 grids) completed successfully. No GPU required.
+
+Environment:
+- python: Python 3.11.15 in .venv-lumina
+- torch: not needed for model-light baselines
+- cuda: not used (login-node run)
+- gpu summary: not used
+- active env: .venv-lumina
+- important env vars set/unset, without values: LUMINA_REPO and LUMINA_MODEL_PATH set in session but not used by the CLI
+
+Server jobs:
+- job id: none (login-node model-light run)
+- mode: Stage-3 Phase-3 selector baselines
+- output dir: outputs/stage3_self_corrupt/selectors/locality_smoke_v1/
+
+Results:
+- output root: outputs/stage3_self_corrupt/selectors/locality_smoke_v1/
+- summary.json: outputs/stage3_self_corrupt/selectors/locality_smoke_v1/summary.json
+- eval_mode: holdout, train_ratio: 0.75, seed: 0
+- dataset: 24 rows (8 prompts x 3 corruption types)
+- split: 18 train / 6 eval per grid, stratified by corruption type
+- all referenced image/token paths present: 0 missing
+
+Selector metrics by grid and baseline:
+
+```
+Grid  Baseline                 hit_any  mean_f1  mean_iou  mean_dist
+4x4   random                   0.167    0.111    0.083     1.694
+4x4   token_prior              0.333    0.194    0.139     1.785
+4x4   rgb_diff_oracle (UB)     1.000    0.722    0.583     0.000
+4x4   rgb_localizer            0.333    0.194    0.139     1.123
+4x4   prompt_rgb_localizer     0.333    0.222    0.167     1.869
+8x8   random                   0.167    0.067    0.042     2.072
+8x8   token_prior              0.167    0.067    0.042     2.797
+8x8   rgb_diff_oracle (UB)     1.000    0.533    0.375     0.000
+8x8   rgb_localizer            0.333    0.122    0.075     2.478
+8x8   prompt_rgb_localizer     0.167    0.067    0.042     3.548
+16x16 random                   0.167    0.028    0.015     3.021
+16x16 token_prior              0.167    0.028    0.015     3.277
+16x16 rgb_diff_oracle (UB)     1.000    0.504    0.354     0.000
+16x16 rgb_localizer            0.167    0.056    0.033     3.832
+16x16 prompt_rgb_localizer     0.167    0.028    0.015     4.346
+```
+
+(UB = upper bound only, not a deployable selector)
+
+Analysis:
+- rgb_diff_oracle proves the locality signal is exploitable: hit_any=1.0 at all grids, mean_iou drops from 0.583 (4x4) to 0.354 (16x16) — expected as grid gets finer.
+- On 4x4: token_prior (0.333) and rgb_localizer (0.333) both double random (0.167). prompt_rgb_localizer matches at hit_any=0.333 with slightly better F1 (0.222).
+- On 8x8: only rgb_localizer beats random and token_prior (0.333 vs 0.167). prompt_rgb_localizer degrades to random level.
+- On 16x16: no learned baseline beats random; only rgb_diff_oracle survives.
+- token_prior ~ rgb_localizer at 4x4 and 16x16: per decision rule, the 24-row smoke dataset is too small for model conclusions.
+
+Problems / blockers:
+- None at runtime. All 15 baselines completed without errors.
+- Scientific blocker: the 24-row smoke dataset is too small. The learned localizers (rgb_localizer, prompt_rgb_localizer) degrade sharply at finer grids and prompt features do not help at 8x8/16x16.
+
+Recommendation: **Expand the self-corruption dataset before neural selector work.**
+- The rgb_diff_oracle proves the RGB signal contains exploitable locality.
+- rgb_localizer at 4x4 is the most promising learned baseline (doubles random).
+- Expand from 8 prompts to at least 64 prompts, keeping block_4x4 and local_shuffle_4x4 as primary corruption types (block_2x2 is too weak per Phase 1 results).
+- After expansion, reassess rgb_localizer at 8x8 and 16x16.
+- Do not proceed to Phase 4 (hidden states / repair head) on the current 24-row dataset.
