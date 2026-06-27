@@ -1,5 +1,8 @@
 # Server AI Task: Stage 3 Self-Corruption Locality Probe
 
+Status: completed by server job 71441. Keep this file as provenance. The next
+server task is `docs/SERVER_AI_TASK_STAGE3_SELF_CORRUPT_DATASET.md`.
+
 You are the server-side AI for ASCR. Your immediate task is to run the first
 Stage-3 gate: token-to-image locality for controlled Lumina VQ-token corruption.
 

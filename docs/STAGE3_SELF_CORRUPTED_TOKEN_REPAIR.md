@@ -22,6 +22,29 @@ Do not claim that the model becomes generally smarter without external signal.
 The clean image is only a relative positive compared with its corrupted pair; it
 is not guaranteed to be a perfect prompt match.
 
+## Clarification: Corruption Target And Selector Grids
+
+Stage 3 corrupts Lumina's generated VQ image-token sequence, then decodes the
+corrupted token sequence back into an image. In the current Lumina path this is
+a 64x64 token grid for 1024x1024 images, not a 4x4 or 8x8 selector grid.
+
+The corruption is controlled and local:
+
+- random replacement of one local block of token ids, for example 2x2 or 4x4;
+- local shuffling inside a block, for example 4x4;
+- later, smaller perturbations can be added if they produce visible but not
+  destructive changes.
+
+The goal is not to create arbitrary bad images. The goal is to create paired
+clean/corrupted examples where the true corrupted token positions are known, the
+decoded image quality or local consistency is measurably worse, and the
+localization target is self-supervised.
+
+The 4x4, 8x8, and 16x16 grids are selector or analysis grids inherited from the
+earlier ASCR interface. They are projections of the underlying token grid. The
+server locality smoke supports using coarse-to-fine selector grids: start with
+4x4 or 8x8 localization, then refine only if the data supports finer claims.
+
 ## Current Repo Facts
 
 - `LuminaAdapter` stores generated VQ ids in
@@ -123,6 +146,16 @@ Decision gate:
 - If locality is weak, do not train a hidden-state repair head yet; narrow the
   claim.
 
+Server result from job 71441:
+
+- 8 prompts and 24 corruption rows completed successfully.
+- Lumina generation/decode succeeded for all clean and corrupted token grids.
+- `block_4x4_random_replace` and `local_shuffle_4x4` show clear locality on
+  4x4 and 8x8 grids.
+- Top-1 and top-k hit rates were 1.00 across all tested corruption types and
+  grid sizes.
+- Proceed to Phase 2 dataset construction before selector training.
+
 ## Phase 2: Self-Corruption Dataset
 
 After Phase 1 passes, build paired examples:
@@ -155,6 +188,23 @@ Each row should include:
 
 Store large token arrays in referenced JSON files rather than inlining them in
 `dataset.jsonl`.
+
+Implemented model-light tooling:
+
+```bash
+python -m ascr.cli.stage3_locality_report \
+  --manifest outputs/stage3_self_corrupt/locality_probe_smoke/manifest.jsonl \
+  --summary outputs/stage3_self_corrupt/locality_probe_smoke/summary.json \
+  --output-dir outputs/stage3_self_corrupt/locality_probe_smoke/report
+
+python -m ascr.cli.stage3_self_corrupt_dataset \
+  --manifest outputs/stage3_self_corrupt/locality_probe_smoke/manifest.jsonl \
+  --summary outputs/stage3_self_corrupt/locality_probe_smoke/summary.json \
+  --output-dir outputs/stage3_self_corrupt/datasets/locality_smoke_v1
+```
+
+These commands do not load Lumina. They convert the server probe outputs into a
+repeatable report and a Phase-2 dataset manifest.
 
 ## Phase 3: Selector Baselines
 

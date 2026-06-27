@@ -14,8 +14,8 @@ The project is:
 ```text
 ASCR: Alternating Semantic-Confidence Revision
 GitHub: https://github.com/hmss2002/ASCR.git
-Latest known pushed commit: 405fca06e2d0dc0f2cafdeb9970eaf73aa589836
-Commit message: Add stage3 self-corruption locality probe
+Latest known pushed commit: check `git log -1 --oneline --decorate`
+Commit message: may advance as Windows and server agents alternate
 Main working branch: main
 ```
 
@@ -70,14 +70,14 @@ git rev-parse HEAD
 git rev-parse origin/main
 ```
 
-Expected commit:
-
-```text
-405fca06e2d0dc0f2cafdeb9970eaf73aa589836
-```
-
 If `HEAD` and `origin/main` differ, report the exact output before making
-changes.
+changes. Also check recent remote feature branches because the server AI often
+pushes results to a new branch before `main` is updated:
+
+```powershell
+git fetch --all --prune
+git for-each-ref --sort=-committerdate --format="%(committerdate:iso8601) %(refname:short) %(objectname:short) %(subject)" refs/remotes/origin
+```
 
 ## 4. Python Environment On Windows
 
@@ -182,50 +182,52 @@ tests/test_schema_parser.py
 `GridCell.from_any()` now accepts labels beyond 4x4, for example `H8` and
 `P16`, so Stage 3 can compare 8x8 and 16x16 selector grids.
 
-## 7. What The Server AI Is Expected To Do Next
+## 7. Current Stage-3 State
 
-The server AI should run the first Stage-3 gate:
+The server AI ran the first Stage-3 gate on branch
+`feat/stage3-self-corrupt-locality-server`:
 
 ```text
 token-to-image locality probe for controlled Lumina VQ-token corruption
 ```
 
-Server task document:
+Result summary:
+
+- job 71441 completed successfully on one GPU;
+- 8 prompts and 24 corruption rows decoded successfully;
+- `block_4x4_random_replace` and `local_shuffle_4x4` showed clear locality on
+  4x4 and 8x8 grids;
+- top-1 and top-k hit rates were 1.00 across tested grids and corruption types;
+- Phase 2 dataset construction is now the next step.
+
+The next server task document is:
 
 ```text
-docs/SERVER_AI_TASK_STAGE3_SELF_CORRUPT_LOCALITY.md
+docs/SERVER_AI_TASK_STAGE3_SELF_CORRUPT_DATASET.md
 ```
 
-Expected server commands:
+Expected server commands after pulling latest `main`:
 
 ```bash
 git fetch origin
 git checkout main
 git pull --ff-only
-git checkout -b feat/stage3-self-corrupt-locality-server
 source .venv-lumina/bin/activate
-sbatch jobs/stage3/self_corrupt_locality_probe.sbatch
+
+python -m ascr.cli.stage3_locality_report \
+  --manifest outputs/stage3_self_corrupt/locality_probe_smoke/manifest.jsonl \
+  --summary outputs/stage3_self_corrupt/locality_probe_smoke/summary.json \
+  --output-dir outputs/stage3_self_corrupt/locality_probe_smoke/report
+
+python -m ascr.cli.stage3_self_corrupt_dataset \
+  --manifest outputs/stage3_self_corrupt/locality_probe_smoke/manifest.jsonl \
+  --summary outputs/stage3_self_corrupt/locality_probe_smoke/summary.json \
+  --output-dir outputs/stage3_self_corrupt/datasets/locality_smoke_v1
 ```
 
-Server AI must append results to:
-
-```text
-docs/AI_COLLAB_LOG.md
-```
-
-It should report:
-
-- branch and commit hash;
-- node, job id, and environment;
-- exact command;
-- whether Lumina generation/decode succeeded;
-- `summary.json` row count and prompt count;
-- aggregate locality metrics from `manifest.jsonl`;
-- heatmap example paths;
-- blockers, if any.
-
-Server AI should not yet train selectors, inspect hidden states, use Qwen/Gemini
-teacher labels, or run formal before/after ASCR benchmarks.
+Server AI should append results to `docs/AI_COLLAB_LOG.md`. It should not yet
+train selectors, inspect hidden states, use Qwen/Gemini teacher labels, or run
+formal before/after ASCR benchmarks.
 
 ## 8. Windows Codex Behavior Rules
 
@@ -284,8 +286,8 @@ Windows Codex can safely do documentation and pure-Python work. Good next tasks:
 1. Read `docs/STAGE3_SELF_CORRUPTED_TOKEN_REPAIR.md`.
 2. Read `docs/AI_COLLAB_LOG.md` from the latest Stage-3 entry.
 3. Verify tests pass locally.
-4. Wait for the server locality probe result before implementing selector
-   training or hidden-state repair-head work.
+4. Use the server locality probe result to build the Phase-2 dataset before
+   implementing selector training or hidden-state repair-head work.
 
 If the user wants local progress before server results, implement only
 model-light utilities such as:

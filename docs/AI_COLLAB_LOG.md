@@ -1722,3 +1722,47 @@ Recommendation: **Proceed to self-corruption dataset construction (Phase 2).**
 - block_2x2_random_replace is weaker (inside_frac=0.3075 on 8x8, in/out ratio=0.4533) but still has non-trivial locality above the random baseline of ~0.016 for a single cell on an 8x8 grid.
 - The locality gradient from 4x4 → 8x8 → 16x16 is smooth and expected, supporting a coarse-to-fine repair strategy (start at 4x4 coarse cells, refine to 8x8 or 16x16).
 - No blockers to building the paired clean/corrupted dataset as specified in docs/STAGE3_SELF_CORRUPTED_TOKEN_REPAIR.md Phase 2.
+
+---
+
+## 2026-06-28: Stage 3 Phase-2 local dataset tooling (Windows Codex)
+
+### Reviewed server result
+- Fetched server branch `origin/feat/stage3-self-corrupt-locality-server`.
+- Fast-forwarded the server log-only result into local `main`.
+- Accepted the server conclusion from job 71441: Phase 1 locality passed.
+- Key interpretation:
+  - Corruption is applied to Lumina VQ image tokens, then decoded to image space.
+  - The current Lumina path uses a 64x64 token grid for 1024x1024 images.
+  - 4x4, 8x8, and 16x16 are selector/analysis projections of that token grid,
+    not the token corruption grid itself.
+  - The first selector baseline should be coarse-to-fine, starting with 4x4 or
+    8x8 localization before making token-level claims.
+
+### Local changes prepared
+- Added model-light Stage-3 helpers in `ascr/analysis/stage3_self_corrupt.py`.
+- Added `python -m ascr.cli.stage3_locality_report` to aggregate
+  `manifest.jsonl` metrics into JSON and Markdown reports.
+- Added `python -m ascr.cli.stage3_self_corrupt_dataset` to convert the locality
+  probe manifest into a Phase-2 `dataset.jsonl` plus `dataset_manifest.json`.
+- Registered both tools in `pyproject.toml`.
+- Added tests in `tests/test_stage3_self_corrupt.py`.
+- Updated `docs/STAGE3_SELF_CORRUPTED_TOKEN_REPAIR.md` with the corruption-grid
+  clarification, job 71441 result, and Phase-2 commands.
+- Added `docs/SERVER_AI_TASK_STAGE3_SELF_CORRUPT_DATASET.md`.
+- Marked `docs/SERVER_AI_TASK_STAGE3_SELF_CORRUPT_LOCALITY.md` as completed.
+- Updated `docs/WINDOWS_CODEX_HANDOFF_STAGE3.md` so future Windows Codex agents
+  check recent server feature branches, not only `origin/main`.
+
+### Next server task
+- Read `docs/SERVER_AI_TASK_STAGE3_SELF_CORRUPT_DATASET.md`.
+- Create branch `feat/stage3-self-corrupt-dataset-server` from latest `main`.
+- Do not rerun Lumina unless the job 71441 outputs are missing.
+- Run:
+  `python -m ascr.cli.stage3_locality_report --manifest outputs/stage3_self_corrupt/locality_probe_smoke/manifest.jsonl --summary outputs/stage3_self_corrupt/locality_probe_smoke/summary.json --output-dir outputs/stage3_self_corrupt/locality_probe_smoke/report`
+- Run:
+  `python -m ascr.cli.stage3_self_corrupt_dataset --manifest outputs/stage3_self_corrupt/locality_probe_smoke/manifest.jsonl --summary outputs/stage3_self_corrupt/locality_probe_smoke/summary.json --output-dir outputs/stage3_self_corrupt/datasets/locality_smoke_v1`
+- Append report paths, dataset paths, row count, corruption types, and blockers
+  to this file.
+- Do not commit `outputs/`; commit only the log update.
+- Do not train selectors, inspect hidden states, or run formal benchmarks yet.
