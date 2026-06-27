@@ -346,6 +346,42 @@ The older hidden-state repair-head scaffold remains useful only as a diagnostic
 baseline. It is not the main research route unless the native MMU/LoRA path
 fails.
 
+### Phase 4 Server Results (2026-06-28)
+
+Server branch: `feat/stage4-mmu-lora-server`. All four sub-steps ran.
+
+| Step | Result | Detail |
+|------|--------|--------|
+| 4a — Zero-shot probe | parse_rate **0.0** | 16/16 malformed. Base Lumina MMU outputs natural language, not structured JSON. Confirms need for LoRA. |
+| 4b — SFT prep | 96 train / 32 eval | 0 missing images, 0 missing VQ tokens. `preferred_training_input: vq_ids_path`. |
+| 4c — LoRA training | loss 9.75 → **0.157** | 15 epochs, 12.5 min. adapter_model.safetensors = 16.8 MB. |
+| 4d — LoRA eval | parse_rate **0.156** (5/32) | 27/32 still malformed. hit_any = **0.0**. |
+
+**OOM workaround**: The default config (image_size=1024, 7 LoRA target modules,
+max_seq_len=6144) OOMs on the 45 GB L40S during training. Reducing to
+image_size=512, max_seq_len=2048, and 2 target modules (q_proj, v_proj)
+resolved the OOM but limits LoRA capacity. Inference at 1024 fits fine.
+
+**Schema mismatch found**: The LoRA outputs `{"correction_instruction": "11,12,13,..."}`
+(integer coordinates) while the probe parser expects
+`{"corrupted_cells_16x16": ["J10","J9"]}` (cell labels). The LoRA learned to
+output structured localization data but with the wrong key name and value
+format. This is a training target ↔ parser schema mismatch, not a
+failure to learn.
+
+**Decision**: Phase 4 gate not yet cleared (parse_rate 0.156 < 0.5 threshold).
+But the LoRA qualitatively changed output from natural language → structured
+coordinates, proving the approach is viable. Next steps:
+
+1. **Fix schema alignment** — make SFT targets use the same JSON keys and
+   cell-label format that the probe parser expects.
+2. **Recover training capacity** — use bf16 mixed precision + gradient
+   checkpointing to train at image_size=1024 with more target modules.
+3. **Consider image-space MMU** — `answer_image()` on decoded corrupted images
+   may be easier for the model than `answer_vq_tokens()` on raw VQ tokens.
+4. **Coarse-first curriculum** — train on 4×4 grid localization first, then
+   progress to 8×8 and 16×16.
+
 ## Phase 5: ASCR Loop Integration
 
 Add a Stage-3 loop only after a selector is useful:
