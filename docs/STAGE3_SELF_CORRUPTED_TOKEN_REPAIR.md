@@ -65,7 +65,7 @@ Stage 3 adds a separate direct mask path:
 
 ```text
 prompt + clean/corrupted vq_ids -> self-corruption labels
--> selector or internal repair head -> TokenReopenMask -> Lumina reopen
+-> selector or Lumina-native MMU localizer -> TokenReopenMask -> Lumina reopen
 ```
 
 ## Phase 0: Local Direction Reset
@@ -143,7 +143,7 @@ Decision gate:
   construction.
 - If only coarse block locality is stable, use coarse-to-fine block repair
   rather than token-level claims.
-- If locality is weak, do not train a hidden-state repair head yet; narrow the
+- If locality is weak, do not train internal Lumina localizers yet; narrow the
   claim.
 
 Server result from job 71441:
@@ -232,7 +232,7 @@ Metrics:
 - mean distance to corrupted token;
 - selected token count.
 
-Only proceed to internal hidden-state work if synthetic corruption labels are
+Only proceed to internal Lumina/MMU work if synthetic corruption labels are
 learnable above trivial baselines.
 
 Implemented model-light baseline tooling:
@@ -268,7 +268,7 @@ Notes:
 - The 24-row smoke dataset is enough to validate wiring, but not enough for a
   paper-level selector conclusion. If learned localizers beat random and
   token-prior on holdout, expand the self-corruption dataset before hidden-state
-  repair-head work.
+  native-MMU LoRA work.
 
 Server Hard64 result:
 
@@ -279,55 +279,72 @@ Server Hard64 result:
 - Phase-3 selector gate cleared:
   `prompt_rgb_localizer` reached 0.875 hit_any on 16x16, substantially above
   random and token-prior.
-- Proceed to Phase 4 hidden-state probing.
+- Proceed to Phase 4 native MMU/LoRA localization.
 
-## Phase 4: Internal Repair Head
+## Phase 4: Native MMU/LoRA Localization
 
 Main research version:
 
 ```text
 prompt + corrupted image tokens
--> Lumina multimodal forward / MMU hidden states
--> lightweight repair head
--> H x W mask logits
+-> Lumina native MMU answer path
+-> structured SemanticEvaluation JSON
+-> existing selector/reopen contract
 ```
+
+The key principle is "unify": the localizer should live inside Lumina's own
+multimodal understanding path where the image-token information is already
+represented. Avoid making a separate model the mainline unless it is explicitly
+used as a baseline or diagnostic.
 
 Training order:
 
-1. Freeze Lumina completely.
-2. Train only a small repair head.
-3. Compare against random, prior, RGB, and text-output baselines.
-4. If frozen-head results are useful, try LoRA on the MMU path.
+1. Probe zero-training Lumina MMU localization on self-corrupted Hard64 rows.
+2. Prepare MMU SFT pairs from corrupted VQ tokens and canonical
+   `SemanticEvaluation` targets.
+3. Train a lightweight LoRA adapter on Lumina's MMU answer path.
+4. Evaluate the LoRA adapter against Phase-3 external selector baselines.
+5. If useful, plug the LoRA-backed evaluator into the existing ASCR loop.
 
-Server AI must first inspect whether
-`LLaDAForMultiModalGeneration.forward(output_hidden_states=True)` works in the
-actual Lumina checkout. If not, this phase should pause rather than forcing a
-large invasive model patch.
-
-Implemented Phase-4 scaffold:
+Implemented native-MMU tooling:
 
 ```bash
-python -m ascr.cli.stage4_hidden_state_probe \
-  --config configs/stage4/self_corrupt/hidden_probe_hard64.yaml
+python -m ascr.cli.stage4_mmu_localization_probe \
+  --config configs/stage4/self_corrupt/mmu_probe_zero_hard64.yaml
 
-python -m ascr.cli.stage4_extract_hidden_features \
-  --config configs/stage4/self_corrupt/hidden_features_hard64_grid16.yaml
+python -m ascr.cli.stage4_prepare_mmu_sft \
+  --config configs/stage4/self_corrupt/mmu_sft_hard64.yaml
 
-python -m ascr.cli.stage4_train_repair_head \
-  --config configs/stage4/self_corrupt/repair_head_hard64_grid16.yaml
+python -m ascr.training.prepare_lumina_sft_data \
+  --sft-examples outputs/stage4_self_corrupt/mmu_lora_hard64/sft/train_sft_examples.jsonl \
+  --output-dir outputs/stage4_self_corrupt/mmu_lora_hard64/lumina_sft \
+  --repo-path third_party/Lumina-DiMOO \
+  --checkpoint-path models/lumina-dimoo \
+  --image-size 1024
+
+python -m ascr.cli.stage4_train_mmu_lora \
+  --config configs/stage4/self_corrupt/mmu_lora_train_hard64.yaml
+
+python -m ascr.cli.stage4_mmu_localization_probe \
+  --config configs/stage4/self_corrupt/mmu_probe_lora_hard64.yaml
 ```
 
-Slurm wrappers:
+Single-command and Slurm wrappers:
 
 ```bash
-sbatch jobs/stage4/hidden_state_probe.sbatch
-sbatch jobs/stage4/train_repair_head.sbatch
+bash scripts/training/run_stage4_mmu_lora.sh
+sbatch jobs/stage4/train_mmu_lora.sbatch
 ```
 
-The first Phase-4 repair head freezes Lumina, extracts projected hidden features
-from corrupted image-token prompts, and trains a lightweight per-cell logistic
-head. This is intentionally a capability and signal probe, not yet a full ASCR
-loop integration.
+`LuminaNativeEngine.answer_vq_tokens()` allows Stage 4 to ask the MMU about
+existing corrupted VQ tokens directly, without first decoding to RGB and
+re-encoding through the VQ-VAE. The decoded corrupted image path is still
+available as a fallback and for human inspection, but the preferred training
+input is the internal token representation.
+
+The older hidden-state repair-head scaffold remains useful only as a diagnostic
+baseline. It is not the main research route unless the native MMU/LoRA path
+fails.
 
 ## Phase 5: ASCR Loop Integration
 
@@ -370,7 +387,7 @@ Benchmark arms:
 - Stage 1 Qwen coarse ASCR;
 - Stage 2 Lumina-native JSON evaluator if available;
 - Stage 3 self-corrupt selector ASCR;
-- Stage 3 internal repair head ASCR if Phase 4 succeeds.
+- Stage 4 native MMU/LoRA ASCR if Phase 4 succeeds.
 
 External Qwen/Gemini judges are allowed for evaluation. They must not provide
 Stage-3 training labels unless the experiment is explicitly marked as a hybrid

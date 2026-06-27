@@ -1,6 +1,7 @@
 import argparse
 from datetime import datetime, timezone
 import json
+import math
 import os
 import pickle
 from pathlib import Path
@@ -57,6 +58,19 @@ def _load_image_tokenizer(checkpoint_path, device, image_size):
     return tokenize
 
 
+def _token_payload_from_vq_ids(vq_ids_path, image_size=None, token_grid_size=None):
+    vq_ids = json.loads(Path(vq_ids_path).read_text(encoding="utf-8"))
+    grid = int(token_grid_size or math.isqrt(len(vq_ids)))
+    if grid * grid != len(vq_ids):
+        raise ValueError(f"VQ token count is not a square grid: {vq_ids_path}")
+    height = width = int(image_size or grid * 16)
+    return {
+        "input_ids": [int(value) for value in vq_ids],
+        "height": height,
+        "width": width,
+    }
+
+
 def convert_sft_examples(
     sft_examples,
     output_dir,
@@ -76,34 +90,54 @@ def convert_sft_examples(
     output_dir = Path(output_dir)
     image_cache_dir = output_dir / "image_tokens"
     image_cache_dir.mkdir(parents=True, exist_ok=True)
-    if image_tokenizer is None:
-        image_tokenizer = _load_image_tokenizer(checkpoint_path, device, image_size)
 
     rows = []
     skipped = []
+    direct_vq_count = 0
     for index, example in enumerate(read_jsonl(sft_examples)):
         if limit is not None and index >= int(limit):
             break
-        image_path = Path(example.get("image_path") or "")
-        if not image_path.exists():
+        raw_image_path = example.get("image_path") or ""
+        image_path = Path(raw_image_path) if raw_image_path else None
+        raw_vq_ids_path = example.get("vq_ids_path") or example.get("corrupted_vq_ids_path") or ""
+        vq_ids_path = Path(raw_vq_ids_path) if raw_vq_ids_path else None
+        has_image = bool(image_path and image_path.exists())
+        has_vq_ids = bool(vq_ids_path and vq_ids_path.exists())
+        if not has_image and not has_vq_ids:
             skipped.append({
                 "sample_id": example.get("sample_id"),
-                "image_path": str(image_path),
-                "reason": "missing_image",
+                "image_path": str(image_path) if image_path else None,
+                "vq_ids_path": str(vq_ids_path) if vq_ids_path else None,
+                "reason": "missing_image_or_vq_ids",
             })
             continue
         target_text = compact_target_text(example)
         if not target_text:
             skipped.append({
                 "sample_id": example.get("sample_id"),
-                "image_path": str(image_path),
+                "image_path": str(image_path) if image_path else None,
+                "vq_ids_path": str(vq_ids_path) if vq_ids_path else None,
                 "reason": "missing_target",
             })
             continue
         token_path = image_cache_dir / f"img_{len(rows):04d}.pkl"
         if not token_path.exists():
             with token_path.open("wb") as handle:
-                pickle.dump(image_tokenizer(image_path), handle)
+                if has_vq_ids:
+                    pickle.dump(
+                        _token_payload_from_vq_ids(
+                            vq_ids_path,
+                            image_size=example.get("image_size", image_size),
+                            token_grid_size=example.get("token_grid_size"),
+                        ),
+                        handle,
+                    )
+                else:
+                    if image_tokenizer is None:
+                        image_tokenizer = _load_image_tokenizer(checkpoint_path, device, image_size)
+                    pickle.dump(image_tokenizer(image_path), handle)
+        if has_vq_ids:
+            direct_vq_count += 1
         rows.append({
             "sample_id": example.get("sample_id"),
             "user_image": str(token_path).replace("\\", "/"),
@@ -111,7 +145,9 @@ def convert_sft_examples(
             "system_prompt": SYSTEM_PROMPT,
             "user_prompt": example.get("input_text") or f"Original prompt: {example.get('prompt', '')}",
             "answer_text": target_text,
-            "source_image": str(image_path).replace("\\", "/"),
+            "source_image": str(image_path).replace("\\", "/") if image_path else None,
+            "source_vq_ids": str(vq_ids_path).replace("\\", "/") if vq_ids_path else None,
+            "input_mode": "vq_tokens" if has_vq_ids else "image",
         })
 
     train_path = output_dir / "train.jsonl"
@@ -129,6 +165,8 @@ def convert_sft_examples(
         "image_size": int(image_size),
         "example_count": len(rows),
         "skipped_count": len(skipped),
+        "direct_vq_example_count": direct_vq_count,
+        "image_encoded_example_count": len(rows) - direct_vq_count,
         "skipped": skipped,
         "train_jsonl": str(train_path),
         "image_cache_dir": str(image_cache_dir),

@@ -1,0 +1,42 @@
+run_name: stage4_mmu_lora_ascr_smoke
+output_dir: outputs/stage4_self_corrupt/mmu_lora_hard64/ascr_smoke
+max_iterations: 1
+image_size: 1024
+token_grid_size: 64
+coarse_grid_size: 16
+dilation: 0
+
+generator:
+  name: lumina
+  repo_path: third_party/Lumina-DiMOO
+  checkpoint_path: models/lumina-dimoo
+  lora_path: outputs/stage4_self_corrupt/mmu_lora_hard64/lora
+  device: cuda
+  image_size: 1024
+  token_grid_size: 64
+  guidance_scale: 4.0
+  generation_timesteps: 64
+  temperature: 1.0
+  seed: 1234
+  answer_steps: 64
+  answer_block_length: 128
+  answer_temperature: 0.0
+  answer_cfg_scale: 0.0
+
+evaluator:
+  name: lumina_native_evaluator
+  repo_path: third_party/Lumina-DiMOO
+  checkpoint_path: models/lumina-dimoo
+  lora_path: outputs/stage4_self_corrupt/mmu_lora_hard64/lora
+  device: cuda
+  grid_size: 16
+  max_new_tokens: 384
+  max_selected_cells: 16
+  answer_steps: 64
+  answer_block_length: 128
+  answer_temperature: 0.0
+  answer_cfg_scale: 0.0
+  unsupported_policy: abstain
+
+selector:
+  max_selected_cells: 16

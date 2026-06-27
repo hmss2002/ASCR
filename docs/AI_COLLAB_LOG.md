@@ -2370,3 +2370,65 @@ hidden-state inspection tools — the dataset is ready for either path.
 - Do not commit `outputs/`; commit only the log update.
 - Do not fine-tune Lumina or add LoRA until this hidden-feature repair-head
   probe is understood.
+
+---
+
+## 2026-06-28 03:15 HKT: Server AI revised Phase 4 plan (native MMU + LoRA)
+
+### Server recommendation incorporated
+- Server branch `origin/feat/stage3-self-corrupt-selectors-server` advanced to
+  commit `8a31c3716c712eab3db77f0aa28748cd1c803719`.
+- The branch base predates local commit `e541d47`, so Windows Codex did not
+  merge it directly; that would have deleted the hidden-state scaffold files.
+- The useful server content is the strategic correction:
+  - do not make an external hidden-state repair head the main Phase-4 path;
+  - use Lumina's native MMU `answer_image()` path;
+  - add LoRA as a lightweight Lumina adapter if zero-shot MMU localization is
+    not enough;
+  - compare against Phase-3 `prompt_rgb_localizer` at 16x16
+    (`hit_any=0.875`).
+
+### Updated local direction
+- Hidden-state repair-head code is retained only as a diagnostic baseline.
+- Main Stage-4 path is now:
+  `corrupted VQ tokens -> Lumina MMU -> SemanticEvaluation JSON -> selector/reopen`.
+- The implementation should prefer direct VQ-token input where possible rather
+  than decode to RGB and re-encode.
+
+---
+
+## 2026-06-28: Stage 4 native MMU/LoRA scaffold (Windows Codex)
+
+### Local changes prepared
+- Added `LuminaNativeEngine.answer_vq_tokens()` so the MMU answer path can
+  consume corrupted Lumina VQ tokens directly.
+- Extended `prepare_lumina_sft_data` to accept `vq_ids_path` examples and build
+  Lumina training token caches without image re-encoding.
+- Added Stage-4 MMU/LoRA utilities in `ascr/training/stage4_mmu_lora.py`.
+- Added CLIs:
+  - `python -m ascr.cli.stage4_mmu_localization_probe`
+  - `python -m ascr.cli.stage4_prepare_mmu_sft`
+  - `python -m ascr.cli.stage4_train_mmu_lora`
+- Added configs under `configs/stage4/self_corrupt/` for zero-shot probe, SFT
+  split, LoRA training, LoRA evaluation, and an ASCR-loop smoke.
+- Stage-4 LoRA training defaults to `image_size=1024` and
+  `max_seq_len=6144` so 16x16 localization labels remain aligned with the full
+  64x64 VQ-token grid.
+- Added `scripts/training/run_stage4_mmu_lora.sh` and
+  `jobs/stage4/train_mmu_lora.sbatch`.
+- Added `docs/SERVER_AI_TASK_STAGE4_MMU_LORA.md`.
+- Marked `docs/SERVER_AI_TASK_STAGE4_HIDDEN_REPAIR_HEAD.md` as deprecated.
+- Added `docs/STAGE4_PROMPT_SCALING_GUIDE.md` for Hard256/Bench3 prompt
+  expansion.
+- Added tests in `tests/test_stage4_mmu_lora.py`.
+
+### Next server task
+- Pull latest `main`.
+- Create `feat/stage4-mmu-lora-server`.
+- Run:
+  `bash scripts/training/run_stage4_mmu_lora.sh`
+  or
+  `sbatch jobs/stage4/train_mmu_lora.sbatch`.
+- Append zero-shot probe metrics, SFT counts, LoRA training loss, LoRA probe
+  metrics, and blockers to this file.
+- Do not commit `outputs/` or LoRA adapter weights.

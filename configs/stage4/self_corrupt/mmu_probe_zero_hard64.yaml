@@ -1,0 +1,16 @@
+dataset: outputs/stage3_self_corrupt/datasets/locality_hard64_v1/dataset.jsonl
+output_dir: outputs/stage4_self_corrupt/mmu_lora_hard64/probe_zero_sample16
+grid_size: 16
+max_selected_cells: 16
+top_k: 4
+limit: 16
+use_vq_tokens: true
+repo_path: third_party/Lumina-DiMOO
+checkpoint_path: models/lumina-dimoo
+device: cuda
+image_size: 1024
+max_new_tokens: 384
+answer_steps: 64
+answer_block_length: 128
+answer_temperature: 0.0
+answer_cfg_scale: 0.0

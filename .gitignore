@@ -90,10 +90,16 @@ pretrained/
 *.mp4
 *.mov
 *.avi
+*.ppt
+*.pptx
+*.pptm
 
 # Keep source planning docs and hand-written docs trackable
 !docs/archive/blueprints/*.docx
 !docs/**/*.md
+!docs/**/*.ppt
+!docs/**/*.pptx
+!docs/**/*.pptm
 !data/README.md
 
 # Local third-party source checkouts

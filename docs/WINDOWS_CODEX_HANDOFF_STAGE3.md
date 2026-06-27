@@ -152,7 +152,7 @@ clean Lumina vq_ids
 -> clean/corrupted image pair
 -> known corruption mask as self-supervised label
 -> locality probe
--> later selector / internal repair head
+-> selector / native MMU-LoRA localizer
 ```
 
 Important new files:
@@ -216,13 +216,13 @@ Selector result summary:
   `outputs/stage3_self_corrupt/datasets/locality_hard64_v1/dataset.jsonl`;
 - dataset row count is 128;
 - `prompt_rgb_localizer` reached 0.875 hit_any at 16x16;
-- Phase-3 gate is cleared, so Phase 4 hidden-state probing is now the next
-  task.
+- Phase-3 gate is cleared, so Phase 4 native Lumina MMU/LoRA localization is
+  now the next task.
 
 The next server task document is:
 
 ```text
-docs/SERVER_AI_TASK_STAGE4_HIDDEN_REPAIR_HEAD.md
+docs/SERVER_AI_TASK_STAGE4_MMU_LORA.md
 ```
 
 Expected server commands after pulling latest `main`:
@@ -233,19 +233,13 @@ git checkout main
 git pull --ff-only
 source .venv-lumina/bin/activate
 
-python -m ascr.cli.stage4_hidden_state_probe \
-  --config configs/stage4/self_corrupt/hidden_probe_hard64.yaml
-
-python -m ascr.cli.stage4_extract_hidden_features \
-  --config configs/stage4/self_corrupt/hidden_features_hard64_grid16.yaml
-
-python -m ascr.cli.stage4_train_repair_head \
-  --config configs/stage4/self_corrupt/repair_head_hard64_grid16.yaml
+bash scripts/training/run_stage4_mmu_lora.sh
 ```
 
-Server AI should append results to `docs/AI_COLLAB_LOG.md`. It should not yet
-fine-tune Lumina, add LoRA, use Qwen/Gemini teacher labels, or run formal
-before/after ASCR benchmarks.
+Server AI should append results to `docs/AI_COLLAB_LOG.md`. It should not
+commit generated outputs or LoRA adapter weights. Qwen/Gemini may be used later
+for evaluation, but not for Stage-4 self-corruption training labels unless the
+experiment is explicitly marked as a hybrid ablation.
 
 ## 8. Windows Codex Behavior Rules
 
@@ -304,8 +298,8 @@ Windows Codex can safely do documentation and pure-Python work. Good next tasks:
 1. Read `docs/STAGE3_SELF_CORRUPTED_TOKEN_REPAIR.md`.
 2. Read `docs/AI_COLLAB_LOG.md` from the latest Stage-3 entry.
 3. Verify tests pass locally.
-4. Use the server Phase-3 selector result to start Phase-4 hidden-state probing
-   and repair-head training.
+4. Use the server Phase-3 selector result to start Phase-4 native MMU/LoRA
+   localization.
 
 If the user wants local progress before server results, implement only
 model-light utilities such as:

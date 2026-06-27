@@ -199,6 +199,43 @@ class LuminaNativeEngine:
         return img
 
     # ----------------------------------------------------------- mmu / answer
+    def _normalise_mmu_vq_tokens(self, vq_ids):
+        """Return flat image-token ids in Lumina's MMU offset token space."""
+        values = [int(value) for value in vq_ids]
+        specials = {MASK_TOKEN_ID, NEWLINE_TOKEN_ID, BOI, EOI, ANSWER_START, ANSWER_END}
+        non_special = [value for value in values if value not in specials]
+        if non_special and all(0 <= value < CODEBOOK_SIZE for value in non_special):
+            return [value if value in specials else value + IMAGE_TOKEN_OFFSET for value in values]
+        return values
+
+    def _answer_from_mmu_tokens(self, question, img_tokens_with_breaks, max_new_tokens=384):
+        """Generate an MMU text answer from already prepared image tokens."""
+        pu = self._lumina["prompt_utils"]
+        from generators.text_understanding_generator import generate_text_understanding
+
+        gen_len, block_len, steps = align_answer_generation_lengths(
+            max_new_tokens,
+            self.answer_block_length,
+            self.answer_steps,
+        )
+
+        input_prompt = pu.generate_multimodal_understanding_prompt(question)
+        input_ids = self._tokenizer(input_prompt)["input_ids"]
+        input_token = input_ids[:-1] + list(img_tokens_with_breaks) + input_ids[-1:]
+        code_start = len(input_token) + 1
+        input_token = input_token + [ANSWER_START] + [MASK_TOKEN_ID] * gen_len + [ANSWER_END]
+        device = next(self._model.parameters()).device
+        input_ids_t = self._torch.tensor(input_token, device=device).unsqueeze(0)
+
+        out = generate_text_understanding(
+            self._model, input_ids_t,
+            steps=steps, gen_length=gen_len, block_length=block_len,
+            temperature=self.answer_temperature, cfg_scale=self.answer_cfg_scale, remasking="low_confidence",
+            code_start=code_start,
+        )
+        text = self._tokenizer.batch_decode(out[:, code_start:-1], skip_special_tokens=True)[0]
+        return text.strip()
+
     def answer_image(self, question, image_path, max_new_tokens=384):
         """Image-conditioned text generation via Lumina native MMU pipeline.
 
@@ -207,8 +244,6 @@ class LuminaNativeEngine:
         """
         self._load()
         iu = self._lumina["image_utils"]
-        pu = self._lumina["prompt_utils"]
-        from generators.text_understanding_generator import generate_text_understanding
 
         # --- encode image -------------------------------------------------
         from PIL import Image
@@ -222,27 +257,21 @@ class LuminaNativeEngine:
         img_tokens = iu.encode_img_with_breaks(img, vqvae=self._vqvae)
         img_tokens = iu.add_break_line(img_tokens, token_grid_h, token_grid_w, new_number=NEWLINE_TOKEN_ID)
 
-        # --- build prompt -------------------------------------------------
-        gen_len, block_len, steps = align_answer_generation_lengths(
-            max_new_tokens,
-            self.answer_block_length,
-            self.answer_steps,
-        )
+        return self._answer_from_mmu_tokens(question, img_tokens, max_new_tokens=max_new_tokens)
 
-        input_prompt = pu.generate_multimodal_understanding_prompt(question)
-        input_ids = self._tokenizer(input_prompt)["input_ids"]
-        input_token = input_ids[:-1] + img_tokens + input_ids[-1:]
-        code_start = len(input_token) + 1
-        input_token = input_token + [ANSWER_START] + [MASK_TOKEN_ID] * gen_len + [ANSWER_END]
-        device = next(self._model.parameters()).device
-        input_ids_t = self._torch.tensor(input_token, device=device).unsqueeze(0)
+    def answer_vq_tokens(self, question, vq_ids, max_new_tokens=384):
+        """MMU text generation from existing Lumina VQ tokens.
 
-        # --- generate text ------------------------------------------------
-        out = generate_text_understanding(
-            self._model, input_ids_t,
-            steps=steps, gen_length=gen_len, block_length=block_len,
-            temperature=self.answer_temperature, cfg_scale=self.answer_cfg_scale, remasking="low_confidence",
-            code_start=code_start,
-        )
-        text = self._tokenizer.batch_decode(out[:, code_start:-1], skip_special_tokens=True)[0]
-        return text.strip()
+        Stage-4 self-corruption already has corrupted VQ ids. This method lets
+        the MMU path consume that internal representation directly instead of
+        decoding to an RGB image and re-encoding it through the VQ-VAE.
+        """
+        self._load()
+        iu = self._lumina["image_utils"]
+        h, w = self._grid_hw()
+        flat_tokens = self._normalise_mmu_vq_tokens(vq_ids)
+        expected = h * w
+        if len(flat_tokens) != expected:
+            raise ValueError(f"Expected {expected} VQ ids for {h}x{w}, got {len(flat_tokens)}")
+        img_tokens = iu.add_break_line(flat_tokens, h, w, new_number=NEWLINE_TOKEN_ID)
+        return self._answer_from_mmu_tokens(question, img_tokens, max_new_tokens=max_new_tokens)
