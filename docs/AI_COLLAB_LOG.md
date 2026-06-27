@@ -1574,3 +1574,56 @@ Next server action:
 - On GPU node, train LoRA v3 using clean targets and all-mask answer training.
 - Run JSON probe.
 - Do not run formal benchmark unless JSON probe parse rate is materially above zero and parsed outputs pass `safe_parse_semantic_evaluation`.
+
+---
+
+## 2026-06-27: Stage 3 self-corruption direction and locality tooling (local Codex)
+
+### Context
+- The research roadmap is changing because the new advisor direction is not another
+  external-teacher selector distillation pass.
+- Stage 2 remains the Lumina-native `SemanticEvaluation JSON` distillation line.
+- New Stage 3 is self-corrupted token repair: corrupt Lumina discrete image tokens,
+  use the known corruption mask as self-supervised localization signal, then test
+  whether this transfers to real prompt-following repair.
+
+### Local architecture review
+- `README.md` is still the canonical project entrypoint; keep it concise.
+- Stage-2 details remain in `docs/LUMINA_NATIVE_DISTILLATION.md`.
+- Server tasks should remain one-doc-per-task under `docs/SERVER_AI_TASK_*.md`.
+- `LuminaAdapter` already stores generated VQ ids in `GenerationState.metadata["vq_ids"]`.
+- `LuminaNativeEngine.reopen()` already masks selected token cells and resamples only those cells.
+- `DirectTokenReopeningSelector` already supports selector grids smaller than the Lumina 64x64 token grid.
+
+### Local changes prepared
+- Updated the README roadmap so Stage 3 is now self-corrupted token repair.
+- Added `docs/STAGE3_SELF_CORRUPTED_TOKEN_REPAIR.md` as the shared design document.
+- Added `docs/SERVER_AI_TASK_STAGE3_SELF_CORRUPT_LOCALITY.md` for the first server run.
+- Added model-light corruption utilities in `ascr/corruption/vq_corruptor.py`.
+- Added locality metrics in `ascr/analysis/token_locality.py`.
+- Added the server-facing CLI `python -m ascr.cli.token_locality_probe`.
+- Added `configs/stage3/self_corrupt/locality_probe_smoke.yaml`.
+- Added Slurm wrapper `jobs/stage3/self_corrupt_locality_probe.sbatch`.
+- Extended `GridCell.from_any()` so A1-style labels work beyond 4x4 for 8x8/16x16 grids.
+
+### Local validation
+- Created local `.venv` with `uv venv .venv --python python3`.
+- Installed lightweight dev dependencies with `uv pip install -e '.[dev]'`.
+- Passed focused tests:
+  `.venv/bin/python -m unittest tests.test_vq_corruptor tests.test_token_locality tests.test_schema_parser`.
+- Passed CLI import/help smoke:
+  `.venv/bin/python -m ascr.cli.token_locality_probe --help`.
+- Passed full local smoke:
+  `.venv/bin/python scripts/smoke_test.py`.
+- The full smoke ran 149 tests, mock Stage-1 dry-run, local preflight, and committed-secret scan.
+- Expected local warnings: torch and model paths are absent on the Mac; Lumina/Qwen model checks belong on the server.
+
+### Next server task
+- Read `docs/STAGE3_SELF_CORRUPTED_TOKEN_REPAIR.md`.
+- Read `docs/SERVER_AI_TASK_STAGE3_SELF_CORRUPT_LOCALITY.md`.
+- Create branch `feat/stage3-self-corrupt-locality-server` from latest `main`.
+- Run the locality probe smoke job on one GPU:
+  `sbatch jobs/stage3/self_corrupt_locality_probe.sbatch`
+- Append exact job id, node, command, output root, row count, aggregate locality metrics,
+  heatmap examples, and blockers to this file.
+- Do not train selectors or run hidden-state repair-head work until locality is understood.

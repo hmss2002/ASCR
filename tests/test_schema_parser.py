@@ -8,6 +8,8 @@ class SchemaParserTests(unittest.TestCase):
     def test_grid_cell_labels(self):
         self.assertEqual(GridCell.from_any("A1").to_dict()["row"], 0)
         self.assertEqual(GridCell.from_any("D4").to_dict()["col"], 3)
+        self.assertEqual(GridCell.from_any("H8", grid_size=8).to_dict()["row"], 7)
+        self.assertEqual(GridCell.from_any("P16", grid_size=16).to_dict()["col"], 15)
 
     def test_valid_json_payload(self):
         payload = json.dumps({

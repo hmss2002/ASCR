@@ -69,7 +69,7 @@ fixed dilation as an engineering interface. The method itself is not the grid; t
 | --- | --- | --- |
 | Stage 1 | Zero-training semantic reopening with external or self evaluators | Implemented and evaluated across Show-o, MMaDA, Lumina |
 | Stage 2 | Lumina-native semantic evaluator distillation | Feasibility/audit scaffold added; Qwen3.7 teacher labels are the supervision source |
-| Stage 3 | Cross-model ASCR framework across stronger discrete / masked generators | Direction established by current Lumina migration |
+| Stage 3 | Self-corrupted token repair for internal understanding-generation bootstrapping | New direction; locality probe and corruption tooling are the next gate |
 
 In this section, **Stage 1 / 2 / 3** refer to the **research roadmap** of ASCR, not to a single
 CLI or Slurm command. The operational pipeline used today is the **Stage-1 implementation** of
@@ -79,6 +79,12 @@ Stage 2 now means distilling Qwen3.7-style prompt-image semantic evaluation into
 the Lumina-DiMOO model path itself. External `grid-localizer-v0/v1` models remain
 historical scaffold baselines and should not be treated as the formal distilled
 student.
+
+Stage 3 now means using controlled corruption in Lumina's discrete image-token
+space as self-supervised signal for localized repair. The former cross-model
+Stage-3 idea is preserved as a later validation step after the Lumina-native
+self-corruption mechanism is understood. See
+`docs/STAGE3_SELF_CORRUPTED_TOKEN_REPAIR.md` for the working plan.
 
 ## 3. Current empirical summary
 
@@ -113,6 +119,8 @@ ASCR/
 │   │   ├── lumina/
 │   │   ├── showo/
 │   │   └── mmada/
+│   ├── stage2/
+│   ├── stage3/
 │   ├── benchmarks/
 │   │   ├── prompts/
 │   │   └── data/
@@ -156,6 +164,8 @@ prefer the Lumina-DiMOO line.
 | `ascr/evaluators/` | Qwen evaluator, MMaDA self-evaluator, remote evaluator, mock/local evaluators |
 | `ascr/revision/` | Semantic-to-token reopening selectors and correction prompt composition |
 | `ascr/grids/` | Overlay rendering and coarse-grid-to-token projection |
+| `ascr/corruption/` | Controlled VQ token corruption operators for Stage-3 self-supervision |
+| `ascr/analysis/` | Token locality and repair analysis helpers |
 | `ascr/cli/` | Python module CLIs for Stage-1 and comparison variants |
 | `ascr/benchmarks/` | Benchmark reporting helpers |
 | `ascr/traces/` | Trace schemas and writers |
@@ -248,6 +258,8 @@ Implementation rules:
 | `configs/stage1/lumina/` | Current Lumina-DiMOO Stage-1 configs |
 | `configs/stage1/showo/` | Show-o historical and direct-token configs |
 | `configs/stage1/mmada/` | MMaDA self-eval and Qwen-transfer configs |
+| `configs/stage2/` | Lumina-native evaluator distillation configs |
+| `configs/stage3/` | Self-corrupted token repair configs |
 | `configs/benchmarks/prompts/` | Prompt lists including Hard64, smoke sets, DrawBench, GenEval, DPG/DSG/GenAI |
 | `configs/benchmarks/data/` | Benchmark metadata and CSV/JSONL payloads small enough for Git |
 | `configs/cluster/` | Cluster partition templates |
@@ -276,6 +288,7 @@ size**, not a second token grid.
 | `jobs/stage1/showo/` | Show-o Stage-1 jobs |
 | `jobs/stage1/mmada/` | MMaDA Stage-1 jobs |
 | `jobs/stage1/variants/` | Direct-token / cap-sweep / variant generation jobs |
+| `jobs/stage3/` | Self-corrupted token repair probes and later Stage-3 GPU jobs |
 | `jobs/benchmarks/` | GenEval, BAGEL, and benchmark generation/scoring jobs |
 | `jobs/judges/` | Judge-only Slurm jobs |
 | `jobs/training/` | Stage-2 placeholders; selector training is not implemented yet |

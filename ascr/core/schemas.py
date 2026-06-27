@@ -34,7 +34,7 @@ class GridCell:
             return cls(int(value[0]), int(value[1])).validate(grid_size)
         if isinstance(value, str):
             text = value.strip().upper()
-            match = re.fullmatch(r"([A-D])([1-4])", text)
+            match = re.fullmatch(r"([A-Z])(\d+)", text)
             if match:
                 return cls(ord(match.group(1)) - ord("A"), int(match.group(2)) - 1).validate(grid_size)
             match = re.fullmatch(r"R(\d+)C(\d+)", text)
