@@ -2313,3 +2313,273 @@ But the science is no longer blocked on dataset size. The 128-row Hard64
 dataset produces clear, interpretable selector metrics. Windows Codex can
 choose to either build the parallel infra first, or jump straight to Phase 4
 hidden-state inspection tools — the dataset is ready for either path.
+
+---
+
+## 2026-06-28 03:15 HKT — Server AI: Revised Phase 4 plan (native MMU + LoRA, not external repair head)
+
+### Strategic correction
+
+The original Phase 4 design in `docs/STAGE3_SELF_CORRUPTED_TOKEN_REPAIR.md`
+proposed an **external repair head** — a separate small model that reads Lumina
+hidden states from outside. This is the wrong architecture, for two reasons:
+
+1. **Stage 2 already proved external models are weak.** `grid-localizer-v0/v1`
+   were external RGB/prompt localizers trained outside Lumina. Both topped out
+   at hit_any ≈ 0.2–0.3 on holdout, and image-quality benchmarks showed
+   near-zero before/after delta (Geneval all ties, mean delta 0.0).
+
+2. **Lumina already has an internal image understanding path.** We confirmed in
+   June 2025 that `answer_image()` (via `generate_text_understanding` in
+   Lumina-DiMOO's MMU pipeline) can read prompt + image and output detailed
+   descriptions. The model already sees the image internally — we should teach
+   it to *localize* rather than *describe*, using its own native pathway.
+
+### Revised architecture
+
+```
+                    不需要新模型
+                         │
+prompt + 破坏图  →  Lumina MMU (answer_image)  →  定位输出
+                         │
+                    只加 LoRA 适配器（轻量插件，挂在 Lumina 上）
+                    不冻结全量参数，不引入外部模型
+```
+
+对比旧方案：
+```
+prompt + 破坏图  →  Lumina 前向  →  取出隐藏态  →  外部修复头（新模型）→  掩码
+                         ↑                              ↑
+                    冻结 Lumina                    需要单独训练
+                                                  需要单独推理
+                                                  两套参数、两套调试
+```
+
+### Reference approach (仅供参考，不必严格遵循)
+
+以下是一个可行的实现路径，Windows Codex 可以根据实际代码情况调整。
+
+---
+
+#### Step 4a: Native MMU localization probe（零训练试探）
+
+**目标：** 先不训练任何东西，直接测试 Lumina 原生 MMU 能否指出破坏位置。
+
+**CLI 工具：** `ascr/cli/stage3_mmu_localization_probe.py`
+
+```bash
+python -m ascr.cli.stage3_mmu_localization_probe \
+  --dataset outputs/stage3_self_corrupt/datasets/locality_hard64_v1/dataset.jsonl \
+  --limit 16 \
+  --output-dir outputs/stage3_self_corrupt/mmu_probe/hard64_sample16
+```
+
+**内部逻辑参考：**
+```python
+# 伪代码，示意流程
+engine = LuminaNativeEngine(...)
+
+for row in dataset:
+    # 1. 用 answer_image 对破坏图提问
+    answer = engine.answer_image(
+        image=row["corrupted_image"],
+        prompt=f"""Examine this image carefully. The prompt was: "{row['prompt']}".
+
+Some regions of this image may have visual artifacts, distortions, or
+inconsistencies that don't belong. Identify WHERE in the image these
+anomalies appear.
+
+Describe the location using:
+- Grid references if possible (e.g., "top-left quadrant", "center-right")
+- Relative positions (e.g., "lower third, right side")
+- Objects affected (e.g., "the blue bowl appears distorted")
+""",
+        steps=64, block_length=128, temperature=0.0, cfg_scale=0.0
+    )
+
+    # 2. 记录原始输出
+    probe_row = {
+        "sample_id": row["sample_id"],
+        "raw_answer": answer,
+        "ground_truth_cells_4x4": row["coarse_labels_4x4"],
+        "ground_truth_cells_8x8": row["coarse_labels_8x8"],
+        "ground_truth_cells_16x16": row["coarse_labels_16x16"],
+    }
+
+    # 3. 尝试从自然语言中提取定位信息（松匹配）
+    # 例如 "top-left" → A1, "center" → B2/C2/B3/C3, "lower right" → D4
+    probe_row["heuristic_cells"] = extract_cell_hints(answer)
+    probe_row["heuristic_hit"] = any(
+        cell in row["coarse_labels_4x4"]
+        for cell in probe_row["heuristic_cells"]
+    )
+```
+
+**输出：** `outputs/stage3_self_corrupt/mmu_probe/hard64_sample16/probe.jsonl`
+
+每行包含原始回答和启发式匹配结果。
+
+**决策门 4a：**
+- 如果原生 MMU 能模糊指出正确区域（heuristic_hit > 0.3）→ 可以用 prompt engineering 改善，可能不需要 LoRA
+- 如果原生 MMU 输出是纯描述性的、无法映射到位置 → 需要 LoRA 教它结构化输出
+- 历史经验（2025年6月）表明原生 MMU 输出是自然语言描述，不是结构化定位 → **大概率需要 LoRA**
+
+---
+
+#### Step 4b: SFT 数据准备（为 LoRA 准备训练对）
+
+**目标：** 把 128 行 Hard64 数据集转换成 Lumina MMU 的 LoRA 训练格式。
+
+**CLI 工具：** `ascr/cli/stage3_prepare_mmu_localization_sft.py`
+
+```bash
+python -m ascr.cli.stage3_prepare_mmu_localization_sft \
+  --dataset outputs/stage3_self_corrupt/datasets/locality_hard64_v1/dataset.jsonl \
+  --output-dir outputs/stage3_self_corrupt/mmu_sft_data/hard64_v1 \
+  --train-ratio 0.75 \
+  --seed 0
+```
+
+**训练数据格式参考（每个样本是一个对话对）：**
+
+```
+输入（image + prompt）:
+  [破坏图] + "The prompt for this image was: '{prompt}'.
+   Some regions of this image have been artificially corrupted.
+   Identify which grid cells contain the corrupted regions.
+   Output a JSON object with the corrupted cell labels."
+
+目标输出（JSON，只训练 answer 部分）:
+  {
+    "corrupted_cells_4x4": ["D3"],
+    "corrupted_cells_8x8": ["H6", "H7"],
+    "corrupted_cells_16x16": ["P12", "P13"]
+  }
+```
+
+**关键设计选择：**
+
+1. **输出格式：** 简单的 JSON，而不是自然语言。历史教训（2025年6月 LoRA v2）表明教 Lumina 输出自然语言 JSON 很容易产生畸形的括号/引号。建议使用非常简短、固定的模板。
+
+2. **网格粒度：** 同时输出 4×4、8×8、16×16 的标签，让 Lumina 学会多尺度定位。粗网格容易学（信息量大），细网格可以从粗网格推导。
+
+3. **Mask 策略：** 只对 answer 部分计算 loss（`answer_mask_mode: all`），不对 prompt 部分计算 loss。这是之前 LoRA v3 方案里已经解决的问题。
+
+4. **数据量：** 128 行 × 0.75 = 96 训练 / 32 验证。这个数量对 LoRA 来说足够起步了（之前 LoRA v2 用 16 个样本都能改变输出分布，虽然 JSON 格式不对）。
+
+---
+
+#### Step 4c: LoRA 训练
+
+**目标：** 给 Lumina MMU 加一个轻量 LoRA 适配器，教它输出结构化定位 JSON。
+
+**CLI 工具：** `ascr/cli/stage3_train_mmu_localization_lora.py`
+
+```bash
+python -m ascr.cli.stage3_train_mmu_localization_lora \
+  --sft-data outputs/stage3_self_corrupt/mmu_sft_data/hard64_v1/train.jsonl \
+  --output-dir outputs/stage3_self_corrupt/lora/hard64_v1 \
+  --epochs 15 \
+  --lr 3e-5 \
+  --lora-r 8 \
+  --lora-alpha 16 \
+  --image-size 512 \
+  --max-seq-len 2048 \
+  --answer-mask-mode all \
+  --ignore-pad-labels
+```
+
+**LoRA 配置参考（基于之前 LoRA v2/v3 的经验）：**
+
+| 参数 | 建议值 | 理由 |
+|------|--------|------|
+| `lora_r` | 8 | 之前 v2 用 8 能收敛（loss 5→0.085），够用 |
+| `lora_alpha` | 16 | 标准配置 |
+| `lr` | 3e-5 | 比 v2 的 5e-5 低，更稳定 |
+| `epochs` | 15 | v2 用 10 个 epoch 收敛，128 行数据更多可多跑几轮 |
+| `image_size` | 512 | 降低显存，L40S 单卡 45GB 够用 |
+| `answer_mask_mode` | `all` | v3 验证过的正确做法 |
+| LoRA target modules | MMU cross-attention 的 q_proj, v_proj | 只训练图文交互层，不动 vision encoder |
+
+**预期输出：**
+```
+outputs/stage3_self_corrupt/lora/hard64_v1/
+  adapter_config.json
+  adapter_model.safetensors    (~几十 MB)
+  loss_curve.json
+```
+
+**训练后，LuminaNativeEngine 加载方式不变：**
+```python
+engine = LuminaNativeEngine(
+    checkpoint_path="models/lumina-dimoo",
+    lora_path="outputs/stage3_self_corrupt/lora/hard64_v1",
+)
+# answer_image 自动走 LoRA 路径
+```
+
+---
+
+#### Step 4d: LoRA 定位评估
+
+**目标：** 量化 LoRA 后的 Lumina 定位准确率，跟 Phase 3 的外部基线对比。
+
+**CLI 工具：** 复用 `stage3_mmu_localization_probe.py`，加上 `--lora-path`
+
+```bash
+python -m ascr.cli.stage3_mmu_localization_probe \
+  --dataset outputs/stage3_self_corrupt/datasets/locality_hard64_v1/dataset.jsonl \
+  --lora-path outputs/stage3_self_corrupt/lora/hard64_v1 \
+  --limit 32 \
+  --output-dir outputs/stage3_self_corrupt/mmu_probe/hard64_lora_eval
+```
+
+**评估指标（跟 Phase 3 选择器基线对比）：**
+
+| 指标 | 外部 rgb_localizer (16×16) | LoRA Lumina MMU (期望) |
+|------|---------------------------|----------------------|
+| hit_any | 0.625 | 期望 > 0.7 |
+| JSON parse rate | N/A | 期望 > 0.9 |
+| mean IoU | 0.112 | 期望 > 0.15 |
+
+**决策门 4d：**
+- 如果 LoRA Lumina 的 hit_any 明显超过外部 prompt_rgb_localizer（16×16 上 > 0.875）→ Phase 4 成功，进入 Phase 5 ASCR 循环
+- 如果 LoRA 改善微弱或 JSON 解析率 < 0.5 → 回到 prompt engineering 或者扩大 SFT 数据到 256+ prompts
+- 如果 JSON 完全无法解析 → 回到 Step 4b 重新设计输出格式（更简单、更固定）
+
+---
+
+### Phase 5 入口（Phase 4 通过后）
+
+```
+prompt → Lumina 生成 clean 图
+  → 破坏 VQ tokens → 解码破坏图
+  → Lumina MMU + LoRA 定位破坏区域 → TokenReopenMask
+  → Lumina.reopen() 重采样
+  → 对比 before/after 图像质量
+```
+
+复用现有的 `student_image_benchmark_lumina.sbatch` 和 `api_image_judge` 基础设施，只是把 student localizer 替换成 Lumina MMU + LoRA。
+
+---
+
+### 给 Windows Codex 的说明
+
+**以上方案仅供参考，不必严格遵循。** 核心原则是：
+
+1. 用 Lumina 原生的 MMU 路径（`answer_image`），不引入外部模型
+2. 如果需要训练，用 LoRA 挂在 Lumina 上，不冻结全量参数训新模型
+3. 先试探原生能力（4a），再决定是否需要 LoRA（4b-4d）
+
+具体实现细节 —— CLI 参数名、输出格式、SFT 数据格式、LoRA target modules ——
+都可以根据实际代码结构灵活调整。上述伪代码和命令仅为示意。
+
+**优先级建议：**
+- 4a（零训练试探）是必须做的，投入最小，信息量最大
+- 4b-4d 取决于 4a 的结果
+- 如果 4a 就能靠 prompt engineering 得到可用定位 → 直接跳到 Phase 5
+
+**当前数据集就绪：**
+- `outputs/stage3_self_corrupt/datasets/locality_hard64_v1/dataset.jsonl` — 128 行
+- 所有图像和 token 路径已验证通过
+- `outputs/stage3_self_corrupt/locality_probe_hard64/manifest.jsonl` — 完整局部性数据
