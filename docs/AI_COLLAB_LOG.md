@@ -3128,3 +3128,116 @@ bash scripts/training/run_stage3_locality_parallel.sh
 ```
 
 Do not commit generated outputs, LoRA adapters, token caches, or datasets.
+
+## 2026-06-28 10:30 HKT — Server AI: OOM investigation results + 4×4 baseline
+
+### Branch and commit
+- Branch: feat/stage4-scaleout-server
+- Base commit: 3bc2ad7 (main)
+
+### What Codex delivered
+All three priority areas addressed:
+- **8-bit Adam** + CLI overrides (`--optimizer`, `--image-size`, `--max-seq-len`,
+  `--target-modules`) in `train_lumina_lora_smoke.py`
+- **Parallel probe infra**: `--prompt-offset/--prompt-limit` in probe CLI,
+  `stage3_merge_probe_shards.py`, array sbatch, shell runner
+- **Curriculum**: grid4/grid8/grid16 configs, `run_stage4_curriculum.sh`,
+  `stage4_summarize_curriculum.py`, curriculum sbatch
+
+### bitsandbytes installed
+`pip install bitsandbytes` in `.venv-lumina`. The 8-bit Adam optimizer path
+initializes correctly (no import error).
+
+### 1024px OOM: definitive conclusion
+
+Three configurations tested, all OOMed on 45GB L40S (SPGL-1-15):
+
+| Config | image_size | LoRA modules | optimizer | Result |
+|--------|-----------|-------------|-----------|--------|
+| 7 modules bf16 | 1024 | 7 (all) | adamw | OOM at LoRA forward |
+| 7 modules adam8bit | 1024 | 7 (all) | **adamw8bit** | OOM at LoRA forward (43.7 GiB used) |
+| attn4 adam8bit | 1024 | **4 (q/k/v/o)** | **adamw8bit** | OOM at RoPE (43.75 GiB used) |
+
+8-bit Adam saves optimizer memory correctly, but the **model activations**
+dominate memory at 1024px. Without gradient checkpointing, the forward
+pass alone consumes ~43.7 GiB, leaving <1 GiB for backward + optimizer
+— which isn't enough even with 8-bit Adam.
+
+**Conclusion**: gradient checkpointing in the LLaDA model code is the
+blocker for 1024px training on a single L40S. 8-bit Adam + attn-only
+LoRA + bf16 are not sufficient without gc. Either:
+1. Implement gc in `modeling_llada.py` (Lumina repo code), or
+2. Use a multi-GPU training setup (>1 GPU per training run, e.g., 2× L40S).
+
+### 4×4 curriculum baseline (job 71473)
+
+Full pipeline on SPGL-1-15 (46 min): zero-shot + LoRA train + eval.
+
+- **Training**: loss 6.875 → **0.032** (epoch 14). Outstanding convergence —
+  the 4×4 task (16 labels) is much simpler than 16×16 (256 labels).
+- **Eval**: parse_rate **0.0** (32/32 malformed), hit_any **0.0**.
+
+The model outputs garbage like `"cell_44":4x4\nA1\nA2\nA3` instead of
+`{"corrupted_cells_4x4":["D2"],"has_error":true}`. The SFT training data
+has correct `answer_text` in `train.jsonl`, and training loss converged
+to 0.032 — the model definitely learned the training targets. But at
+eval time the outputs are completely different format.
+
+**Hypothesis**: 512px center-cropping + 2 LoRA modules (q_proj, v_proj
+only) gives too little capacity to learn JSON structure for 4×4 labels
+(which are less diverse than 16×16 labels, so the model gets less
+structural variety during training).
+
+Alternatively: the eval probe uses a different prompt template than
+training, and the LoRA hasn't generalized across prompt formats.
+
+### Image MMU smoke (job 71472)
+
+Completed 6:48 on SPGL-1-15. 8 samples, decoded_image zero-shot.
+- parse_rate: 0.125 (1/8), same as 16-sample probe
+- Output: `{"has cells": [["A_4_4x4", ...]]}` — same garbled cell labels
+- Confirms decoded_image doesn't fix the localization problem
+
+### Parallel probe infrastructure: QOS blocked
+
+`run_stage3_locality_parallel.sh` hit `QOSMaxSubmitJobPerUserLimit` —
+the 16-task array exceeded the per-user job submit limit. The
+infrastructure is correct but the cluster QOS needs adjustment or the
+array size needs to be reduced. For now, manual sharding (8 parallel
+sbatch calls) remains the workaround, or submit fewer array tasks.
+
+### Updated status
+
+| Item | Status |
+|------|--------|
+| 1024px + 7 modules + bf16 | ❌ OOM |
+| 1024px + 7 modules + bf16 + adam8bit | ❌ OOM |
+| 1024px + 4 modules + bf16 + adam8bit | ❌ OOM |
+| 512px + 2 modules + bf16 | ✅ Works |
+| 16×16 parse_rate with schema fix | 0.406 (hit_any still 0.0) |
+| 4×4 training convergence | ✅ loss 0.032 |
+| 4×4 eval parse_rate | ❌ 0.0 (format mismatch) |
+| Parallel probe infra | ⚠️ QOS blocked |
+| bitsandbytes installed | ✅ |
+
+### Next for Windows Codex
+
+1. **4×4 format bug**: The LoRA learns correct targets (loss 0.032) but
+   produces garbage at eval. Likely cause: eval prompt template differs
+   from training template, or 512px cropping breaks spatial alignment
+   of 4×4 labels. Server logs + probe output available for debugging.
+
+2. **Gradient checkpointing in LLaDA model**: 1024px won't work on single
+   L40S without it. The fix is in `third_party/Lumina-DiMOO/modeling_llada.py`
+   — add `supports_gradient_checkpointing = True` and wrap the forward
+   pass's transformer blocks. This is the single highest-impact code
+   change for the entire Stage 4 pipeline.
+
+3. **QOS workaround**: The parallel probe array needs either smaller
+   arrays (4-8 tasks) or the cluster admin to raise the user job limit.
+
+### What server AI can still do
+- Run the curriculum sbatch (`jobs/stage4/train_mmu_lora_curriculum.sbatch`)
+  once QOS allows
+- Manual-shard parallel probes at Hard64 scale (8 shards, already proven)
+- Run anything that fits in 512px 2-module config
