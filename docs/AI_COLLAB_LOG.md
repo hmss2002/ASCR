@@ -4205,3 +4205,137 @@ and/or add `find_unused_parameters=True` to the DDP constructor.
 
 Fallback: 1-GPU training with Hard256 data submitted (71619-71624). DDP
 training is blocked until PEFT rank-consistency is resolved.
+
+---
+
+## 2026-06-29 06:30 HKT — Server AI: All issues found + remaining scripts needed
+
+### 🔴 Active bugs discovered during multi-GPU testing
+
+#### Bug 1: DDP PEFT rank inconsistency (BLOCKER for 8-GPU training)
+
+```
+RuntimeError: DDP expects same model across all ranks, but Rank 7 has 256 params,
+while rank 0 has inconsistent 0 params.
+```
+
+`get_peft_model()` returns different LoRA parameter counts on different ranks
+when called inside `torchrun`. Rank 0 gets 0 params, others get 256.
+
+**Suggested fix**: Move `get_peft_model()` before `DistributedDataParallel()`,
+ensure all ranks call it identically. Or add `find_unused_parameters=True`
+to DDP. Alternatively, use `accelerate` library which handles PEFT+DDP.
+
+#### Bug 2: Stage5 self-corrupt loop OOM (BLOCKER for Phase 5)
+
+```
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 4.75 GiB.
+```
+
+Single process loads Lumina for generation + MMU inference + LoRA adapter.
+Total exceeds 45 GB L40S limit. Codex added `share_engine: true` config
+but it's not yet effective — the engine isn't actually shared between
+generator and MMU calls.
+
+**Suggested fix**: In `stage5_self_corrupt_loop.py`, create ONE `LuminaNativeEngine`
+instance and reuse it for both `generate()` and `answer_vq_tokens()`. Or
+offload the generator model after use, then load the LoRA adapter.
+
+#### Bug 3: DDP sbatch doesn't propagate --data-jsonl
+
+The `train_mmu_lora_ddp.sbatch` only passes `--config "$CONFIG"` to torchrun.
+Config files have Hard64 data paths hardcoded. No way to override `data_jsonl`
+or `output_dir` from the sbatch command line.
+
+**Suggested fix**: Add `${DATA_JSONL:+--data-jsonl "$DATA_JSONL"}` and
+`${OUTPUT_DIR:+--output-dir "$OUTPUT_DIR"}` to the torchrun command in the
+sbatch script, reading from environment variables.
+
+#### Bug 4: 8-GPU request requires full node — often can't schedule
+
+`--gres=gpu:8` needs ALL 8 GPUs on a single node free. Even when 16 GPUs
+are free across 4 nodes, an 8-GPU job stays PENDING because no single node
+has all 8 free.
+
+**Suggested fix**: Add `--gres=gpu:4` fallback or use `--gres-flags=disable-binding`.
+Or implement multi-node DDP (across multiple nodes, not just one).
+
+#### Bug 5: QOS limit 8 jobs caps GPU utilization
+
+Cluster has 100+ GPUs across `gpu` and `gpu_shared` partitions. But user
+QOS limit of 8 jobs means at most 8×8=64 GPUs can be requested — and
+practically 5-20 GPUs actually run due to job lifecycle (trainings are
+long, evals are dependency-pending).
+
+**Suggested fix**: Request cluster admin to raise QOS from 8 to 24-32.
+Or use job arrays more aggressively (one array submission = one QOS slot).
+
+### 🟡 Remaining scripts and refinements needed
+
+#### Script 1: Hard256 auto-config generation
+
+Every grid×dataset combination needs a YAML config. Currently manual.
+Use `stage4_generate_config.py` or extend it to batch-generate:
+```bash
+python -m ascr.cli.stage4_generate_config --batch \
+  --grids 4,8,16 --dataset hard256 --profile l40s_1024_gc \
+  --output-dir configs/stage4/self_corrupt/
+```
+
+#### Script 2: Training checkpoint / resume
+
+Training runs 2-3h with no intermediate saves. If cancelled or OOM,
+all progress lost. Add periodic checkpoint saving (every N epochs) and
+`stage4_resume_training.py` to continue from checkpoint.
+
+#### Script 3: Dynamic GPU request
+
+Replace hardcoded `--gres=gpu:8` with dynamic detection:
+```bash
+FREE_GPUS=$(bash scripts/slurm/dynamic_gpu_detect.sh --count)
+sbatch --gres=gpu:$FREE_GPUS ...
+```
+
+#### Script 4: Multi-GPU eval probe sharding
+
+`run_stage4_multi_gpu_eval.sh` exists but wasn't tested. Should split
+32 eval samples across 8 GPUs (4 each) instead of single-GPU sequential.
+
+#### Script 5: End-to-end pipeline wrapper
+
+One command from zero to results:
+```bash
+bash scripts/training/run_hard256_full_pipeline.sh
+# 1. Verify SFT data exists
+# 2. Submit 3×8GPU DDP training
+# 3. Wait for completion
+# 4. Submit 3×8GPU eval
+# 5. Cross-grid compare
+# 6. Update registry
+# 7. Report summary metrics
+```
+
+#### Script 6: Automated failure recovery
+
+If DDP training OOMs on 8 GPUs → auto-resubmit with 4 GPUs.
+If eval fails → retry with half samples.
+If QOS blocks → wait and retry.
+
+### 📊 Current Hard256 training status
+
+3×1-GPU trainings (71619/71621/71623) running on SPGL-1-4 at 1h52m.
+336 train rows × 15 epochs. Expected completion ~2.5h.
+
+### 🔄 Merged Codex updates (June 29)
+
+- `4f97fcb`: Respect explicit GPU ids in multi-gpu wrappers
+- `e434c0a`: Refine shared stage5 lora attachment
+- `c383b45`: Multi-gpu stage4 and stage5 execution paths (previously merged)
+
+### Next for Codex — in order of impact
+
+1. **Fix DDP PEFT rank 0 params** (unblocks 8-GPU training → 6× faster)
+2. **Fix Stage5 share_engine** (unblocks Phase 5 ASCR loop)
+3. **Add --data-jsonl/--output-dir to DDP sbatch** (unblocks Hard256 8-GPU)
+4. **Scripts 1-6 as bandwidth allows**
+5. **Ask cluster admin for QOS increase (8→24)**
