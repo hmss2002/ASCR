@@ -1,0 +1,27 @@
+run_name: stage3_self_corrupt_locality_probe_hard256
+output_dir: outputs/stage3_self_corrupt/locality_probe_hard256
+image_size: 1024
+token_grid_size: 64
+seed: 1234
+limit: 256
+prompt_file: configs/benchmarks/prompts/stage3_hard256_sampled.txt
+corruption_types:
+  - block_2x2_random_replace
+  - block_4x4_random_replace
+  - local_shuffle_4x4
+analysis_grids:
+  - 4
+  - 8
+  - 16
+
+generator:
+  name: lumina
+  repo_path: third_party/Lumina-DiMOO
+  checkpoint_path: models/lumina-dimoo
+  lora_path: null
+  device: cuda
+  image_size: 1024
+  token_grid_size: 64
+  guidance_scale: 4.0
+  generation_timesteps: 64
+  temperature: 1.0

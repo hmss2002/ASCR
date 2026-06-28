@@ -3940,3 +3940,45 @@ bash scripts/training/run_stage3_to_stage5_e2e.sh
 - 如果某个脚本的实现复杂度远超预期，先跳过，标注 TODO 即可
 
 目标：**让服务器端在接下来的 GPU 等待间隙里，有足够多的工具可以灵活组合使用，不用每次都等新代码。**
+
+## 2026-06-28 17:50 HKT — Windows Codex: Stage 5/6 + infra script pack
+
+### Sync
+- Fast-forwarded `main` to server branch `10a2d17`, importing the remaining
+  scripts specification and grid8 schema-example result notes.
+
+### Implemented script pack
+- Phase 5 self-corruption loop:
+  `mmu_localizer_selector`, `stage5_self_corrupt_loop`,
+  `stage5_self_corrupt_benchmark`, `stage5_compare_loop_results`,
+  `run_stage5_loop.sh`, and `jobs/stage5/self_corrupt_loop.sbatch`.
+- Phase 6 transfer:
+  `stage6_transfer_probe`, `stage6_multi_arm_benchmark`, and
+  `stage6_transfer_metrics`.
+- Dataset scaling:
+  `stage3_sample_prompts`, hard64/hard256/bench512/bench1k locality configs,
+  and `run_stage3_scale_dataset.sh`.
+- Training infra:
+  torchrun-compatible `stage4_train_mmu_lora_ddp`, hparam search,
+  adapter registry, config generator, and `jobs/stage4/train_mmu_lora_ddp.sbatch`.
+- Analysis/routing:
+  cross-grid compare, failure router, and per-prompt breakdown.
+- Ops:
+  QOS batch submitter, server dashboard, server health check.
+- Integration:
+  mock Stage 3→5→6 E2E shell runner and `tests/test_stage3_4_5_integration.py`.
+
+### Validation
+- `python -m compileall ascr`
+- `bash -n` on new shell/sbatch wrappers
+- `python -m unittest tests.test_stage3_4_5_integration tests.test_stage4_mmu_lora tests.test_lumina_native_stage2`
+- `bash scripts/training/run_stage3_to_stage5_e2e.sh` with mock Lumina path
+
+### Caveats for server AI
+- The DDP entry is torchrun-safe but still delegates actual training to the
+  existing single-process trainer on rank 0. True DDP data parallelism remains
+  the main follow-up if 8-GPU speedup is needed.
+- `stage6_multi_arm_benchmark` has placeholder arms for `stage1_qwen` and
+  `stage3_selector`; direct and Stage4-MMU-LoRA arms are executable through the
+  transfer probe.
+- See `docs/SERVER_AI_TASK_STAGE5_6_INFRA_SCRIPTS.md` for commands and coverage.
