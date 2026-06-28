@@ -432,7 +432,7 @@ def train_lumina_lora_smoke(args):
             value = float(loss.item())
             total += value
             losses.append({"epoch": epoch, "step": step, "loss": value})
-        print(f"epoch {epoch}: avg_loss={total / max(1, len(rows)):.6f}")
+        print(f"epoch {epoch}: avg_loss={total / max(1, len(rows)):.6f}", flush=True)
         if int(args.checkpoint_every_epochs or 0) > 0 and (epoch + 1) % int(args.checkpoint_every_epochs) == 0:
             checkpoints.append(_save_epoch_checkpoint(model, tokenizer, args.output_dir, epoch + 1))
     output_dir = Path(args.output_dir)
@@ -495,7 +495,7 @@ def build_parser():
     parser.add_argument("--lora-dropout", type=float, default=0.05)
     parser.add_argument("--target-modules", default="q_proj,v_proj,k_proj,o_proj,gate_proj,up_proj,down_proj")
     parser.add_argument("--resume-from-adapter", default=None)
-    parser.add_argument("--checkpoint-every-epochs", type=int, default=0)
+    parser.add_argument("--checkpoint-every-epochs", type=int, default=1)
     parser.add_argument("--torch-dtype", default="bfloat16", choices=["auto", "float32", "fp32", "bfloat16", "bf16", "float16", "fp16"])
     parser.add_argument(
         "--device-map",
