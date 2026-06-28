@@ -17,6 +17,7 @@ IFS=',' read -r -a GPU_ID_ARRAY <<< "$GPU_IDS"
 GPU_COUNT=${GPU_COUNT:-${#GPU_ID_ARRAY[@]}}
 GPU_COUNT=${GPU_COUNT:-1}
 SAMPLES_PER_GPU=${SAMPLES_PER_GPU:-4}
+CHUNKS_PER_GPU=${CHUNKS_PER_GPU:-1}
 SAMPLE_OFFSET=${SAMPLE_OFFSET:-0}
 MODE=${MODE:-run}  # run, summarize
 
@@ -36,23 +37,48 @@ if [[ "$MODE" == "summarize" ]]; then
   exit 0
 fi
 
+if [[ "$CHUNKS_PER_GPU" -lt 1 ]]; then
+  echo "CHUNKS_PER_GPU must be >= 1" >&2
+  exit 2
+fi
+
+chunk_size=$(( (SAMPLES_PER_GPU + CHUNKS_PER_GPU - 1) / CHUNKS_PER_GPU ))
+
 pids=()
 for gpu_rank in $(seq 0 $((GPU_COUNT - 1))); do
   gpu="${GPU_ID_ARRAY[$gpu_rank]:-$gpu_rank}"
-  offset=$((SAMPLE_OFFSET + gpu_rank * SAMPLES_PER_GPU))
-  out="$OUTPUT_ROOT/gpu_${gpu_rank}"
-  mkdir -p "$out"
-  (
-    export CUDA_VISIBLE_DEVICES="$gpu"
-    "$PYTHON_BIN" -m ascr.cli.stage4_mmu_localization_probe \
-      --config "$CONFIG" \
-      --output-dir "$out" \
-      --limit "$SAMPLES_PER_GPU" \
-      --sample-offset "$offset"
-  ) >"logs/stage4-mgpu-eval-${gpu_rank}.out" 2>"logs/stage4-mgpu-eval-${gpu_rank}.err" &
-  pids+=("$!")
-  echo "$offset" >"$out.prompt_offset.txt"
-  echo "$gpu" >"$out.cuda_visible_devices.txt"
+  base_offset=$((SAMPLE_OFFSET + gpu_rank * SAMPLES_PER_GPU))
+  for chunk in $(seq 0 $((CHUNKS_PER_GPU - 1))); do
+    remaining=$((SAMPLES_PER_GPU - chunk * chunk_size))
+    if [[ "$remaining" -le 0 ]]; then
+      continue
+    fi
+    limit=$chunk_size
+    if [[ "$remaining" -lt "$limit" ]]; then
+      limit=$remaining
+    fi
+    offset=$((base_offset + chunk * chunk_size))
+    if [[ "$CHUNKS_PER_GPU" -eq 1 ]]; then
+      out="$OUTPUT_ROOT/gpu_${gpu_rank}"
+      log_suffix="${gpu_rank}"
+    else
+      out="$OUTPUT_ROOT/gpu_${gpu_rank}_chunk_${chunk}"
+      log_suffix="${gpu_rank}-chunk-${chunk}"
+    fi
+    mkdir -p "$out"
+    (
+      export CUDA_VISIBLE_DEVICES="$gpu"
+      "$PYTHON_BIN" -m ascr.cli.stage4_mmu_localization_probe \
+        --config "$CONFIG" \
+        --output-dir "$out" \
+        --limit "$limit" \
+        --sample-offset "$offset"
+    ) >"logs/stage4-mgpu-eval-${log_suffix}.out" 2>"logs/stage4-mgpu-eval-${log_suffix}.err" &
+    pids+=("$!")
+    echo "$offset" >"$out.prompt_offset.txt"
+    echo "$limit" >"$out.sample_limit.txt"
+    echo "$gpu" >"$out.cuda_visible_devices.txt"
+  done
 done
 
 status=0

@@ -36,5 +36,6 @@ export LUMINA_REPO=${LUMINA_REPO:-third_party/Lumina-DiMOO}
 export LUMINA_MODEL_PATH=${LUMINA_MODEL_PATH:-models/lumina-dimoo}
 export GPU_COUNT=${GPU_COUNT:-$(bash scripts/slurm/dynamic_gpu_detect.sh --count)}
 export SAMPLES_PER_GPU=${SAMPLES_PER_GPU:-4}
+export CHUNKS_PER_GPU=${CHUNKS_PER_GPU:-1}
 
 bash scripts/training/run_stage4_multi_gpu_eval.sh

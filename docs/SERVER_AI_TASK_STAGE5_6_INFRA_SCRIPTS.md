@@ -122,7 +122,9 @@ MODE=summarize OUTPUT_ROOT=outputs/stage4_self_corrupt/multi_gpu_eval/grid4_1024
 ```
 
 `GPU_IDS` can override auto-detection, for example `GPU_IDS=2,4,6,7`, when
-Slurm exposes a non-contiguous or UUID-based allocation.
+Slurm exposes a non-contiguous or UUID-based allocation. `CHUNKS_PER_GPU=2`
+splits each GPU's eval slice into smaller subprocesses, which is the preferred
+retry path when a larger eval shard OOMs or times out.
 
 Stage-4 grid batch train/probe in one allocation:
 
@@ -139,6 +141,7 @@ MODE=prepare_sft bash scripts/training/run_hard256_full_pipeline.sh
 MODE=check_inputs bash scripts/training/run_hard256_full_pipeline.sh
 MODE=submit_train bash scripts/training/run_hard256_full_pipeline.sh
 MODE=submit_eval bash scripts/training/run_hard256_full_pipeline.sh
+MODE=submit_eval_recovery CHUNKS_PER_GPU=2 bash scripts/training/run_hard256_full_pipeline.sh
 MODE=summarize bash scripts/training/run_hard256_full_pipeline.sh
 MODE=registry bash scripts/training/run_hard256_full_pipeline.sh
 ```
@@ -148,7 +151,14 @@ Stage-4 training fallback submit:
 ```bash
 MODE=submit CONFIG=configs/stage4/self_corrupt/mmu_lora_train_hard256_grid4_vq_tokens_l40s_1024_gc_adam8bit.yaml \
   GPU_FALLBACKS="8 4 1" bash scripts/training/run_stage4_recovery_submit.sh
+MODE=recover JOB_ID=<failed_job_id> \
+  GPU_FALLBACKS="8 4 1" bash scripts/training/run_stage4_recovery_submit.sh
 ```
+
+`run_stage4_recovery_submit.sh` writes `outputs/stage4_self_corrupt/recovery_submit_attempts.tsv`
+so a later `MODE=recover JOB_ID=...` can infer whether the failed job was the
+8-GPU, 4-GPU, or 1-GPU attempt. Use `DRY_RUN=1` to print the exact `sbatch`
+command without submitting.
 
 Stage-5 multi-prompt single-node run:
 
@@ -188,5 +198,11 @@ The Stage-5 multi-prompt wrapper also honors `GPU_IDS`, `GPU_COUNT`,
   `check_inputs` modes. `submit_train` refuses to submit if the Hard256 dataset
   or per-grid Lumina SFT `train.jsonl` files are missing, unless
   `SKIP_INPUT_CHECK=1` is set intentionally.
+- Stage-4 multi-GPU eval supports per-GPU chunking through `CHUNKS_PER_GPU`;
+  Hard256 `submit_eval_recovery` defaults to two chunks per GPU to retry failed
+  evals with smaller per-process sample counts.
+- Stage-4 train recovery records submission attempts and can infer the current
+  fallback position from the failed Slurm job id before resubmitting with the
+  next smaller GPU count.
 - All Stage-5/6 CLIs support `--mock` for local wiring tests without loading
   Lumina.

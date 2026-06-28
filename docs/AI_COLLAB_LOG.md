@@ -4412,3 +4412,34 @@ MODE=prepare_sft bash scripts/training/run_hard256_full_pipeline.sh
 MODE=check_inputs bash scripts/training/run_hard256_full_pipeline.sh
 MODE=submit_train bash scripts/training/run_hard256_full_pipeline.sh
 ```
+
+---
+
+## 2026-06-29 00:30 HKT - Windows Codex: recovery automation hardening
+
+### Sync
+- Fetched all remote branches again. No new server branch was ahead of
+  `origin/main`.
+
+### Fixes
+- `scripts/training/run_stage4_multi_gpu_eval.sh` now supports
+  `CHUNKS_PER_GPU`; setting `CHUNKS_PER_GPU=2` splits each GPU's eval slice into
+  smaller subprocesses while preserving disjoint `sample_offset` windows.
+- `jobs/stage4/stage4_multi_gpu_eval.sbatch` preserves `CHUNKS_PER_GPU`, and
+  `scripts/training/run_hard256_full_pipeline.sh` adds
+  `MODE=submit_eval_recovery` for half-size eval retry submissions.
+- `scripts/training/run_stage4_recovery_submit.sh` now supports `DRY_RUN=1`,
+  records submissions in `outputs/stage4_self_corrupt/recovery_submit_attempts.tsv`,
+  and can infer the failed job's current GPU count from that log or `sacct`
+  before resubmitting with the next fallback value.
+
+### Server command update
+```bash
+# retry a failed DDP train job with the next smaller GPU count
+MODE=recover JOB_ID=<failed_job_id> GPU_FALLBACKS="8 4 1" \
+  bash scripts/training/run_stage4_recovery_submit.sh
+
+# retry eval with smaller per-process shards
+MODE=submit_eval_recovery CHUNKS_PER_GPU=2 \
+  bash scripts/training/run_hard256_full_pipeline.sh
+```

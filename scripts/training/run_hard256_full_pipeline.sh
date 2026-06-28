@@ -10,7 +10,7 @@ if [[ -z "${PYTHON_BIN:-}" ]]; then
   if command -v python >/dev/null 2>&1; then PYTHON_BIN=python; elif command -v python3 >/dev/null 2>&1; then PYTHON_BIN=python3; else PYTHON_BIN=python; fi
 fi
 
-MODE=${MODE:-plan}  # plan, generate_configs, prepare_sft, check_inputs, submit_train, submit_eval, summarize, registry
+MODE=${MODE:-plan}  # plan, generate_configs, prepare_sft, check_inputs, submit_train, submit_eval, submit_eval_recovery, summarize, registry
 GRIDS=${GRIDS:-"4 8 16"}
 DATASET=${DATASET:-hard256}
 PROFILE=${PROFILE:-l40s_1024_gc}
@@ -18,6 +18,7 @@ CONFIG_DIR=${CONFIG_DIR:-configs/stage4/self_corrupt}
 BASE_DIR=${BASE_DIR:-outputs/stage4_self_corrupt/mmu_lora_hard256_curriculum}
 GPU_FALLBACKS=${GPU_FALLBACKS:-"8 4 1"}
 SAMPLES_PER_GPU=${SAMPLES_PER_GPU:-4}
+CHUNKS_PER_GPU=${CHUNKS_PER_GPU:-1}
 CHECKPOINT_EVERY_EPOCHS=${CHECKPOINT_EVERY_EPOCHS:-1}
 IMAGE_SIZE=${IMAGE_SIZE:-1024}
 export LUMINA_REPO=${LUMINA_REPO:-third_party/Lumina-DiMOO}
@@ -115,6 +116,7 @@ case "$MODE" in
     echo "5. MODE=submit_eval bash $0"
     echo "6. MODE=summarize bash $0"
     echo "7. MODE=registry bash $0"
+    echo "Recovery eval retry: MODE=submit_eval_recovery CHUNKS_PER_GPU=2 bash $0"
     for grid in $GRIDS; do
       echo "grid${grid}:"
       echo "  sft=$(config_path sft "$grid")"
@@ -152,12 +154,16 @@ case "$MODE" in
       MODE=submit bash scripts/training/run_stage4_recovery_submit.sh
     done
     ;;
-  submit_eval)
+  submit_eval|submit_eval_recovery)
+    if [[ "$MODE" == "submit_eval_recovery" && "${CHUNKS_PER_GPU:-1}" == "1" ]]; then
+      CHUNKS_PER_GPU=2
+    fi
     for grid in $GRIDS; do
       CONFIG="$(config_path probe "$grid")" \
       OUTPUT_ROOT="$BASE_DIR/grid${grid}/vq_tokens/multi_gpu_eval" \
       SAMPLES_PER_GPU="$SAMPLES_PER_GPU" \
-      sbatch --export=ALL,CONFIG,OUTPUT_ROOT,SAMPLES_PER_GPU jobs/stage4/stage4_multi_gpu_eval.sbatch
+      CHUNKS_PER_GPU="$CHUNKS_PER_GPU" \
+      sbatch --export=ALL,CONFIG,OUTPUT_ROOT,SAMPLES_PER_GPU,CHUNKS_PER_GPU jobs/stage4/stage4_multi_gpu_eval.sbatch
     done
     ;;
   summarize)
