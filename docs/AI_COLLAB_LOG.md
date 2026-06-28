@@ -3592,6 +3592,23 @@ Fast-forwarded `feat/stage4-gc-fallback-server` from `32a7dcd` to `6f04b23`
 - After completion:
   `MODE=summarize bash scripts/training/run_stage4_server_campaign.sh`.
 
+## 🎉 2026-06-28 — MILESTONE: First non-zero hit_any (grid4 schema_example)
+
+Grid4 `schema_example` + 1024px gc + adam8bit: **hit_any = 0.0625 (2/32)**.
+
+Full curriculum (schema_example + 1024px gc):
+
+| Grid | Train Loss | Parse Rate | Hit Any | F1 | IoU |
+|------|-----------|-----------|---------|-----|------|
+| 4×4 | 0.045 | 0.375 | **0.0625** | 0.025 | 0.016 |
+| 8×8 | 0.063 | 0.688 | 0.0 | 0.0 | 0.0 |
+| 16×16 | 0.046 | 0.469 | 0.0 | 0.0 | 0.0 |
+
+Hit samples: p0030_c000 (A1→A1), p0035_c001 (A4→A4). Model biases toward
+A-row cells but targets in A-row get lucky hits. Coarse-to-fine validated.
+
+Hard256 dataset: 16/16 shards complete, 256 prompts, 512 rows ready.
+
 ---
 
 ## 2026-06-28 14:30 HKT — Server AI: comprehensive remaining-scripts spec for Windows Codex
