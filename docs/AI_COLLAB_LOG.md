@@ -2631,3 +2631,157 @@ python -m ascr.cli.stage4_compare_input_modes \
 
 - Commit only the appended server result in this log. Do not commit
   `outputs/`, adapters, checkpoints, token caches, or datasets.
+
+## 2026-06-28 08:15 HKT — Server AI: Phase 4 dual-path comparison results
+
+### Branch and commit
+- Branch: feat/stage4-mmu-lora-dual-server
+- Base commit: 4209346 (main)
+- Fix applied: `train_lumina_lora_smoke.py` line 100-103 — replaced `hasattr`
+  check with `try/except (ValueError, NotImplementedError)` for
+  `gradient_checkpointing_enable()`. LLaDA model has the method but raises
+  ValueError. This fix is in-repo on the server branch.
+
+### Environment
+- Host: hpcr4300a
+- GPU node: SPGL-1-15 (L40S, 45 GB), 2 GPUs used simultaneously
+- Python: 3.11.15 in .venv-lumina
+- PROFILE: l40s (512px, bf16, 2 modules q_proj+v_proj)
+
+### Commands executed
+
+**Non-GPU prep (login node):**
+```bash
+python -m ascr.cli.stage4_prepare_mmu_sft --config ...mmu_sft_hard64_vq_tokens.yaml
+python -m ascr.cli.stage4_prepare_mmu_sft --config ...mmu_sft_hard64_decoded_image.yaml
+python -m ascr.training.prepare_lumina_sft_data --sft-examples .../vq_tokens/sft/train_sft_examples.jsonl ...
+```
+
+**GPU pipeline (sbatch array, 2 GPUs parallel):**
+```bash
+PROFILE=l40s sbatch jobs/stage4/train_mmu_lora_dual.sbatch
+```
+Job 71470: array tasks 0 (vq_tokens) and 1 (decoded_image), both on SPGL-1-15.
+Elapsed: ~55 min each.
+
+**Comparison:**
+```bash
+python -m ascr.cli.stage4_compare_input_modes ...
+```
+
+### Zero-shot probe results (limit=16 each)
+
+| Metric | vq_tokens | decoded_image |
+|--------|-----------|---------------|
+| parse_rate | 0.0 | 0.125 |
+| parsed | 0/16 | 2/16 |
+| malformed | 16 | 14 |
+| hit_any | 0.0 | 0.0 |
+
+### SFT data preparation
+
+| Metric | vq_tokens | decoded_image |
+|--------|-----------|---------------|
+| train_rows | 96 | 96 |
+| eval_rows | 32 | 32 |
+| missing_images | 0 | 0 |
+| missing_vq_ids | 0 | 0 |
+| preferred_input | vq_ids_path | image_path |
+| target_schema | localization_cells | localization_cells |
+
+### LoRA training
+
+| Metric | vq_tokens | decoded_image |
+|--------|-----------|---------------|
+| epochs | 15 | 15 |
+| start_loss | 6.875 | 6.75 |
+| final_loss | 0.222 | 0.187 |
+| adapter_size | 16.8 MB | 16.8 MB |
+| config | 512px, bf16, q_proj+v_proj, seq_len 2048 | same |
+
+### LoRA evaluation (32 eval samples each)
+
+| Metric | vq_tokens | decoded_image | Winner |
+|--------|-----------|---------------|--------|
+| parse_rate | **0.406** | 0.156 | vq_tokens |
+| parsed | 13/32 | 5/32 | vq_tokens |
+| malformed | 19 | 27 | vq_tokens |
+| hit_any_rate | 0.0 | 0.0 | tie |
+| mean_f1_at_k | 0.0 | 0.0 | tie |
+| mean_iou | 0.0 | 0.0 | tie |
+| call_errors | 0 | 0 | tie |
+| mean_latency_ms | 54,704 | 55,232 | vq_tokens (~tie) |
+
+### Comparison vs previous run (before schema fix)
+
+| Metric | Previous vq_tokens | Now vq_tokens | Delta |
+|--------|-------------------|---------------|-------|
+| parse_rate | 0.156 | 0.406 | **+0.250** |
+| parsed | 5/32 | 13/32 | **+8** |
+| hit_any | 0.0 | 0.0 | 0.0 |
+
+### Root cause: cell label values still garbled
+
+Schema key is now correct (`corrupted_cells_4x4`), but the LoRA outputs
+garbled cell label values:
+
+```
+predicted: ["A1A2AA2A1A3AA6A1AA1A44A1A5..."]  ← concatenated nonsense
+target:    ["J10", "J9"]                       ← valid 16×16 grid labels
+```
+
+Or predicts only A-row cells (`["A1","A2","A3","A8"]`) while targets are
+in J-L rows. The model doesn't understand the 16×16 coordinate system.
+
+This is a **capacity + task difficulty** problem, not a schema problem:
+- 2 LoRA modules (q_proj, v_proj) at 512px
+- 96 training examples
+- 16×16 = 256 possible cells (A1–P16)
+- The model learns "output cell-like strings" but not "output correct cell labels"
+
+### Blockers
+
+1. **Gradient checkpointing not supported** by LLaDA model. Fix applied:
+   try/except in training code. Removed gc from viable optimization list
+   until Lumina model code is patched.
+
+2. **Full 1024px config OOMs** even with bf16 (no gc to reduce activation
+   memory). L40S fallback (512px, 2 modules) works but limits capacity.
+
+3. **16×16 grid too hard** for current LoRA capacity. Coarse-first
+   curriculum needed.
+
+### OOM resolution shared TODO
+
+Added to `docs/STAGE3_SELF_CORRUPTED_TOKEN_REPAIR.md` as a shared
+investigation item for both AIs. Key finding: gc is blocked, 8-bit Adam
+is the next candidate. See the document for full optimization table.
+
+### Recommendation
+
+1. **Coarse-first curriculum**: Start with 4×4 grid (16 cells, A1–D4).
+   Much smaller output space. Train LoRA, evaluate. If hit_any > 0 at 4×4,
+   progress to 8×8 then 16×16.
+
+2. **8-bit Adam**: Implement `bitsandbytes` 8-bit Adam to recover
+   optimizer memory. This may allow 4+ modules at 1024px without gc.
+
+3. **Image MMU smoke test**: Run `stage4_image_mmu_smoke` (Codex built it
+   but we didn't run it yet). Verify decoded_image path works before
+   investing in LoRA for that path.
+
+4. **More data**: 96 training examples may be insufficient. Expand to
+   256+ prompts after coarse-first curriculum proves the approach.
+
+### What's ready to run immediately
+
+```bash
+# Image MMU smoke (quick GPU test, ~10 min)
+python -m ascr.cli.stage4_image_mmu_smoke \
+  --dataset outputs/stage3_self_corrupt/datasets/locality_hard64_v1/dataset.jsonl \
+  --limit 8 \
+  --output-dir outputs/stage4_self_corrupt/image_mmu_smoke
+
+# Coarse-first 4x4 LoRA training (if config exists)
+# Otherwise, just re-run existing pipeline with more data
+```

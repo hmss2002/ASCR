@@ -22,6 +22,65 @@ Do not claim that the model becomes generally smarter without external signal.
 The clean image is only a relative positive compared with its corrupted pair; it
 is not guaranteed to be a perfect prompt match.
 
+## Shared TODO: Resolve 1024px LoRA Training Memory On 45 GB L40S
+
+**Status**: Windows Codex + Server AI joint investigation. Not yet resolved.
+
+**Problem**: A single L40S (45 GB) can run Lumina-DiMOO inference at 1024×1024
+without issue. But LoRA training at 1024×1024 with the full 7-module target set
+(q_proj, v_proj, k_proj, o_proj, gate_proj, up_proj, down_proj) and
+max_seq_len=6144 OOMs because training adds:
+
+- LoRA adapter parameters + gradients
+- Adam optimizer states (momentum + variance ≈ 2× per parameter)
+- Forward activations saved for backward pass
+- Cross-entropy loss computation on long sequences
+
+**Current workaround (L40S fallback config)**:
+```
+image_size: 1024 → 512          (center-crop, loses spatial alignment)
+max_seq_len: 6144 → 2048        (truncates long outputs)
+target_modules: 7 → 2           (only q_proj, v_proj — limits capacity)
+```
+
+**Goal**: Keep image_size=1024, max_seq_len=6144, and all 7 target modules
+while fitting within 45 GB. The current full config attempts this with
+bf16 + gradient checkpointing; if it OOMs, further optimizations are needed.
+
+**Optimization candidates (either AI can implement)**:
+
+| Technique | Expected saving | Risk |
+|-----------|----------------|------|
+| bf16 mixed precision | ~50% model weight memory | Already in full config |
+| Gradient checkpointing | ~30% activation memory | Already in full config; ~20% slower |
+| LoRA on attention only (4 modules: q/k/v/o) | ~40% optimizer memory vs 7 modules | May reduce localization quality |
+| Activation offloading to CPU | Variable | Much slower |
+| 8-bit Adam optimizer | ~50% optimizer memory | Small precision loss |
+| Flash Attention 2 | ~20-30% activation memory | Needs compatible CUDA/code |
+| Sequence parallelism | Splits seq_len across GPUs | Needs >1 GPU per training run |
+| Smaller per-device batch with gradient accumulation | ~linear in batch size | Slower convergence |
+
+**Decision**: The full config (bf16 + gradient checkpointing + 7 modules at
+1024px) is the first attempt. If it OOMs, try 8-bit Adam next. If still OOMs,
+reduce to 4 attention modules. Only fall back to 512px as last resort.
+
+**Server finding (2026-06-28)**: `LLaDAForMultiModalGeneration` raises
+`ValueError: does not support gradient checkpointing` — the Lumina-DiMOO
+transformers fork doesn't implement `gradient_checkpointing_enable()`.
+Gradient checkpointing is removed from the optimization candidate list until
+Windows Codex or server AI patches the Lumina model code.
+
+**Updated priority**:
+1. ~~bf16 + gradient checkpointing~~ → **blocked** (model doesn't support gc)
+2. **8-bit Adam optimizer** → try next (no model code change needed)
+3. 4 attention modules (q/k/v/o) → if 8-bit Adam still OOMs
+4. 512px fallback → current working config; only keep as last resort
+
+**Validation**: After any memory fix, re-run a single-epoch smoke to confirm
+training loss decreases before committing to the full 15-epoch run.
+
+---
+
 ## Clarification: Corruption Target And Selector Grids
 
 Stage 3 corrupts Lumina's generated VQ image-token sequence, then decodes the

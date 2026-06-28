@@ -98,10 +98,10 @@ def train_lumina_lora_smoke(args):
         raise ValueError(f"Unsupported torch_dtype: {args.torch_dtype}")
     model = model_cls.from_pretrained(args.checkpoint_path, torch_dtype=dtype_map[dtype_name], device_map="auto")
     if args.gradient_checkpointing:
-        if hasattr(model, "gradient_checkpointing_enable"):
+        try:
             model.gradient_checkpointing_enable()
-        else:
-            print("warning: model does not expose gradient_checkpointing_enable(); continuing without it")
+        except (ValueError, NotImplementedError) as e:
+            print(f"warning: gradient_checkpointing not supported ({e}); continuing without it")
     lora_config = LoraConfig(
         task_type=TaskType.CAUSAL_LM,
         r=int(args.lora_r),
