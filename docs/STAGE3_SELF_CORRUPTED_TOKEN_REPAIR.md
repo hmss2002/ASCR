@@ -72,10 +72,9 @@ Windows Codex or server AI patches the Lumina model code.
 
 **Updated priority**:
 1. ~~bf16 + gradient checkpointing~~ → **blocked** (model doesn't support gc)
-2. **8-bit Adam optimizer** → implemented in the training CLI; server should
-   validate whether it fits 1024px full-module LoRA on L40S.
-3. 4 attention modules (q/k/v/o) → if 8-bit Adam still OOMs
-4. 512px fallback → current working config; only keep as last resort
+2. **8-bit Adam optimizer** → installed. init works. **Server tested: 7 modules + adam8bit → OOM. 4 modules + adam8bit → OOM.** 8-bit Adam saves optimizer memory but model activations at 1024px still dominate.
+3. **Gradient checkpointing in LLaDA model code** → **single highest-impact change.** See reference below. If gc works, 1024px + 7 modules fits on one L40S.
+4. 512px fallback → current working config; only keep as last resort.
 
 **Validation**: After any memory fix, re-run a single-epoch smoke to confirm
 training loss decreases before committing to the full 15-epoch run.
@@ -93,6 +92,83 @@ training loss decreases before committing to the full 15-epoch run.
 - Added coarse-to-fine curriculum configs and runners for grid4/grid8/grid16:
   `scripts/training/run_stage4_curriculum.sh` and
   `jobs/stage4/train_mmu_lora_curriculum.sbatch`.
+
+### Reference: How Gradient Checkpointing Works (for patching LLaDA)
+
+**Normal training forward pass:**
+```
+输入 → Layer1 → Layer2 → ... → Layer32 → 输出 → loss
+        ↓        ↓              ↓
+      存A1     存A2          存A32      (所有激活值都保留用于反向)
+```
+反向传播时每层都要自己的激活值。32 层 × 每层几十 MB = **几个 GB 激活值常驻显存**。
+
+**With gradient checkpointing:**
+```
+输入 → Layer1 → Layer2 → ... → Layer32 → 输出 → loss
+        ✗        ✗              ✗              (激活值全部丢弃)
+```
+反向传播时按需重算：
+```
+需要 A32 → 从 A31 重算一遍 Layer32 → 拿到 A32 → 算梯度 → 扔掉
+需要 A31 → 从 A30 重算一遍 Layer31 → 拿到 A31 → 算梯度 → 扔掉
+...
+```
+**用时间换空间**：每个 layer 跑两遍（~20% 慢），但激活值只保留 checkpoint 点之间那几个。
+
+**显存对比：**
+```
+不开 gc:  激活值 35+ GB → OOM
+开 gc:    激活值 5-8 GB  → 能跑！
+```
+
+**为什么 LLaDA 不支持：** HuggingFace 的 `PreTrainedModel` 提供了
+`model.gradient_checkpointing_enable()` 接口，LLaDA 虽然继承了但一调就抛
+`ValueError("LLaDAForMultiModalGeneration does not support gradient checkpointing")`。
+原因是底层 transformer block 的 forward 没包 `torch.utils.checkpoint.checkpoint()`。
+
+**大概要改什么（`modeling_llada.py`，参考，不保证精确）：**
+
+```python
+# 当前（不支持 gc）：
+class LLaDADecoderLayer(nn.Module):
+    def forward(self, hidden_states, attention_mask=None, ...):
+        hidden_states = self.self_attn(hidden_states, attention_mask, ...)
+        hidden_states = self.mlp(hidden_states, ...)
+        return hidden_states
+
+# 改成（支持 gc）：
+class LLaDADecoderLayer(nn.Module):
+    def forward(self, hidden_states, attention_mask=None, ...):
+        if torch.is_grad_enabled() and self.training and self.gradient_checkpointing:
+            def custom_forward(*inputs):
+                # inputs = (hidden_states, attention_mask, ...)
+                h = self.self_attn(inputs[0], inputs[1], ...)
+                h = self.mlp(h, ...)
+                return h
+            return torch.utils.checkpoint.checkpoint(
+                custom_forward, hidden_states, attention_mask, ...
+            )
+        # fallback: normal forward
+        hidden_states = self.self_attn(hidden_states, attention_mask, ...)
+        hidden_states = self.mlp(hidden_states, ...)
+        return hidden_states
+```
+
+关键点：
+- 只包 transformer block 的内部 forward，不动 attention 和 MLP 内部
+- 需要 `self.gradient_checkpointing` 标志位（从 `PreTrainedModel` 继承，
+  `gradient_checkpointing_enable()` 会设它为 True）
+- `use_reentrant=False` 在新版 PyTorch 中推荐（省显存但需要 PyTorch ≥ 1.11）
+- 改动量可能就几十行但需要理解 LLaDA 的 attention 输入输出
+
+**服务器验证方式（改完后）：**
+```bash
+python -m ascr.cli.stage4_train_mmu_lora \
+  --config configs/stage4/self_corrupt/mmu_lora_train_hard64_vq_tokens_l40s_1024px_adam8bit.yaml \
+  --gradient-checkpointing --epochs 1 --limit 4
+```
+如果不 OOM 且 loss 下降 → gc 生效，可以开 15 epoch 完整训练。
 
 ---
 
