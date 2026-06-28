@@ -2776,12 +2776,268 @@ is the next candidate. See the document for full optimization table.
 ### What's ready to run immediately
 
 ```bash
-# Image MMU smoke (quick GPU test, ~10 min)
-python -m ascr.cli.stage4_image_mmu_smoke \
-  --dataset outputs/stage3_self_corrupt/datasets/locality_hard64_v1/dataset.jsonl \
-  --limit 8 \
-  --output-dir outputs/stage4_self_corrupt/image_mmu_smoke
-
-# Coarse-first 4x4 LoRA training (if config exists)
-# Otherwise, just re-run existing pipeline with more data
+# Image MMU smoke (quick GPU test, ~10 min) — COMPLETED, see below
+# 4x4 LoRA training — RUNNING (job 71473)
 ```
+
+## 2026-06-28 09:50 HKT — Server AI: image MMU smoke + 4×4 in progress + handoff to Windows Codex
+
+### Image MMU smoke (job 71472)
+
+Completed on SPGL-1-15 in 6:48. 8 samples, zero-shot decoded_image path.
+
+- parse_rate: 0.125 (1/8), hit_any: 0.0
+- Output pattern: `{"has cells": [["A_4_4x4", "A_4_4x4", ...]]}` — garbled
+  pseudo-labels. Same failure mode as vq_tokens zero-shot.
+
+Takeaway: decoded_image doesn't magically fix the localization problem.
+The model needs LoRA to output correct cell labels regardless of input
+modality. vq_tokens remains the preferred path (faster, no decode step,
+higher parse_rate after LoRA: 0.406 vs 0.156).
+
+### 4×4 coarse-first experiment (job 71473)
+
+Running on SPGL-1-15. Grid size 4 (16 cells: A1–D4), max_selected_cells=4.
+Using the proven L40S config (512px, bf16, q_proj+v_proj). ZS probe +
+LoRA training (15 epochs) + eval on 32 holdout samples. Expected wall
+time ~35 min.
+
+This is the simplest possible localization task. If hit_any stays at 0.0
+on 4×4, we have a more fundamental problem than grid resolution. If it
+works, we have a baseline and can progress to 8×8.
+
+---
+
+## Handoff to Windows Codex: scripts needed for the next push
+
+> **Note from server AI**: the following is my best assessment of what's
+> needed. Windows Codex should do its own analysis — you can see things I
+> can't from the codebase perspective. If you spot additional work that
+> I haven't listed, please add it. This is a collaborative planning doc,
+> not a requirements document.
+
+---
+
+### Priority 1: Resolve 1024px LoRA training on 45GB L40S
+
+Current status: inference fits, training doesn't. We're stuck at 512px +
+2 modules as a workaround, which limits the LoRA's ability to learn
+spatial relationships (cell labels are garbled at 16×16, probably due
+to this capacity bottleneck).
+
+**Attempt 1: 8-bit Adam optimizer**
+
+Smallest code change, biggest potential win. `bitsandbytes` 8-bit Adam
+saves ~50% optimizer memory. For LoRA with 7 target modules at 1024px,
+this might be the difference between OOM and fitting.
+
+In `ascr/training/train_lumina_lora_smoke.py` or `stage4_mmu_lora.py`:
+```python
+# Current:
+optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=wd)
+# Target:
+import bitsandbytes as bnb
+optimizer = bnb.optim.AdamW8bit(model.parameters(), lr=lr, weight_decay=wd)
+```
+
+Add `--optimizer {adamw,adamw8bit}` CLI flag. If 8-bit works, make it
+the default for L40S.
+
+**Attempt 2: Reduce to 4 attention modules**
+
+If 8-bit Adam still OOMs: target only q_proj, k_proj, v_proj, o_proj.
+Drop the FFN modules (gate_proj, up_proj, down_proj). The cross-attention
+layers are where image and text interact — most critical for localization.
+
+**Attempt 3: Implement gradient checkpointing in Lumina model code**
+
+`LLaDAForMultiModalGeneration` inherits `gradient_checkpointing_enable()`
+from `PreTrainedModel` but raises `ValueError`. Likely needs a few lines
+in `modeling_llada.py` to wrap the forward pass with `torch.utils.checkpoint`.
+Server AI can't do this without understanding the Lumina model internals.
+
+**Config needed after any fix:**
+`configs/stage4/self_corrupt/mmu_lora_train_hard64_vq_tokens_l40s_1024px.yaml`
+— same as full config but with whatever memory optimization works.
+
+---
+
+### Priority 2: Scale-up parallel infrastructure (end the manual sharding era)
+
+Currently, running locality probes on more than 8 prompts requires manual
+prompt-file splitting, separate sbatch submissions per shard, and a custom
+merger script (`.runtime/merge_shard_manifests.py`). This works but is
+fragile and doesn't scale past ~64 prompts.
+
+The goal: one command to probe N prompts across M GPUs, with automatic
+sharding, scheduling, and merge.
+
+**Script A: `--prompt-offset / --prompt-limit` in token_locality_probe.py**
+
+The CLI already has `--limit`. Add:
+```
+--prompt-offset N   # skip first N prompts from the file
+--prompt-limit M    # process at most M prompts (after offset)
+```
+
+Or read `PROMPT_OFFSET` / `PROMPT_LIMIT` from environment variables so
+Slurm array tasks can set them without creating per-task configs.
+
+This is the blocker for everything below. Once `--prompt-offset` exists,
+the rest is orchestration.
+
+**Script B: `jobs/stage3/self_corrupt_locality_probe_array.sbatch`**
+
+Slurm job array. One sbatch command fans out across GPUs:
+```bash
+#SBATCH --array=0-15          # 16 tasks = 16 GPUs
+#SBATCH --gres=gpu:1
+# Each task: PROMPT_OFFSET = TASK_ID * 4, PROMPT_LIMIT = 4
+```
+
+64 prompts × 16 GPUs = 4 prompts each, ~5 min wall time.
+256 prompts × 16 GPUs = 16 prompts each, ~15 min wall time.
+
+**Script C: `ascr/cli/stage3_merge_probe_shards.py`**
+
+Official merger to replace `.runtime/merge_shard_manifests.py`:
+```bash
+python -m ascr.cli.stage3_merge_probe_shards \
+  --shard-dirs outputs/stage3_self_corrupt/locality_probe_hard256/shard_* \
+  --output-dir outputs/stage3_self_corrupt/locality_probe_hard256
+```
+
+Features beyond the current script:
+- Re-assigns global prompt indices (no collision)
+- Validates all referenced paths
+- Reports missing shards / prompt ranges
+- Produces unified manifest.jsonl + summary.json
+
+**Script D: `scripts/stage3/run_locality_probe_parallel.sh`**
+
+Shell wrapper tying it all together:
+```bash
+PROMPT_FILE=configs/benchmarks/prompts/t2i_compbench_hard64.txt \
+PROMPTS_PER_GPU=4 \
+bash scripts/stage3/run_locality_probe_parallel.sh
+```
+
+Calculates array size, submits array, waits for completion, runs merger.
+
+**With these four scripts, the server AI can:**
+```bash
+# 256 prompts across 32 GPUs in ~15 minutes:
+bash scripts/stage3/run_locality_probe_parallel.sh  # submit array
+# ... wait 15 min ...
+python -m ascr.cli.stage3_merge_probe_shards ...     # merge
+python -m ascr.cli.stage3_self_corrupt_dataset ...   # build dataset
+python -m ascr.cli.stage4_prepare_mmu_sft ...        # SFT prep
+python -m ascr.cli.stage4_train_mmu_lora ...         # train
+```
+
+From 256 prompts to trained LoRA in under 2 hours, fully automated
+except for the manual train step. Currently this takes a full day of
+manual sharding and babysitting.
+
+---
+
+### Priority 3: Phase 5 ASCR loop integration
+
+Once 4×4 (or 8×8) LoRA localization produces usable hit_any, the next
+step is closing the ASCR loop: generate → corrupt → localize → reopen.
+
+**Script E: MMU localizer → TokenReopenMask bridge**
+
+The LoRA outputs cell labels like `["D3"]` (4×4) or `["H6","H7"]` (8×8).
+These need to be mapped to the 64×64 VQ token grid for `reopen()`.
+
+This mapping already exists in the ASCR codebase:
+- `DirectTokenReopeningSelector` converts coarse cells → token mask
+- `GridCell.from_any()` parses A1-style labels
+
+What's needed: a thin bridge that takes the LoRA's parsed JSON output,
+extracts the cell labels, and creates a `TokenReopenMask`.
+
+**Script F: ASCR loop smoke with LoRA localizer**
+
+Config `configs/stage4/self_corrupt/mmu_lora_ascr_smoke.yaml` already exists.
+Wire it up:
+```bash
+python -m ascr.benchmarks.lumina_native_benchmark \
+  --prompts configs/benchmarks/prompts/t2i_compbench_hard64.txt \
+  --domain hard64_mmu_lora_smoke \
+  --output-dir outputs/stage4_self_corrupt/mmu_lora_hard64_dual/ascr_smoke \
+  --config configs/stage4/self_corrupt/mmu_lora_ascr_smoke.yaml \
+  --limit 4 --max-iterations 1 --keep-going
+```
+
+This runs the full loop: Lumina generates → corrupt VQ tokens → MMU + LoRA
+localizes → reopen → save before/after images.
+
+**Script G: Before/after image judge (reuse existing)**
+
+The Qwen3.7 API image judge already exists (`ascr/benchmarks/api_image_judge.py`).
+After the ASCR smoke produces before/after images, run the judge on the
+login node to quantify improvement.
+
+---
+
+### What else Windows Codex might spot
+
+These are areas where the server AI has limited visibility. Codex should
+assess independently:
+
+- **Training stability across grids**: the current training code works for
+  16×16. Verify it handles 4×4 and 8×8 correctly end-to-end (the server is
+  testing 4×4 right now, but Codex can run focused unit tests).
+
+- **SFT target format edge cases**: what happens when a sample has 0
+  corrupted cells? What if `has_error: false`? The `localization_cells`
+  schema should handle these gracefully.
+
+- **LoRA adapter compatibility with answer_vq_tokens vs answer_image**:
+  the adapter trained on vq_tokens path may or may not work when loaded
+  for the image path. Verify the LoRA target modules are the same
+  regardless of input mode.
+
+- **Checkpoint management**: after training multiple LoRA adapters (4×4,
+  8×8, 16×16, vq_tokens, decoded_image), we need a way to track which
+  adapter is which. A training manifest is already written, but a
+  registry or naming convention would help.
+
+- **Prompt expansion strategy**: 64 prompts → 256 → 512. Which prompt
+  files to sample from, how to avoid benchmark contamination, how to
+  stratify by prompt complexity. The `STAGE4_PROMPT_SCALING_GUIDE.md`
+  has initial notes but could use a concrete sampling script.
+
+- **Failure mode catalog**: the LoRA output failures seem to follow
+  patterns (A-row-only, concatenated nonsense, wrong delimiter). A
+  systematic catalog of failure modes might reveal whether the problem
+  is capacity, data, or prompt engineering.
+
+---
+
+### Summary: what the server AI will do when these scripts land
+
+```bash
+# 1. Scale up to 256 prompts in 15 min (instead of 2+ hours)
+bash scripts/stage3/run_locality_probe_parallel.sh  # 32 GPUs parallel
+python -m ascr.cli.stage3_merge_probe_shards ...
+python -m ascr.cli.stage3_self_corrupt_dataset ...
+
+# 2. Train LoRA at 1024px with 7 modules (if OOM fix works)
+python -m ascr.cli.stage4_prepare_mmu_sft --grid-size 4
+python -m ascr.cli.stage4_train_mmu_lora --config ...l40s_1024px.yaml
+
+# 3. Curriculum: 4×4 → 8×8 → 16×16
+bash scripts/training/run_stage4_curriculum.sh
+
+# 4. ASCR loop smoke
+python -m ascr.benchmarks.lumina_native_benchmark --config ...mmu_lora_ascr_smoke.yaml
+
+# 5. Judge before/after
+python -m ascr.benchmarks.api_image_judge --manifest .../manifest.jsonl
+```
+
+The server has 32-48 available L40S GPUs. The bottleneck is no longer
+compute — it's the engineering to use them efficiently.
