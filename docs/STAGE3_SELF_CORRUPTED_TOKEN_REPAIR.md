@@ -1009,31 +1009,37 @@ Decision rules:
   rather than image resolution/capacity. Test stricter decoding or constrained
   JSON generation before scaling data.
 
-Prompt/decoding sweep for format control:
+### 📌 Design Decision: `schema_example` is the sole prompt variant
 
-```bash
-sbatch jobs/stage4/stage4_probe_sweep.sbatch
+**Decision (2026-06-28)**: `schema_example` is the standard and only prompt
+variant for Stage 4 SFT training and evaluation. All other variants
+(`default`, `minimal_json`, `schema_first`) are deprecated.
 
-# If QOS rejects 8 array tasks, split it:
-sbatch --array=0-3 jobs/stage4/stage4_probe_sweep.sbatch
-sbatch --array=4-7 jobs/stage4/stage4_probe_sweep.sbatch
+**Rationale**: `schema_example` includes a concrete JSON example in the
+system prompt, so the model sees the exact output format it should produce.
+This eliminates the format-guessing problem: the model doesn't need to
+invent JSON structure from scratch — it copies the example structure and
+fills in cell labels. The sweep confirmed that example-driven prompting
+is categorically better for structured output.
 
-MODE=summarize bash scripts/training/run_stage4_probe_sweep.sh
-cat outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/grid4/vq_tokens/probe_sweep_l40s_1024px_gc/probe_sweep_summary.md
-```
+**What needs cleanup (Windows Codex)**:
+- Scan all Stage 4 configs, CLIs, and scripts for `prompt_variant` references
+- Remove `default`, `minimal_json`, `schema_first` variants or gate them behind
+  an explicit `--legacy-prompt-variant` flag
+- Make `schema_example` the hard default (no `--prompt-variant` needed)
+- Update `stage4_prepare_mmu_sft.py` to default to `schema_example`
+- Update `stage4_mmu_localization_probe.py` to default to `schema_example`
+- Remove the sweep infrastructure (`stage4_probe_sweep.py`, sweep sbatch,
+  sweep shell runner) or repurpose it for other hyperparameter sweeps
+- Regenerate all existing SFT data with `schema_example` (server can do this
+  as a batch operation on the login node)
 
-Default sweep:
+**Server action**: All new SFT data from now on uses `--prompt-variant schema_example`.
+Existing `default` SFT data under `outputs/` will be regenerated as needed.
 
-| Axis | Values |
-|------|--------|
-| prompt_variant | `default`, `minimal_json`, `schema_first`, `schema_example` |
-| max_new_tokens | `128`, `384` |
-| answer_temperature | `0.0` |
-| answer_cfg_scale | `0.0` |
-
-This sweep is intentionally evaluation-only: it reuses the trained grid4 GC
-adapter and tests whether the remaining failure is prompt/decoding format
-control before launching more expensive data scaling or retraining.
+Prompt/decoding sweep is deprecated in favor of this decision. The sweep jobs
+(71524/71525) will still complete for reference data, but results will not
+change the direction.
 
 ## Phase 5: ASCR Loop Integration
 
