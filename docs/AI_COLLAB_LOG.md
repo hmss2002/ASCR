@@ -4385,3 +4385,30 @@ CONFIG=configs/stage4/self_corrupt/mmu_lora_train_hard256_grid4_vq_tokens_l40s_1
   EPOCHS=1 LIMIT=8 CHECKPOINT_EVERY_EPOCHS=1 \
   sbatch --gres=gpu:8 jobs/stage4/train_mmu_lora_ddp.sbatch
 ```
+
+---
+
+## 2026-06-29 00:17 HKT - Windows Codex: Hard256 pipeline guardrails + Stage5 share-engine regression test
+
+### Sync
+- Fetched all remote branches. No server branch was newer than `origin/main`;
+  `feat/stage4-gc-fallback-server` remains merged into `main`.
+
+### Fixes
+- Strengthened `scripts/training/run_hard256_full_pipeline.sh` so the Hard256
+  path now has explicit `prepare_sft` and `check_inputs` modes between config
+  generation and training submission.
+- `submit_train` now checks that the Stage-3 Hard256 dataset and each per-grid
+  Lumina SFT `train.jsonl` exist before submitting DDP jobs. Use
+  `SKIP_INPUT_CHECK=1` only for deliberate low-level debugging.
+- Added a Stage-5 regression test proving `share_engine: true` creates one
+  Lumina engine, reuses it for generation/MMU/reopen, and lazily attaches the
+  LoRA adapter before `answer_vq_tokens`.
+
+### Server command update
+```bash
+MODE=generate_configs bash scripts/training/run_hard256_full_pipeline.sh
+MODE=prepare_sft bash scripts/training/run_hard256_full_pipeline.sh
+MODE=check_inputs bash scripts/training/run_hard256_full_pipeline.sh
+MODE=submit_train bash scripts/training/run_hard256_full_pipeline.sh
+```

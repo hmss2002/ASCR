@@ -135,9 +135,12 @@ Hard256 full pipeline:
 ```bash
 MODE=plan bash scripts/training/run_hard256_full_pipeline.sh
 MODE=generate_configs bash scripts/training/run_hard256_full_pipeline.sh
+MODE=prepare_sft bash scripts/training/run_hard256_full_pipeline.sh
+MODE=check_inputs bash scripts/training/run_hard256_full_pipeline.sh
 MODE=submit_train bash scripts/training/run_hard256_full_pipeline.sh
 MODE=submit_eval bash scripts/training/run_hard256_full_pipeline.sh
 MODE=summarize bash scripts/training/run_hard256_full_pipeline.sh
+MODE=registry bash scripts/training/run_hard256_full_pipeline.sh
 ```
 
 Stage-4 training fallback submit:
@@ -175,7 +178,15 @@ The Stage-5 multi-prompt wrapper also honors `GPU_IDS`, `GPU_COUNT`,
   `stage6_multi_arm_benchmark`; plug mature runners into those arms when the
   server needs full comparisons.
 - Stage-5 defaults to `share_engine: true` to avoid loading generator, MMU, and
-  LoRA copies at the same time. Set `share_engine: false` only when GPU memory
-  is sufficient and separate generation/MMU behavior must be isolated.
+  LoRA copies at the same time. The loop now reuses one
+  `LuminaNativeEngine` instance and lazily attaches the LoRA adapter before
+  the MMU answer call; this behavior is covered by
+  `test_stage5_share_engine_reuses_one_lumina_instance_and_attaches_lora_lazily`.
+  Set `share_engine: false` only when GPU memory is sufficient and separate
+  generation/MMU behavior must be isolated.
+- `run_hard256_full_pipeline.sh` now includes explicit `prepare_sft` and
+  `check_inputs` modes. `submit_train` refuses to submit if the Hard256 dataset
+  or per-grid Lumina SFT `train.jsonl` files are missing, unless
+  `SKIP_INPUT_CHECK=1` is set intentionally.
 - All Stage-5/6 CLIs support `--mock` for local wiring tests without loading
   Lumina.
