@@ -3452,7 +3452,37 @@ OOMed at 1024px. The gc fallback is the first to succeed.
 | 71509 | **Full 1024px 16×16** | 15 | **0.031** | 1h22m | ✅ |
 | 71511 | **Grid4 1024px + eval** | 15 | **0.029** | 1h50m | ✅ |
 
-### 71509 — Full 1024px 16×16 LoRA training
+### 71520 completed — 16×16 1024px LoRA eval
+
+Completed on SPGL-1-18 (33 min). Eval on 32 holdout samples.
+
+| Metric | 512px (old) | 1024px gc (new) |
+|--------|-----------|-----------|
+| parse_rate | 0.406 | 0.344 |
+| parsed | 13/32 | 11/32 |
+| malformed | 19 | 21 |
+| hit_any | 0.0 | 0.0 |
+
+1024px 16×16 parse_rate (0.344) is slightly lower than 512px (0.406). This is
+because the 1024px model learned to output ALL THREE grid resolutions (4×4,
+8×8, 16×16) in one JSON object — a more complex task that produces more
+malformed outputs. All 11 parsed rows have empty predicted_cells (parser
+can't extract valid cell labels from malformed values).
+
+### 📊 Full comparison: 512px vs 1024px gc
+
+| Metric | 512px 16×16 | 512px 4×4 | 1024px 16×16 | 1024px 4×4 |
+|--------|-----------|-----------|-------------|-----------|
+| Training loss | 0.222 | 0.032 | **0.031** | **0.030** |
+| parse_rate | 0.406 | 0.0 | 0.344 | **0.469** |
+| hit_any | 0.0 | 0.0 | 0.0 | 0.0 |
+
+Takeaways:
+- 1024px training converges MUCH better (loss 0.03 vs 0.22 at 16×16)
+- 1024px significantly improves grid4 parse_rate (0→0.469)
+- 1024px at 16×16 trades parse_rate for richer output (multi-grid JSON)
+- hit_any remains 0.0 universally — cell label accuracy is the next frontier
+- Prompt/decoding sweep is the recommended next step per decision layer
 
 - config: 1024px, 7 modules, bf16, adam8bit, gc_fallback=force
 - gc: ascr_module_wrapper, **32 modules wrapped**
