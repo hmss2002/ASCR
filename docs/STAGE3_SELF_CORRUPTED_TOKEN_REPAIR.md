@@ -1009,6 +1009,32 @@ Decision rules:
   rather than image resolution/capacity. Test stricter decoding or constrained
   JSON generation before scaling data.
 
+Prompt/decoding sweep for format control:
+
+```bash
+sbatch jobs/stage4/stage4_probe_sweep.sbatch
+
+# If QOS rejects 8 array tasks, split it:
+sbatch --array=0-3 jobs/stage4/stage4_probe_sweep.sbatch
+sbatch --array=4-7 jobs/stage4/stage4_probe_sweep.sbatch
+
+MODE=summarize bash scripts/training/run_stage4_probe_sweep.sh
+cat outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/grid4/vq_tokens/probe_sweep_l40s_1024px_gc/probe_sweep_summary.md
+```
+
+Default sweep:
+
+| Axis | Values |
+|------|--------|
+| prompt_variant | `default`, `minimal_json`, `schema_first`, `schema_example` |
+| max_new_tokens | `128`, `384` |
+| answer_temperature | `0.0` |
+| answer_cfg_scale | `0.0` |
+
+This sweep is intentionally evaluation-only: it reuses the trained grid4 GC
+adapter and tests whether the remaining failure is prompt/decoding format
+control before launching more expensive data scaling or retraining.
+
 ## Phase 5: ASCR Loop Integration
 
 Add a Stage-3 loop only after a selector is useful:

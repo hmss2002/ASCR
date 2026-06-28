@@ -19,6 +19,7 @@ def build_parser():
     parser.add_argument("--project-root", default=".")
     parser.add_argument("--input-mode", choices=["vq_tokens", "decoded_image", "both"], default="vq_tokens")
     parser.add_argument("--target-schema", choices=["localization_cells", "semantic_evaluation"], default="localization_cells")
+    parser.add_argument("--prompt-variant", choices=["default", "minimal_json", "schema_first", "schema_example"], default="default")
     return parser
 
 
@@ -37,6 +38,7 @@ def main(argv=None):
         project_root=config.get("project_root", args.project_root),
         input_mode=config.get("input_mode", args.input_mode),
         target_schema=config.get("target_schema", args.target_schema),
+        prompt_variant=config.get("prompt_variant", args.prompt_variant),
     )
     print(json.dumps(manifest, indent=2, sort_keys=True))
     return 0

@@ -3353,3 +3353,49 @@ the next server pass from manually re-deriving the same branches:
 - grid4 parse failure dominated by wrong-format classes -> prioritize
   constrained JSON / decoding / prompt-template alignment;
 - grid4 parse + hit_any both pass -> scale grid8/grid16 and Hard256.
+
+## 2026-06-28 12:12 HKT - Windows Codex: Prompt/decoding sweep for format failures
+
+### Implemented locally
+- Added `prompt_variant` support to Stage-4 SFT prep and MMU localization probe:
+  `default`, `minimal_json`, `schema_first`, and `schema_example`.
+- Strengthened the Stage-4 loose-output normalizer so parser recovery can handle
+  observed server-style outputs such as:
+  - `{"has cells": [["A_4_4x4"]]}`
+  - nested cell lists;
+  - `cell_*` keys and loose label containers.
+- Added `ascr.cli.stage4_probe_sweep`.
+- Added `scripts/training/run_stage4_probe_sweep.sh`.
+- Added `jobs/stage4/stage4_probe_sweep.sbatch`, default 8-task array:
+  4 prompt variants x 2 answer lengths.
+- `run_stage4_postprocess.sh` now summarizes sweep output when present.
+
+### Server usage
+If grid4 1024px GC training fits but eval is still dominated by wrong-format
+classes, run:
+
+```bash
+sbatch jobs/stage4/stage4_probe_sweep.sbatch
+```
+
+If QOS rejects 8 tasks, submit a smaller subset:
+
+```bash
+sbatch --array=0-3 jobs/stage4/stage4_probe_sweep.sbatch
+sbatch --array=4-7 jobs/stage4/stage4_probe_sweep.sbatch
+```
+
+After completion:
+
+```bash
+MODE=summarize bash scripts/training/run_stage4_probe_sweep.sh
+cat outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/grid4/vq_tokens/probe_sweep_l40s_1024px_gc/probe_sweep_summary.md
+bash scripts/training/run_stage4_postprocess.sh
+cat outputs/stage4_self_corrupt/next_actions/stage4_next_actions.md
+```
+
+Decision rule:
+- If one prompt variant clears parse-rate but hit_any remains zero, the next
+  work is localization/cell mapping, not JSON formatting.
+- If no prompt variant clears parse-rate, try stricter decoding or train on the
+  same winning prompt variant before scaling Hard256.

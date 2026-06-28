@@ -33,6 +33,10 @@ maybe_analyze_grid4_gc() {
 
 maybe_analyze_grid4_gc
 
+if [[ -d outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/grid4/vq_tokens/probe_sweep_l40s_1024px_gc ]]; then
+  MODE=summarize bash scripts/training/run_stage4_probe_sweep.sh
+fi
+
 decision_args=(
   --registry "$REGISTRY_DIR/stage4_run_registry.json"
   --failure-summary "outputs/stage4_self_corrupt/**/failure_analysis/failure_summary.json"

@@ -226,9 +226,9 @@ def decide_stage4_next_actions(
                 actions.append(_action(
                     "format",
                     60,
-                    "Prioritize constrained JSON or stricter answer decoding before scaling data.",
-                    "python -m ascr.cli.stage4_analyze_probe_failures --probe-rows outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/grid4/vq_tokens/probe_lora_l40s_1024px_gc_eval/probe_rows.jsonl --summary outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/grid4/vq_tokens/probe_lora_l40s_1024px_gc_eval/summary.json --sft-examples outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/grid4/vq_tokens/sft/train_sft_examples.jsonl --train-jsonl outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/grid4/vq_tokens/lumina_sft/train.jsonl --output-dir outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/grid4/vq_tokens/probe_lora_l40s_1024px_gc_eval/failure_analysis",
-                    "Failure analysis is dominated by output-format classes, not missing training targets.",
+                    "Run the prompt/decoding sweep before scaling data.",
+                    "sbatch jobs/stage4/stage4_probe_sweep.sbatch\n# after completion:\nMODE=summarize bash scripts/training/run_stage4_probe_sweep.sh\ncat outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/grid4/vq_tokens/probe_sweep_l40s_1024px_gc/probe_sweep_summary.md",
+                    "Failure analysis is dominated by output-format classes; sweep prompt variants and answer length first.",
                 ))
             else:
                 actions.append(_action(

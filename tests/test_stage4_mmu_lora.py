@@ -12,6 +12,7 @@ from ascr.training.stage4_mmu_lora import (
     run_mmu_localization_probe,
     safe_parse_mmu_localization_payload,
 )
+from ascr.cli.stage4_probe_sweep import build_sweep_plan, summarize_sweep, write_summary as write_sweep_summary
 from ascr.cli.stage4_compare_input_modes import compare_probe_summaries, write_comparison
 from ascr.cli.stage4_analyze_probe_failures import analyze_probe_failures, write_outputs as write_failure_outputs
 from ascr.cli.stage4_build_run_registry import build_registry, write_outputs as write_registry_outputs
@@ -52,6 +53,13 @@ class Stage4MmuLoraTests(unittest.TestCase):
         self.assertIn('"corrupted_cells_2x2": string[]', prompt)
         self.assertIn("Do not put cell lists inside correction_instruction", prompt)
         self.assertIn("A1, A2, B1, B2", prompt)
+
+    def test_prompt_variants_change_format_instruction(self):
+        minimal = mmu_localization_prompt("a red cube", grid_size=2, prompt_variant="minimal_json")
+        example = mmu_localization_prompt("a red cube", grid_size=2, prompt_variant="schema_example")
+        self.assertIn("Return JSON only", minimal)
+        self.assertIn("Positive example", example)
+        self.assertIn('"corrupted_cells_2x2":["A1"]', example)
 
     def test_prepare_mmu_sft_dataset_writes_vq_backed_canonical_targets(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -222,6 +230,16 @@ class Stage4MmuLoraTests(unittest.TestCase):
         self.assertFalse(evaluation.should_abstain)
         self.assertEqual([cell.to_label() for cell in evaluation.regions[0].cells], ["A1", "A2"])
         self.assertEqual(normalised["regions"][0]["cells"], [{"label": "A1"}, {"label": "A2"}])
+
+    def test_parser_recovers_loose_server_cell_keys(self):
+        evaluation, normalised = safe_parse_mmu_localization_payload(
+            {"has cells": [["A_2_2x2"]]},
+            grid_size=2,
+            max_selected_cells=4,
+        )
+        self.assertFalse(evaluation.should_abstain)
+        self.assertEqual([cell.to_label() for cell in evaluation.regions[0].cells], ["A2"])
+        self.assertEqual(normalised["summary"], "Stage-4 localization cells from has cells.")
 
     def test_compare_input_modes_writes_outputs(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -419,11 +437,40 @@ class Stage4MmuLoraTests(unittest.TestCase):
         failures = [{"classification_counts": {"wrong_key_has_cells": 4}}]
         decision = decide_stage4_next_actions(registry, failure_summaries=failures)
         titles = [action["title"] for action in decision["actions"]]
-        self.assertTrue(any("constrained JSON" in title for title in titles))
+        self.assertTrue(any("prompt/decoding sweep" in title for title in titles))
         with tempfile.TemporaryDirectory() as temp_dir:
             outputs = write_next_actions(Path(temp_dir), decision)
             self.assertTrue(Path(outputs["next_actions_json"]).exists())
             self.assertTrue(Path(outputs["next_actions_md"]).exists())
+
+    def test_probe_sweep_plan_and_summary(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            plan = build_sweep_plan(
+                {"dataset": "dataset.jsonl", "grid_size": 4},
+                root,
+                prompt_variants=["default", "schema_example"],
+                max_new_tokens=[128, 384],
+                answer_steps=[64],
+                answer_temperatures=[0.0],
+                answer_cfg_scales=[0.0],
+                answer_block_lengths=[128],
+            )
+            self.assertEqual(plan["combo_count"], 4)
+            first_summary = Path(plan["combos"][0]["output_dir"]) / "summary.json"
+            first_summary.parent.mkdir(parents=True)
+            first_summary.write_text(json.dumps({
+                "row_count": 2,
+                "parse_rate": 0.5,
+                "malformed_count": 1,
+                "call_error_count": 0,
+                "metrics": {"hit_any_rate": 0.25, "mean_f1_at_k": 0.1, "mean_iou": 0.05},
+            }), encoding="utf-8")
+            summary = summarize_sweep(plan)
+            outputs = write_sweep_summary(root / "summary", summary)
+            self.assertEqual(summary["complete_count"], 1)
+            self.assertEqual(summary["best"][0]["label"], plan["combos"][0]["label"])
+            self.assertTrue(Path(outputs["sweep_summary_json"]).exists())
 
 
 if __name__ == "__main__":

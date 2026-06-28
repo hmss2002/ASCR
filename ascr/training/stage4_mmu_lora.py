@@ -30,6 +30,10 @@ INPUT_MODE_DECODED_IMAGE = "decoded_image"
 INPUT_MODE_BOTH = "both"
 TARGET_SCHEMA_SEMANTIC_EVALUATION = "semantic_evaluation"
 TARGET_SCHEMA_LOCALIZATION_CELLS = "localization_cells"
+PROMPT_VARIANT_DEFAULT = "default"
+PROMPT_VARIANT_MINIMAL_JSON = "minimal_json"
+PROMPT_VARIANT_SCHEMA_FIRST = "schema_first"
+PROMPT_VARIANT_SCHEMA_EXAMPLE = "schema_example"
 
 
 def normalise_input_mode(value, allow_both=False):
@@ -72,6 +76,34 @@ def normalise_target_schema(value):
     return schema
 
 
+def normalise_prompt_variant(value):
+    variant = str(value or PROMPT_VARIANT_DEFAULT).strip().lower().replace("-", "_")
+    aliases = {
+        "default": PROMPT_VARIANT_DEFAULT,
+        "full": PROMPT_VARIANT_DEFAULT,
+        "minimal": PROMPT_VARIANT_MINIMAL_JSON,
+        "minimal_json": PROMPT_VARIANT_MINIMAL_JSON,
+        "short": PROMPT_VARIANT_MINIMAL_JSON,
+        "schema": PROMPT_VARIANT_SCHEMA_FIRST,
+        "schema_first": PROMPT_VARIANT_SCHEMA_FIRST,
+        "schema_only": PROMPT_VARIANT_SCHEMA_FIRST,
+        "example": PROMPT_VARIANT_SCHEMA_EXAMPLE,
+        "schema_example": PROMPT_VARIANT_SCHEMA_EXAMPLE,
+        "fewshot": PROMPT_VARIANT_SCHEMA_EXAMPLE,
+        "few_shot": PROMPT_VARIANT_SCHEMA_EXAMPLE,
+    }
+    variant = aliases.get(variant, variant)
+    allowed = {
+        PROMPT_VARIANT_DEFAULT,
+        PROMPT_VARIANT_MINIMAL_JSON,
+        PROMPT_VARIANT_SCHEMA_FIRST,
+        PROMPT_VARIANT_SCHEMA_EXAMPLE,
+    }
+    if variant not in allowed:
+        raise ValueError(f"Unsupported Stage-4 prompt_variant: {value!r}")
+    return variant
+
+
 def created_at_utc():
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
@@ -93,14 +125,56 @@ def mmu_localization_prompt(
     grid_size=16,
     max_selected_cells=16,
     target_schema=TARGET_SCHEMA_LOCALIZATION_CELLS,
+    prompt_variant=PROMPT_VARIANT_DEFAULT,
 ):
     target_schema = normalise_target_schema(target_schema)
+    prompt_variant = normalise_prompt_variant(prompt_variant)
     cells = ", ".join(_cell_labels(grid_size))
     if target_schema == TARGET_SCHEMA_LOCALIZATION_CELLS:
         schema_keys = [
             f'"corrupted_cells_{size}x{size}": string[]'
             for size in _target_grid_sizes(grid_size)
         ]
+        schema_text = "{\"has_error\": boolean, " + ", ".join(schema_keys) + "}"
+        if prompt_variant == PROMPT_VARIANT_MINIMAL_JSON:
+            return (
+                "Return JSON only. No prose.\n"
+                f"Schema: {schema_text}\n"
+                f"Allowed cells: {cells}.\n"
+                f"Max {int(max_selected_cells)} cells in corrupted_cells_{int(grid_size)}x{int(grid_size)}.\n"
+                f"Prompt: {prompt}"
+            )
+        if prompt_variant == PROMPT_VARIANT_SCHEMA_FIRST:
+            return (
+                f"{schema_text}\n"
+                "Output exactly the schema above as one compact JSON object.\n"
+                "Use true/false booleans and arrays of exact grid labels only.\n"
+                "No markdown, no explanation, no alternate keys.\n"
+                f"Allowed {int(grid_size)}x{int(grid_size)} labels: {cells}.\n"
+                f"Original prompt: {prompt}"
+            )
+        if prompt_variant == PROMPT_VARIANT_SCHEMA_EXAMPLE:
+            first_label = _cell_labels(grid_size)[0]
+            example_key = f"corrupted_cells_{int(grid_size)}x{int(grid_size)}"
+            example = json.dumps(
+                {"has_error": True, example_key: [first_label]},
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            no_error = json.dumps(
+                {"has_error": False, example_key: []},
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            return (
+                "Return exactly one compact JSON object and nothing else.\n"
+                f"Schema: {schema_text}\n"
+                f"Positive example: {example}\n"
+                f"No-error example: {no_error}\n"
+                f"Allowed {int(grid_size)}x{int(grid_size)} labels: {cells}.\n"
+                f"Use at most {int(max_selected_cells)} selected cells.\n"
+                f"Original prompt: {prompt}"
+            )
         return (
             "You are the ASCR native Lumina-MMU corruption localizer.\n"
             "The input image is a generated image whose internal VQ image tokens may "
@@ -109,9 +183,7 @@ def mmu_localization_prompt(
             "Return exactly one compact JSON object. No markdown. No analysis.\n"
             "Use exact key names and put only grid-cell labels in the arrays.\n"
             "Do not put cell lists inside correction_instruction.\n"
-            "Schema: {\"has_error\": boolean, "
-            + ", ".join(schema_keys)
-            + "}\n"
+            f"Schema: {schema_text}\n"
             f"Allowed {int(grid_size)}x{int(grid_size)} grid cells: {cells}.\n"
             f"Use at most {int(max_selected_cells)} selected cells for the {int(grid_size)}x{int(grid_size)} grid.\n"
             "If no corrupted region is visible, output has_error=false and all corrupted_cells arrays as [].\n"
@@ -218,9 +290,11 @@ def sft_example_from_row(
     split=None,
     input_mode=INPUT_MODE_VQ_TOKENS,
     target_schema=TARGET_SCHEMA_LOCALIZATION_CELLS,
+    prompt_variant=PROMPT_VARIANT_DEFAULT,
 ):
     input_mode = normalise_input_mode(input_mode)
     target_schema = normalise_target_schema(target_schema)
+    prompt_variant = normalise_prompt_variant(prompt_variant)
     image_path, image_exists = _normalised_path(row.get("corrupted_image"), project_root=project_root)
     vq_ids_path, vq_ids_exists = _normalised_path(row.get("corrupted_vq_ids_path"), project_root=project_root)
     target = repair_target_payload(
@@ -238,6 +312,7 @@ def sft_example_from_row(
         "split": split,
         "input_mode": input_mode,
         "target_schema": target_schema,
+        "prompt_variant": prompt_variant,
         "prompt": row.get("prompt", ""),
         "image_path": image_path,
         "image_exists": bool(image_exists),
@@ -248,6 +323,7 @@ def sft_example_from_row(
             grid_size=grid_size,
             max_selected_cells=max_selected_cells,
             target_schema=target_schema,
+            prompt_variant=prompt_variant,
         ),
         "target_json": target,
         "target_text": json.dumps(target, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
@@ -273,9 +349,11 @@ def prepare_mmu_sft_dataset(
     project_root=None,
     input_mode=INPUT_MODE_VQ_TOKENS,
     target_schema=TARGET_SCHEMA_LOCALIZATION_CELLS,
+    prompt_variant=PROMPT_VARIANT_DEFAULT,
 ):
     input_mode = normalise_input_mode(input_mode, allow_both=True)
     target_schema = normalise_target_schema(target_schema)
+    prompt_variant = normalise_prompt_variant(prompt_variant)
     input_modes = [INPUT_MODE_VQ_TOKENS, INPUT_MODE_DECODED_IMAGE] if input_mode == INPUT_MODE_BOTH else [input_mode]
     rows = read_jsonl(dataset)
     if limit is not None:
@@ -305,6 +383,7 @@ def prepare_mmu_sft_dataset(
                     split=split,
                     input_mode=mode,
                     target_schema=target_schema,
+                    prompt_variant=prompt_variant,
                 )
             )
     train_ids = {str(rows[index].get("sample_id")) for index in train_indices}
@@ -338,6 +417,7 @@ def prepare_mmu_sft_dataset(
         "input_mode": input_mode,
         "input_modes": input_modes,
         "target_schema": target_schema,
+        "prompt_variant": prompt_variant,
         "train_indices": train_indices,
         "eval_indices": eval_indices,
         "train_sample_ids": [rows[index].get("sample_id") for index in train_indices],
@@ -369,6 +449,7 @@ def prepare_mmu_sft_dataset(
         "input_modes": input_modes,
         "input_mode_counts": mode_counts,
         "target_schema": target_schema,
+        "prompt_variant": prompt_variant,
         "grid_size": int(grid_size),
         "max_selected_cells": int(max_selected_cells),
         "source_row_count": len(rows),
@@ -436,6 +517,47 @@ def _cell_label_from_index(index, grid_size):
     raise ValueError(f"Cell index {index} is outside {grid_size}x{grid_size}")
 
 
+def _flatten_cell_candidates(raw_cells):
+    if raw_cells is None:
+        return []
+    if isinstance(raw_cells, dict):
+        values = []
+        for key in ("label", "cell", "cells", "grid_cells", "selected_cells", "value"):
+            if key in raw_cells:
+                values.extend(_flatten_cell_candidates(raw_cells.get(key)))
+        if values:
+            return values
+        return list(raw_cells.values())
+    if isinstance(raw_cells, (list, tuple, set)):
+        values = []
+        for value in raw_cells:
+            if isinstance(value, (list, tuple, set, dict)) and not (
+                isinstance(value, (list, tuple)) and len(value) == 2 and all(isinstance(part, int) for part in value)
+            ):
+                values.extend(_flatten_cell_candidates(value))
+            else:
+                values.append(value)
+        return values
+    return [raw_cells]
+
+
+def _coerce_server_cell_token(value, grid_size):
+    text = str(value or "").strip().upper()
+    match = re.fullmatch(r"([A-Z])_(\d+)(?:_\d+X\d+)?", text)
+    if match:
+        return GridCell.from_any(f"{match.group(1)}{match.group(2)}", grid_size).to_label()
+    match = re.fullmatch(r"CELL[_-]?(\d)(\d)", text)
+    if match:
+        row = int(match.group(1)) - 1
+        col = int(match.group(2)) - 1
+        if 0 <= row < int(grid_size) and 0 <= col < int(grid_size):
+            return GridCell(row, col).to_label()
+    match = re.fullmatch(r"CELL[_-]?(\d+)", text)
+    if match:
+        return _cell_label_from_index(int(match.group(1)), grid_size)
+    raise ValueError(f"Cannot coerce server cell token: {value!r}")
+
+
 def _coerce_cell_labels(raw_cells, grid_size, max_selected_cells=None):
     if raw_cells is None:
         return []
@@ -455,9 +577,11 @@ def _coerce_cell_labels(raw_cells, grid_size, max_selected_cells=None):
             else:
                 raw_cells = re.findall(r"-?\d+", text)
     elif isinstance(raw_cells, dict):
-        raw_cells = [raw_cells]
+        raw_cells = _flatten_cell_candidates(raw_cells)
     elif not isinstance(raw_cells, (list, tuple, set)):
         raw_cells = [raw_cells]
+    else:
+        raw_cells = _flatten_cell_candidates(raw_cells)
 
     labels = []
     for value in raw_cells:
@@ -465,7 +589,10 @@ def _coerce_cell_labels(raw_cells, grid_size, max_selected_cells=None):
             if isinstance(value, int) or (isinstance(value, str) and re.fullmatch(r"-?\d+", value.strip())):
                 label = _cell_label_from_index(int(value), grid_size)
             else:
-                label = GridCell.from_any(value, grid_size).to_label()
+                try:
+                    label = GridCell.from_any(value, grid_size).to_label()
+                except Exception:
+                    label = _coerce_server_cell_token(value, grid_size)
         except Exception:
             continue
         if label not in labels:
@@ -490,11 +617,25 @@ def localization_payload_to_semantic_payload(payload, grid_size=16, max_selected
         "cells",
         "selected_cells",
         "grid_cells",
+        "has_cells",
+        "has cells",
+        "cell_labels",
+        "labels",
     ):
         if candidate in payload:
             raw_cells = payload.get(candidate)
             source_key = candidate
             break
+    if raw_cells is None:
+        loose_values = []
+        for key_name, value in payload.items():
+            normalised_key = str(key_name).strip().lower().replace(" ", "_")
+            if normalised_key.startswith("corrupted_cells_") or normalised_key.startswith("cell"):
+                loose_values.extend(_flatten_cell_candidates(value))
+                loose_values.append(key_name)
+        if loose_values:
+            raw_cells = loose_values
+            source_key = "loose_payload_keys"
     if raw_cells is None and payload.get("correction_instruction"):
         recovered = _coerce_cell_labels(
             payload.get("correction_instruction"),
@@ -554,6 +695,7 @@ def run_mmu_localization_probe(
     input_mode=None,
     use_vq_tokens=None,
     target_schema=TARGET_SCHEMA_LOCALIZATION_CELLS,
+    prompt_variant=PROMPT_VARIANT_DEFAULT,
     lora_path=None,
     engine=None,
     repo_path="third_party/Lumina-DiMOO",
@@ -567,6 +709,7 @@ def run_mmu_localization_probe(
     answer_cfg_scale=0.0,
 ):
     target_schema = normalise_target_schema(target_schema)
+    prompt_variant = normalise_prompt_variant(prompt_variant)
     if input_mode is None:
         input_mode = INPUT_MODE_VQ_TOKENS if use_vq_tokens is not False else INPUT_MODE_DECODED_IMAGE
     input_mode = normalise_input_mode(input_mode)
@@ -607,6 +750,7 @@ def run_mmu_localization_probe(
             grid_size=grid_size,
             max_selected_cells=max_selected_cells,
             target_schema=target_schema,
+            prompt_variant=prompt_variant,
         )
         probe_row = {
             "schema_version": PROBE_ROW_SCHEMA,
@@ -617,6 +761,7 @@ def run_mmu_localization_probe(
             "grid_size": int(grid_size),
             "input_mode": input_mode,
             "target_schema": target_schema,
+            "prompt_variant": prompt_variant,
             "target_cells": target_cells(row, grid_size),
             "use_vq_tokens": bool(use_vq_tokens),
             "lora_path": str(lora_path) if lora_path else None,
@@ -706,7 +851,13 @@ def run_mmu_localization_probe(
         "top_k": int(top_k),
         "input_mode": input_mode,
         "target_schema": target_schema,
+        "prompt_variant": prompt_variant,
         "use_vq_tokens": bool(use_vq_tokens),
+        "max_new_tokens": int(max_new_tokens),
+        "answer_steps": int(answer_steps),
+        "answer_block_length": int(answer_block_length),
+        "answer_temperature": float(answer_temperature),
+        "answer_cfg_scale": float(answer_cfg_scale),
         "split_manifest": str(split_manifest) if split_manifest else None,
         "split": split if split_manifest else None,
         "lora_path": str(lora_path) if lora_path else None,
