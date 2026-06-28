@@ -3399,3 +3399,54 @@ Decision rule:
   work is localization/cell mapping, not JSON formatting.
 - If no prompt variant clears parse-rate, try stricter decoding or train on the
   same winning prompt variant before scaling Hard256.
+
+## 2026-06-28 12:30 HKT — Server AI: GC fallback breakthrough — 1024px training works
+
+### Branch
+- Branch: feat/stage4-gc-fallback-server
+- Base: ef53cc1 (main)
+
+### Breakthrough: ASCR gradient checkpointing fallback works
+
+Codex implemented a custom gc fallback that wraps LLaDA decoder blocks with
+`torch.utils.checkpoint.checkpoint()` at runtime, bypassing the LLaDA model's
+missing gc support. Three prior configs (bf16, adam8bit, attn4+adam8bit) all
+OOMed at 1024px. The gc fallback is the first to succeed.
+
+**Smoke test (job 71507)**: 1024px, full 7 modules, bf16, adam8bit, gc_fallback=force
+- Result: **COMPLETED in 29 seconds, no OOM**
+- Wrapped 33 decoder/block modules
+- Loss: 6.66 → 6.59 (1 epoch, 4 samples)
+- gc report: `backend: ascr_module_wrapper, wrapped_module_count: 33`
+
+### Running now
+
+| Job | What | Status |
+|-----|------|--------|
+| 71509 | Full 1024px 16×16 LoRA, 15 epochs, gc+adam8bit | RUNNING (~36 min) |
+| 71511 | Grid4 1024px LoRA, 15 epochs, gc+adam8bit + eval | RUNNING (~34 min) |
+
+### Side work completed
+- bitsandbytes installed in .venv-lumina
+- `stage4_build_run_registry` run, registry built
+- `stage4_analyze_probe_failures` run on 4×4 512px results — confirmed all 32
+  rows fail with `invalid_json_object`, training data has correct format
+  (12 unique answer_text values, 0 parse errors)
+- Grid4 SFT data copied to curriculum path for 71511
+- Post-processing pipeline ready: `bash scripts/training/run_stage4_postprocess.sh`
+
+### Updated OOM status
+
+| Config | Result |
+|--------|--------|
+| 1024px + 7 modules + bf16 | ❌ OOM |
+| 1024px + 7 modules + bf16 + adam8bit | ❌ OOM |
+| 1024px + 4 modules + bf16 + adam8bit | ❌ OOM |
+| **1024px + 7 modules + bf16 + adam8bit + gc fallback** | **✅ WORKS** |
+
+### Next after jobs complete
+1. Read full 1024px training manifest (final loss, convergence)
+2. Run grid4 eval probe (if 71511 finishes)
+3. Run `bash scripts/training/run_stage4_postprocess.sh`
+4. If grid4 1024px eval still malformed → run probe sweep
+5. If parse passes → submit 8×8 and 16×16 curriculum
