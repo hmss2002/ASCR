@@ -4443,3 +4443,58 @@ MODE=recover JOB_ID=<failed_job_id> GPU_FALLBACKS="8 4 1" \
 MODE=submit_eval_recovery CHUNKS_PER_GPU=2 \
   bash scripts/training/run_hard256_full_pipeline.sh
 ```
+
+---
+
+## 2026-06-29 — Server AI: Codex code review + remaining issues
+
+### What Codex already fixed (impressive velocity)
+
+- ✅ DDP PEFT rank consistency (`_assert_rank_consistent_lora`)
+- ✅ DDP sbatch override propagation (DATA_JSONL, OUTPUT_DIR, EPOCHS, etc.)
+- ✅ Checkpoint/resume (`--checkpoint-every-epochs`, `--resume-from-adapter`)
+- ✅ Hard256 configs + end-to-end pipeline
+- ✅ Recovery submit with GPU fallback (8→4→1)
+- ✅ Stage5 share_engine regression test
+
+### 🔴 Remaining issues (only 2)
+
+#### Issue 1: stdout buffering — training appears silent
+
+Training code has epoch-level logging (`print(f"epoch {epoch}: avg_loss=...")`)
+but stdout is fully buffered when piped to Slurm log files. The output doesn't
+appear until the program exits. This makes 2-5h training runs completely opaque.
+
+**Fix** (2 lines):
+```python
+# In train_lumina_lora_smoke.py, after each epoch print:
+print(f"epoch {epoch}: avg_loss={total / max(1, len(rows)):.6f}", flush=True)
+
+# Or in sbatch scripts:
+export PYTHONUNBUFFERED=1
+```
+
+#### Issue 2: `--checkpoint-every-epochs` defaults to 0
+
+Default is 0 = never save checkpoints. Should default to 1 (save every epoch)
+or at least a reasonable value. If a 3h training gets cancelled at epoch 14/15,
+all progress is lost.
+
+**Fix**: change default from 0 to 1 in the CLI argparse.
+
+### 🟡 Needs server validation
+
+The DDP PEFT fix looks correct on paper but hasn't been tested on the cluster.
+Submit a quick 1-epoch 8-GPU smoke as soon as QOS allows:
+```bash
+CONFIG=.../mmu_lora_train_hard256_grid4_vq_tokens_l40s_1024_gc_adam8bit.yaml \
+DATA_JSONL=.../grid4/vq_tokens/lumina_sft/train.jsonl \
+OUTPUT_DIR=.../grid4/vq_tokens/lora_ddp_test \
+EPOCHS=1 LIMIT=8 CHECKPOINT_EVERY_EPOCHS=1 \
+sbatch --gres=gpu:8 jobs/stage4/train_mmu_lora_ddp.sbatch
+```
+
+### 📊 Hard256 1-GPU training still running
+
+71619/71621/71623: Grid4/8/16 at ~3h. 336 samples × 15 epochs.
+Should complete within ~1-2h. Eval chains (71620/71622/71624) will auto-fire.
