@@ -3999,3 +3999,142 @@ bash scripts/training/run_stage3_to_stage5_e2e.sh
   `stage3_selector`; direct and Stage4-MMU-LoRA arms are executable through the
   transfer probe.
 - See `docs/SERVER_AI_TASK_STAGE5_6_INFRA_SCRIPTS.md` for commands and coverage.
+
+---
+
+## 🔴 2026-06-29 04:00 HKT — Server AI: CRITICAL — Multi-GPU utilization is the #1 bottleneck
+
+### The problem in one sentence
+
+**集群有 100+ L40S GPU，但我们每个 job 只能实际使用 1 张卡。**
+即使申请 `--gres=gpu:8`，其他 7 张卡要么空闲要么报错。
+
+### Root causes found through testing
+
+| 任务 | 当前状态 | 失败原因 |
+|------|---------|---------|
+| LoRA 训练 | torchrun + DDP coordinator | rank 0 单独训练，rank 1-7 barrier 等待 |
+| LoRA 训练 | device_map="auto" 8 GPU | 模型被拆到多卡，但训练循环把 input/labels 只放 cuda:0。loss 计算时 tensor 跨设备 → `RuntimeError: Expected all tensors to be on the same device, but found cuda:7 and cuda:0` |
+| LoRA 训练 | 1 GPU + gc fallback | ✅ 能跑，但 1.5h/网格，三网格串行=4.5h |
+| Locality probe | CUDA_VISIBLE_DEVICES + & | ✅ 能跑多卡并行（已验证 Hard256 4 卡同时跑 4 片） |
+| Stage5 loop | 1 GPU 全管线 | ❌ OOM（生成+MMU+LoRA > 45GB） |
+| Eval probe | 1 GPU | ✅ 能跑，但 32 样本串行 ~30min |
+
+### What needs to change — prioritized
+
+#### P0: Real DDP data parallelism for LoRA training
+
+**This single change would reduce training time 6-8× and is the highest-impact
+optimization in the entire project.**
+
+Current state:
+```python
+# stage4_mmu_lora_ddp.py — rank 0 runs, others idle
+if rank == 0:
+    train_main()      # single-GPU training
+else:
+    barrier()          # 7 GPUs wasted
+```
+
+Target state:
+```python
+# Each rank has its own model replica + LoRA
+# DistributedSampler splits data across ranks
+# Gradient all-reduce syncs weights
+model = DDP(get_peft_model(base_model, lora_config))
+sampler = DistributedSampler(dataset)
+for epoch in epochs:
+    for batch in dataloader:
+        loss = model(batch)
+        loss.backward()  # DDP auto-syncs gradients
+```
+
+Key changes needed in `ascr/training/stage4_mmu_lora_ddp.py`:
+1. Wrap model with `torch.nn.parallel.DistributedDataParallel`
+2. Add `DistributedSampler` to the dataloader
+3. Handle device placement of input tensors per rank
+4. Only rank 0 saves checkpoints (avoid race)
+
+Config changes:
+- `world_size` = number of GPUs (set by torchrun)
+- No `device_map="auto"` — each GPU gets full model replica
+- Batch size per GPU stays the same → effective batch size ×8
+
+Expected result: 15 epochs in **~12 min** instead of ~90 min.
+
+#### P1: Device-aware training loop (fix device_map path)
+
+If DDP is too complex, at minimum fix the `device_map="auto"` path so 8-GPU
+model parallelism works:
+
+```python
+# train_lumina_lora_smoke.py line ~288
+# Current:
+loss = model(input_ids=[input_ids], labels=[labels])
+# Fix: get model's first device and move inputs there
+device = next(model.parameters()).device
+input_ids = [ids.to(device) for ids in input_ids]
+labels = [lbl.to(device) for lbl in labels]
+loss = model(input_ids=input_ids, labels=labels)
+```
+
+Or use `accelerate` library which handles this automatically.
+
+#### P2: Fix Stage5 loop OOM
+
+Stage5 loads generator + MMU + LoRA in one process → OOM at 45GB.
+Options:
+1. Share the Lumina engine between generation and MMU (they're the same model)
+2. Offload the generator after use, load LoRA for MMU
+3. Reduce generation resolution (512px) for the clean image
+4. Use `accelerate` to shard the model across available GPUs within the job
+
+#### P3: Multi-GPU eval probe
+
+Current eval does 32 `answer_vq_tokens()` calls sequentially. Split across N
+GPUs using the same pattern as the multi-GPU locality probe — each GPU handles
+a subset of samples.
+
+#### P4: Multi-prompt Stage5 loop
+
+One 8-GPU job runs 8 independent Stage5 loops, each on a different GPU with a
+different prompt. The multi-GPU probe wrapper pattern already works for this;
+just need to fix the OOM first.
+
+### Concrete server validation after each fix
+
+```bash
+# After DDP fix: 8-GPU training smoke
+torchrun --nproc_per_node=8 -m ascr.cli.stage4_train_mmu_lora_ddp \
+  --config ...1024px_gc_adam8bit.yaml --epochs 1 --limit 8
+
+# After device_map fix: 8-GPU training with model parallelism
+sbatch --gres=gpu:8 --wrap="python -m ascr.cli.stage4_train_mmu_lora ..."
+
+# After Stage5 OOM fix:
+sbatch --gres=gpu:1 --wrap="python -m ascr.cli.stage5_self_corrupt_loop ..."
+
+# After multi-GPU eval:
+sbatch --gres=gpu:8 --wrap="run_multi_gpu_eval.sh"
+```
+
+### Additional quality-of-life scripts
+
+These are lower priority but would save server AI significant time:
+
+1. **`ascr/cli/stage4_batch_train.py`** — one CLI call trains grid4+8+16
+   sequentially on a single GPU allocation, with auto-eval after each.
+2. **`scripts/slurm/dynamic_gpu_detect.sh`** — detects actual free GPU count
+   on assigned node and auto-configures `CUDA_VISIBLE_DEVICES`.
+3. **`ascr/cli/stage4_resume_training.py`** — resume from checkpoint if
+   training was interrupted (currently no checkpointing, lost progress on cancel).
+
+### What the server AI can still do while waiting
+
+- Single-GPU training + eval (working, just slow)
+- Multi-GPU locality probes (working with CUDA_VISIBLE_DEVICES wrapper)
+- All model-light tools (SFT prep, registry, comparison, analysis)
+- Manual QOS management (cancel evals, resubmit after training)
+- The `gpu_shared` partition gives access to SPGL-1-2 through SPGL-1-11
+  in addition to the `gpu` partition SPGL-1-12 through SPGL-1-19 —
+  roughly 100+ L40S GPUs total. We just can't use them efficiently yet.
