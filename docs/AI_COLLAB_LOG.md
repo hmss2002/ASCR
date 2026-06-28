@@ -4182,9 +4182,26 @@ These are lower priority but would save server AI significant time:
 ### Server validation requested
 ```bash
 torchrun --nproc_per_node=8 -m ascr.cli.stage4_train_mmu_lora_ddp \
-  --config configs/stage4/self_corrupt/mmu_lora_train_hard64_grid4_vq_tokens_l40s_1024px_gc_adam8bit.yaml \
-  --epochs 1 --limit 8
-
+  --config ... --epochs 1 --limit 8
 sbatch jobs/stage4/stage4_multi_gpu_eval.sbatch
 sbatch jobs/stage5/multi_prompt_loop.sbatch
 ```
+
+### 🔴 Server DDP test result (2026-06-29)
+
+3×8-GPU DDP trainings (71608/71610/71612) all failed at ~10 min with:
+```
+RuntimeError: DDP expects same model across all ranks, but Rank 7 has 256 params,
+while rank 0 has inconsistent 0 params.
+```
+
+Root cause: `get_peft_model()` produces different parameter counts across ranks.
+Rank 0 gets 0 LoRA params, other ranks get 256. This is a PEFT + DDP
+initialization ordering issue — the LoRA adapter injection must happen
+identically on all ranks before DDP wrapping.
+
+Suggested fix: ensure all ranks call `get_peft_model()` before `DistributedDataParallel()`,
+and/or add `find_unused_parameters=True` to the DDP constructor.
+
+Fallback: 1-GPU training with Hard256 data submitted (71619-71624). DDP
+training is blocked until PEFT rank-consistency is resolved.
