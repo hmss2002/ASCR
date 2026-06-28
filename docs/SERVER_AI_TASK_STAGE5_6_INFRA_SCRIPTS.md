@@ -118,6 +118,9 @@ MODE=summarize OUTPUT_ROOT=outputs/stage4_self_corrupt/multi_gpu_eval/grid4_1024
   bash scripts/training/run_stage4_multi_gpu_eval.sh
 ```
 
+`GPU_IDS` can override auto-detection, for example `GPU_IDS=2,4,6,7`, when
+Slurm exposes a non-contiguous or UUID-based allocation.
+
 Stage-4 grid batch train/probe in one allocation:
 
 ```bash
@@ -131,6 +134,9 @@ sbatch jobs/stage5/multi_prompt_loop.sbatch
 MODE=summarize OUTPUT_ROOT=outputs/stage5_self_corrupt/multi_prompt \
   bash scripts/training/run_stage5_multi_prompt.sh
 ```
+
+The Stage-5 multi-prompt wrapper also honors `GPU_IDS`, `GPU_COUNT`,
+`PROMPT_OFFSET`, and `PROMPTS_PER_GPU`.
 
 ## Current Boundaries
 

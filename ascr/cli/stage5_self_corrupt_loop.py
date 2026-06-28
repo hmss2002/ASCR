@@ -91,12 +91,15 @@ def _maybe_attach_lora(engine, lora_path):
         return engine
     if getattr(engine, "lora_path", None) == str(lora_path):
         return engine
-    # If the heavy base model is already loaded, mutating LoRA in-place is risky.
-    # Keep this path explicit so the server can choose memory vs isolation.
     if getattr(engine, "_model", None) is None:
         engine.lora_path = str(lora_path)
         return engine
-    return None
+    from peft import PeftModel
+
+    engine._model = PeftModel.from_pretrained(engine._model, str(lora_path))
+    engine._model.eval()
+    engine.lora_path = str(lora_path)
+    return engine
 
 
 def run_stage5_loop(
@@ -121,11 +124,8 @@ def run_stage5_loop(
     token_grid_size = int(config.get("token_grid_size", (config.get("generator") or {}).get("token_grid_size", 64)))
 
     share_engine = bool(config.get("share_engine", True))
-    gen_engine = _engine(config, lora_path=lora_path if share_engine else None, mock=mock)
+    gen_engine = _engine(config, lora_path=None, mock=mock)
     mmu_engine = gen_engine if share_engine else _engine(config, lora_path=lora_path, mock=mock)
-    if not share_engine:
-        attached = _maybe_attach_lora(mmu_engine, lora_path)
-        mmu_engine = attached or mmu_engine
     clean_vq_ids = gen_engine.generate(prompt, seed=seed)
     clean_path = output_dir / "clean.ppm"
     gen_engine.decode_to(clean_vq_ids, clean_path)
@@ -144,6 +144,7 @@ def run_stage5_loop(
         max_selected_cells=max_selected_cells,
         target_schema="localization_cells",
     )
+    mmu_engine = _maybe_attach_lora(mmu_engine, lora_path)
     raw_text, answer_method = call_native_answer(
         mmu_engine,
         question,
