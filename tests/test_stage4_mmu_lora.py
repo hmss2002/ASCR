@@ -4,6 +4,7 @@ import pickle
 import tempfile
 import unittest
 
+from ascr.analysis.stage4_run_decision import decide_stage4_next_actions, write_next_actions
 from ascr.training.prepare_lumina_sft_data import convert_sft_examples
 from ascr.training.stage4_mmu_lora import (
     mmu_localization_prompt,
@@ -386,6 +387,43 @@ class Stage4MmuLoraTests(unittest.TestCase):
             self.assertIn("adapter_artifact_id", probe)
             self.assertTrue(Path(outputs["registry_json"]).exists())
             self.assertTrue(Path(outputs["registry_md"]).exists())
+
+    def test_decide_next_recommends_gc_smoke_when_registry_is_empty(self):
+        decision = decide_stage4_next_actions({"rows": []})
+        commands = "\n".join(action.get("command") or "" for action in decision["actions"])
+        self.assertIn("train_mmu_lora_gc_probe.sbatch", commands)
+
+    def test_decide_next_prioritizes_format_control_after_bad_grid4_gc_probe(self):
+        registry = {
+            "rows": [
+                {
+                    "kind": "lora_adapter",
+                    "artifact_id": "grid4/vq_tokens/lora_l40s_1024px_gc_adam8bit",
+                    "path": "outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/grid4/vq_tokens/lora_l40s_1024px_gc_adam8bit",
+                    "image_size": 1024,
+                    "epochs": 1,
+                    "gradient_checkpointing": True,
+                    "gradient_checkpointing_backend": "ascr_module_wrapper",
+                    "wrapped_module_count": 32,
+                },
+                {
+                    "kind": "probe_summary",
+                    "artifact_id": "grid4/vq_tokens/probe_lora_l40s_1024px_gc_eval",
+                    "path": "outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/grid4/vq_tokens/probe_lora_l40s_1024px_gc_eval",
+                    "grid_size": 4,
+                    "parse_rate": 0.0,
+                    "hit_any_rate": 0.0,
+                },
+            ]
+        }
+        failures = [{"classification_counts": {"wrong_key_has_cells": 4}}]
+        decision = decide_stage4_next_actions(registry, failure_summaries=failures)
+        titles = [action["title"] for action in decision["actions"]]
+        self.assertTrue(any("constrained JSON" in title for title in titles))
+        with tempfile.TemporaryDirectory() as temp_dir:
+            outputs = write_next_actions(Path(temp_dir), decision)
+            self.assertTrue(Path(outputs["next_actions_json"]).exists())
+            self.assertTrue(Path(outputs["next_actions_md"]).exists())
 
 
 if __name__ == "__main__":

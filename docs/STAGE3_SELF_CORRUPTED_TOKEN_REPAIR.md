@@ -984,6 +984,19 @@ python -m ascr.cli.stage4_build_run_registry \
   --output-dir outputs/stage4_self_corrupt/registry
 ```
 
+One-command postprocess:
+
+```bash
+bash scripts/training/run_stage4_postprocess.sh
+cat outputs/stage4_self_corrupt/next_actions/stage4_next_actions.md
+```
+
+The postprocess wrapper rebuilds the registry, analyzes the standard grid4 GC
+probe when available, scans Stage-4 Slurm logs, and emits a concrete
+`stage4_next_actions.md` decision file. This file is intentionally operational:
+it includes shell commands for the next server-side action and the evidence
+behind each branch.
+
 Decision rules:
 
 - If GC smoke fits and `gradient_checkpointing_report.backend` is

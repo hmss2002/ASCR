@@ -3308,3 +3308,48 @@ Interpretation rule:
 - If 4x4 1024px GC trains but eval format remains wrong, the issue is no longer
   just 512px crop or two-module LoRA capacity; prioritize decoding/template
   alignment or constrained JSON generation.
+
+## 2026-06-28 12:02 HKT - Windows Codex: Stage-4 postprocess decision layer
+
+### Remote sync
+- Pulled/fetched latest GitHub state after commit `e59bd81`.
+- No new remote commits or branches were present; `origin/main` remained at
+  `e59bd81`.
+
+### Implemented locally
+- Added pure decision logic in `ascr.analysis.stage4_run_decision`.
+- Added `ascr.cli.stage4_decide_next`, which reads:
+  - `outputs/stage4_self_corrupt/registry/stage4_run_registry.json`;
+  - any `failure_summary.json` files;
+  - optional Slurm logs.
+- Added `scripts/training/run_stage4_postprocess.sh` so server AI can run one
+  command after any Stage-4 batch:
+
+```bash
+bash scripts/training/run_stage4_postprocess.sh
+```
+
+This command:
+1. rebuilds the Stage-4 registry;
+2. analyzes the standard grid4 GC probe if rows exist;
+3. scans Stage-4 Slurm logs for OOM/QOS/path/GC-support failures;
+4. writes:
+   - `outputs/stage4_self_corrupt/registry/stage4_run_registry.md`;
+   - `outputs/stage4_self_corrupt/next_actions/stage4_next_actions.md`.
+
+### Server usage
+After the GC probe job finishes:
+
+```bash
+bash scripts/training/run_stage4_postprocess.sh
+cat outputs/stage4_self_corrupt/next_actions/stage4_next_actions.md
+```
+
+The decision layer does not replace scientific judgment, but it should prevent
+the next server pass from manually re-deriving the same branches:
+- no GC manifest -> submit `jobs/stage4/train_mmu_lora_gc_probe.sbatch`;
+- active GC but OOM -> reduce sequence length or move toward true multi-GPU
+  model/pipeline parallelism;
+- grid4 parse failure dominated by wrong-format classes -> prioritize
+  constrained JSON / decoding / prompt-template alignment;
+- grid4 parse + hit_any both pass -> scale grid8/grid16 and Hard256.
