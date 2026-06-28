@@ -3531,29 +3531,31 @@ sbatch jobs/stage4/stage4_probe_sweep.sbatch
    valid JSON with the right schema — minor key-name artifacts and
    wrong cell values. Prompt/decoding sweep is the recommended next step.
 
-### 🔄 Probe sweep running (71524 + 71525)
+### 🔄 Grid8 + Grid4 schema_example running
 
-Sweep submitted as two 4-task arrays to avoid QOS limit:
-- 71524 (tasks 0-3): 4 prompt variants × answer_length=384
-- 71525 (tasks 4-7): 4 prompt variants × answer_length=512
-- Currently 5/8 running across SPGL-1-12, SPGL-1-13, SPGL-1-18; 3 pending
+- 71532 (grid8 1024px gc schema_example training): **COMPLETED** — loss **0.063**
+- 71537 (grid8 eval): running on SPGL-1-15
+- 71538 (grid4 schema_example retraining): running on SPGL-1-15
 
-After completion:
-```bash
-MODE=summarize bash scripts/training/run_stage4_probe_sweep.sh
-```
+### ✅ Codex delivered: schema_example unification + campaign layer
 
-### ⏳ Grid8 1024px gc training — SFT ready, blocked by QOS
+- `schema_example` is now the Stage-4 default prompt variant
+- Grid8/grid16 1024px gc configs created (no more manual config adaptation)
+- `stage4_server_campaign.py` — automated campaign runner
+- `run_stage4_server_campaign.sh` — plan, submit, summarize modes
+- Legacy variants (default/minimal_json/schema_first) retained for reproducibility only
+- Sweep narrowed to answer-length diagnostic only
 
-Grid8 SFT data prepared on login node (96 train / 32 eval, all paths valid).
-Training will be submitted once sweep jobs complete and QOS frees up.
+### Server merged clean
 
-### Next actions (in priority order)
+Fast-forwarded `feat/stage4-gc-fallback-server` from `32a7dcd` to `6f04b23`
+(Codex's 6 commits). No conflicts.
 
-1. Wait for probe sweep (71524/71525) to complete → summarize → read results
-2. If sweep finds a winning prompt variant → submit grid8 1024px gc training
-3. If parse_rate stays low despite sweep → Codex needs to investigate training vs eval prompt mismatch
-4. If parse_rate > 0.7 on any variant → proceed to Hard256 data expansion
+### Next actions
+
+1. Wait for 71537 (grid8 eval) and 71538 (grid4 schema_example retrain)
+2. Submit grid16 schema_example training
+3. Run campaign summarize after all grids complete
 
 ## 2026-06-28 13:05 HKT — Windows Codex: schema_example policy + server campaign layer
 
