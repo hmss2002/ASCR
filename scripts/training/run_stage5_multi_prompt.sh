@@ -19,7 +19,9 @@ fi
 CONFIG=${CONFIG:-configs/stage5/self_corrupt/ascr_loop_smoke.yaml}
 PROMPT_FILE=${PROMPT_FILE:-configs/benchmarks/prompts/t2i_compbench_hard64.txt}
 OUTPUT_ROOT=${OUTPUT_ROOT:-outputs/stage5_self_corrupt/multi_prompt}
-GPU_COUNT=${GPU_COUNT:-$(bash scripts/slurm/dynamic_gpu_detect.sh --count)}
+GPU_IDS=${GPU_IDS:-$(bash scripts/slurm/dynamic_gpu_detect.sh --ids)}
+IFS=',' read -r -a GPU_ID_ARRAY <<< "$GPU_IDS"
+GPU_COUNT=${GPU_COUNT:-${#GPU_ID_ARRAY[@]}}
 GPU_COUNT=${GPU_COUNT:-1}
 PROMPTS_PER_GPU=${PROMPTS_PER_GPU:-1}
 PROMPT_OFFSET=${PROMPT_OFFSET:-0}
@@ -81,19 +83,21 @@ PY
 fi
 
 pids=()
-for gpu in $(seq 0 $((GPU_COUNT - 1))); do
+for gpu_rank in $(seq 0 $((GPU_COUNT - 1))); do
+  gpu="${GPU_ID_ARRAY[$gpu_rank]:-$gpu_rank}"
   (
     export CUDA_VISIBLE_DEVICES="$gpu"
     for slot in $(seq 0 $((PROMPTS_PER_GPU - 1))); do
-      index=$((PROMPT_OFFSET + gpu * PROMPTS_PER_GPU + slot))
+      index=$((PROMPT_OFFSET + gpu_rank * PROMPTS_PER_GPU + slot))
       prompt=$(read_prompt "$index")
       sample_dir="$OUTPUT_ROOT/prompt_$(printf "%04d" "$index")"
       mkdir -p "$sample_dir"
       printf '%s\n' "$prompt" >"$sample_dir/prompt.txt"
+      printf '%s\n' "$gpu" >"$sample_dir/cuda_visible_devices.txt"
       MODE=loop CONFIG="$CONFIG" PROMPT="$prompt" OUTPUT_DIR="$sample_dir" MOCK_FLAG="$MOCK_FLAG" \
         bash scripts/training/run_stage5_loop.sh
     done
-  ) >"logs/stage5-mprompt-gpu-${gpu}.out" 2>"logs/stage5-mprompt-gpu-${gpu}.err" &
+  ) >"logs/stage5-mprompt-gpu-${gpu_rank}.out" 2>"logs/stage5-mprompt-gpu-${gpu_rank}.err" &
   pids+=("$!")
 done
 

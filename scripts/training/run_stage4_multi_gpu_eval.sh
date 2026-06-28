@@ -12,7 +12,9 @@ fi
 
 CONFIG=${CONFIG:-configs/stage4/self_corrupt/mmu_probe_lora_hard64_grid4_vq_tokens_l40s_1024px_gc.yaml}
 OUTPUT_ROOT=${OUTPUT_ROOT:-outputs/stage4_self_corrupt/multi_gpu_eval/grid4_1024gc}
-GPU_COUNT=${GPU_COUNT:-$(bash scripts/slurm/dynamic_gpu_detect.sh --count)}
+GPU_IDS=${GPU_IDS:-$(bash scripts/slurm/dynamic_gpu_detect.sh --ids)}
+IFS=',' read -r -a GPU_ID_ARRAY <<< "$GPU_IDS"
+GPU_COUNT=${GPU_COUNT:-${#GPU_ID_ARRAY[@]}}
 GPU_COUNT=${GPU_COUNT:-1}
 SAMPLES_PER_GPU=${SAMPLES_PER_GPU:-4}
 SAMPLE_OFFSET=${SAMPLE_OFFSET:-0}
@@ -34,9 +36,10 @@ if [[ "$MODE" == "summarize" ]]; then
 fi
 
 pids=()
-for gpu in $(seq 0 $((GPU_COUNT - 1))); do
-  offset=$((SAMPLE_OFFSET + gpu * SAMPLES_PER_GPU))
-  out="$OUTPUT_ROOT/gpu_${gpu}"
+for gpu_rank in $(seq 0 $((GPU_COUNT - 1))); do
+  gpu="${GPU_ID_ARRAY[$gpu_rank]:-$gpu_rank}"
+  offset=$((SAMPLE_OFFSET + gpu_rank * SAMPLES_PER_GPU))
+  out="$OUTPUT_ROOT/gpu_${gpu_rank}"
   mkdir -p "$out"
   (
     export CUDA_VISIBLE_DEVICES="$gpu"
@@ -45,9 +48,10 @@ for gpu in $(seq 0 $((GPU_COUNT - 1))); do
       --output-dir "$out" \
       --limit "$SAMPLES_PER_GPU" \
       --sample-offset "$offset"
-  ) >"logs/stage4-mgpu-eval-${gpu}.out" 2>"logs/stage4-mgpu-eval-${gpu}.err" &
+  ) >"logs/stage4-mgpu-eval-${gpu_rank}.out" 2>"logs/stage4-mgpu-eval-${gpu_rank}.err" &
   pids+=("$!")
   echo "$offset" >"$out.prompt_offset.txt"
+  echo "$gpu" >"$out.cuda_visible_devices.txt"
 done
 
 status=0
