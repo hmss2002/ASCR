@@ -3591,3 +3591,352 @@ Fast-forwarded `feat/stage4-gc-fallback-server` from `32a7dcd` to `6f04b23`
   `MODE=split_curriculum bash scripts/training/run_stage4_server_campaign.sh`.
 - After completion:
   `MODE=summarize bash scripts/training/run_stage4_server_campaign.sh`.
+
+---
+
+## 2026-06-28 14:30 HKT — Server AI: comprehensive remaining-scripts spec for Windows Codex
+
+> **意图：在 GPU 排队等待期间，把 Stage 3 剩下可能需要的脚本一次性全部生成出来。**
+> 兼容性不必完美，后期微调。目标是让服务器端有足够多的"武器"可以灵活组合使用。
+
+---
+
+### A. Phase 5 — ASCR 自破坏闭环
+
+#### A1. MMU Localizer → TokenReopenMask 桥接
+
+`ascr/selectors/mmu_localizer_selector.py`
+
+LoRA 输出 `{"corrupted_cells_4x4":["D3"],"has_error":true}` → 64×64 token mask。
+
+```python
+class MMULocalizerSelector:
+    def __init__(self, probe_summary_or_cells, grid_size, token_grid_size=64):
+        ...
+    def to_token_mask(self) -> TokenReopenMask:
+        # D3 on 4×4 grid → tokens [48:64, 32:48] on 64×64 grid
+        ...
+```
+
+输入可以是 probe 的 parsed cells，也可以是 raw JSON string。
+
+#### A2. 自破坏 ASCR 闭环 CLI
+
+`ascr/cli/stage5_self_corrupt_loop.py`
+
+```bash
+python -m ascr.cli.stage5_self_corrupt_loop \
+  --prompt "a green bench and a blue bowl" \
+  --config configs/stage5/self_corrupt/ascr_loop_smoke.yaml \
+  --output-dir outputs/stage5_self_corrupt/loop_smoke
+```
+
+单 prompt 流程：
+1. Lumina generate → clean VQ tokens + clean image
+2. Corrupt VQ tokens → corrupted image
+3. MMU + LoRA localize → cell labels
+4. Cell labels → TokenReopenMask
+5. Lumina reopen → repaired image
+6. Save trace: clean/corrupted/repaired images + masks + metrics
+
+#### A3. 自破坏 ASCR 基准 CLI
+
+`ascr/cli/stage5_self_corrupt_benchmark.py`
+
+```bash
+python -m ascr.cli.stage5_self_corrupt_benchmark \
+  --prompts configs/benchmarks/prompts/t2i_compbench_hard64.txt \
+  --domain hard64_self_corrupt \
+  --config configs/stage5/self_corrupt/benchmark_hard64.yaml \
+  --limit 16 --max-iterations 1 --keep-going \
+  --output-dir outputs/stage5_self_corrupt/benchmark/hard64
+```
+
+批量跑 A2，产出 manifest.jsonl（每行：prompt, clean_image, corrupted_image, repaired_image, lora_cells, mask_stats）。
+
+#### A4. 闭环 Slurm wrapper
+
+`jobs/stage5/self_corrupt_loop.sbatch` + `scripts/training/run_stage5_loop.sh`
+
+单 GPU，支持 `--array` 并行多 prompt。
+
+#### A5. 闭环 before/after 对比
+
+`ascr/cli/stage5_compare_loop_results.py`
+
+```bash
+python -m ascr.cli.stage5_compare_loop_results \
+  --manifest outputs/stage5_self_corrupt/benchmark/hard64/manifest.jsonl \
+  --output-dir outputs/stage5_self_corrupt/benchmark/hard64/comparison
+```
+
+统计：mask_nonempty_rate, reopen_change_rate（图像真的有变化的比例），mean_cells_selected_per_sample。
+
+---
+
+### B. Phase 6 — 合成→真实迁移评估
+
+#### B1. 真实 prompt-following 错误探测
+
+`ascr/cli/stage6_transfer_probe.py`
+
+```bash
+python -m ascr.cli.stage6_transfer_probe \
+  --prompts configs/benchmarks/prompts/geneval_553.txt \
+  --limit 32 \
+  --lora-path outputs/stage4_self_corrupt/.../lora_l40s_1024px_gc_schema_example \
+  --config configs/stage6/transfer_probe.yaml \
+  --output-dir outputs/stage6_transfer/geneval_smoke32
+```
+
+对真实 prompt-following errors（非合成破坏），用 LoRA 直接预测"哪里有问题"。不需要 corruption 步骤——直接在 Lumina 生成的图上跑 MMU 定位。
+
+#### B2. 多臂基准对比 CLI
+
+`ascr/cli/stage6_multi_arm_benchmark.py`
+
+```bash
+python -m ascr.cli.stage6_multi_arm_benchmark \
+  --arms direct stage1_qwen stage3_selector stage4_mmu_lora \
+  --prompts configs/benchmarks/prompts/t2i_compbench_hard64.txt \
+  --limit 32 \
+  --output-dir outputs/stage6_benchmark/multi_arm
+```
+
+四个臂：
+- `direct`: Lumina 直接生成（不做任何修复）
+- `stage1_qwen`: Stage 1 Qwen coarse ASCR
+- `stage3_selector`: 外部 RGB/prompt 选择器 + reopen
+- `stage4_mmu_lora`: LoRA MMU 定位 + reopen
+
+每个臂产出一个 manifest，统一 after/before API judge。
+
+#### B3. 合成→真实迁移指标
+
+`ascr/analysis/stage6_transfer_metrics.py`
+
+对比合成破坏上的定位准确率 vs 真实错误上的定位准确率。量化 transfer gap。
+
+---
+
+### C. 数据集扩展（Hard64 → Hard256 → Bench1k）
+
+#### C1. Prompt 采样器
+
+`ascr/cli/stage3_sample_prompts.py`
+
+```bash
+python -m ascr.cli.stage3_sample_prompts \
+  --sources configs/benchmarks/prompts/dpg_bench_1065.txt \
+            configs/benchmarks/prompts/genai_bench_1600.txt \
+            configs/benchmarks/prompts/dsg1k_1060.txt \
+  --count 256 \
+  --stratify complexity \
+  --holdout configs/benchmarks/prompts/geneval_553.txt \
+  --seed 0 \
+  --output configs/benchmarks/prompts/stage3_hard256_sampled.txt
+```
+
+避免 benchmark contamination（不和 holdout 重叠），按 prompt 复杂度分层采样。
+
+#### C2. 多尺度数据集配置
+
+```
+configs/stage3/self_corrupt/
+  locality_probe_hard64.yaml     (已存在)
+  locality_probe_hard256.yaml    (新)
+  locality_probe_bench512.yaml  (新)
+  locality_probe_bench1k.yaml   (新)
+```
+
+只需改 `limit` 和 `prompt_file`，其余继承 smoke config。
+
+#### C3. 数据集扩展一键 runner
+
+`scripts/training/run_stage3_scale_dataset.sh`
+
+```bash
+PROMPT_COUNT=256 bash scripts/training/run_stage3_scale_dataset.sh
+# → 1. 采样 prompts
+# → 2. 并行探测（Slurm array）
+# → 3. 合并 manifests
+# → 4. 构建 dataset
+# → 5. 验证所有路径
+```
+
+---
+
+### D. 训练基础设施升级
+
+#### D1. 单节点多 GPU DDP LoRA 训练
+
+`ascr/training/stage4_mmu_lora_ddp.py`
+
+```bash
+torchrun --nproc_per_node=8 -m ascr.cli.stage4_train_mmu_lora_ddp \
+  --config configs/stage4/self_corrupt/mmu_lora_train_hard64_vq_tokens_l40s_1024px_gc_adam8bit.yaml
+```
+
+单节点 8× L40S 并行。gradient accumulation + DistributedSampler。目标：把 15 epoch 训练从 1.5h 压到 ~15 min。
+
+#### D2. 超参数搜索
+
+`ascr/cli/stage4_hyperparameter_search.py`
+
+```bash
+python -m ascr.cli.stage4_hyperparameter_search \
+  --search-space '{"lr": [1e-5, 3e-5, 5e-5], "lora_r": [4, 8, 16], "epochs": [10, 15, 20]}' \
+  --config base_config.yaml \
+  --trials 12 \
+  --output-dir outputs/stage4_self_corrupt/hparam_search
+```
+
+随机搜索或简单 grid search。每个 trial 只跑 1-2 epoch 快速筛选。
+
+#### D3. LoRA 适配器注册表 CLI
+
+`ascr/cli/stage4_adapter_registry.py`
+
+```bash
+python -m ascr.cli.stage4_adapter_registry \
+  --scan outputs/stage4_self_corrupt \
+  --output outputs/stage4_self_corrupt/adapter_registry.json
+```
+
+扫描所有 `adapter_model.safetensors`，记录对应的 grid_size、prompt_variant、training_loss、eval_parse_rate。方便跨实验对比。
+
+#### D4. 配置自动生成器
+
+`ascr/cli/stage4_generate_config.py`
+
+```bash
+python -m ascr.cli.stage4_generate_config \
+  --grid 8 --profile l40s_1024_gc --prompt-variant schema_example \
+  --output configs/stage4/self_corrupt/mmu_lora_train_hard64_grid8_vq_tokens_l40s_1024px_gc_adam8bit.yaml
+```
+
+不再手动复制粘贴改 YAML。CLI 根据 grid/profile/prompt-variant 自动生成正确的配置。
+
+---
+
+### E. 分析与决策
+
+#### E1. 跨网格课程对比 CLI
+
+`ascr/cli/stage4_cross_grid_compare.py`
+
+```bash
+python -m ascr.cli.stage4_cross_grid_compare \
+  --summaries \
+    grid4/summary.json \
+    grid8/summary.json \
+    grid16/summary.json \
+  --labels "4x4" "8x8" "16x16" \
+  --output-dir outputs/stage4_self_corrupt/cross_grid_comparison
+```
+
+并排对比不同网格的 parse_rate、hit_any、F1、IoU。输出 heatmap 表格。
+
+#### E2. 失败模式 → 修复路由
+
+`ascr/analysis/stage4_failure_router.py`
+
+决策树：
+```
+parse_rate < 0.3  →  prompt / decoding fix
+parse_rate > 0.5, hit_any < 0.1 →  more data or more capacity
+parse_rate > 0.7, hit_any > 0.2 →  scale to 8×8 / 16×16
+hit_any > 0.5 →  Phase 5 ASCR loop
+```
+
+#### E3. Per-prompt-type 细分分析
+
+`ascr/cli/stage4_per_prompt_breakdown.py`
+
+按 prompt 类型（短/长、compositional/simple、spatial/color/text）分组统计 hit_any。找出 LoRA 擅长和不擅长的 prompt 类型。
+
+---
+
+### F. 运维 & QOS 工具
+
+#### F1. QOS 感知批量提交器
+
+`scripts/slurm/qos_batch_submit.sh`
+
+```bash
+bash scripts/slurm/qos_batch_submit.sh \
+  --max-jobs 4 \
+  --sbatch-args "--partition=gpu --gres=gpu:1 ..." \
+  --configs config1.yaml config2.yaml config3.yaml ...
+```
+
+自动检测当前 QOS 使用量，只提交不超过限制的 job 数，剩余的排队等下一轮。
+
+#### F2. Slurm 任务状态看板
+
+`ascr/cli/server_dashboard.py`
+
+```bash
+python -m ascr.cli.server_dashboard
+# 输出当前队列、最近完成的 job、GPU 利用率、预估剩余时间
+```
+
+#### F3. 服务端快速健康检查
+
+`ascr/cli/server_health_check.py`
+
+```bash
+python -m ascr.cli.server_health_check
+# 检查：venv 存在、Lumina 模型路径、GPU 可用性、最近 job 成功率、磁盘空间
+```
+
+---
+
+### G. 端到端集成测试
+
+#### G1. Stage 3-4-5 全链路烟雾测试
+
+`tests/test_stage3_4_5_integration.py`
+
+Mock Lumina 调用，验证：
+- Phase 1 局部性探测 → manifest 格式正确
+- Phase 2 数据集构建 → 所有路径引用有效
+- Phase 3 选择器基线 → 5 baselines 全跑
+- Phase 4 MMU LoRA → 训练 loss 下降
+- Phase 5 ASCR 闭环 → mask → reopen 链路通
+
+#### G2. 一键端到端 runner
+
+`scripts/training/run_stage3_to_stage5_e2e.sh`
+
+```bash
+# 从零到 ASCR 闭环，全自动
+bash scripts/training/run_stage3_to_stage5_e2e.sh
+```
+
+---
+
+### 优先级建议
+
+| 优先级 | 脚本 | 理由 |
+|--------|------|------|
+| 🔴 P0 | A1 (MMU→TokenReopenMask 桥接) | Phase 5 的入口，没有它无法闭环 |
+| 🔴 P0 | A2 (自破坏闭环) | Phase 5 核心 |
+| 🔴 P0 | C1 (Prompt 采样器) | 扩数据的前提 |
+| 🟡 P1 | A3 (闭环基准) | 批量评估 |
+| 🟡 P1 | D1 (多 GPU DDP) | 训练加速 6× |
+| 🟡 P1 | D4 (配置自动生成) | 不再手动改 YAML |
+| 🟢 P2 | D2 (超参数搜索) | 找到最优 lr/r/epochs |
+| 🟢 P2 | E1 (跨网格对比) | 课程学习完成后需要 |
+| 🟢 P2 | F1 (QOS 批量提交) | 运维体验 |
+| 🔵 P3 | 其余全部 | 锦上添花，有比没有好 |
+
+### 给 Codex 的说明
+
+以上 20+ 个脚本不需要一次全部完美交付。服务器端可以接受：
+- 初版功能跑通即可，后期微调
+- 脚本之间接口不完全一致也可以，后续我们会统一
+- 优先 P0/P1，P2/P3 有时间就写
+- 如果某个脚本的实现复杂度远超预期，先跳过，标注 TODO 即可
+
+目标：**让服务器端在接下来的 GPU 等待间隙里，有足够多的工具可以灵活组合使用，不用每次都等新代码。**
