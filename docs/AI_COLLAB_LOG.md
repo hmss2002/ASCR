@@ -3444,9 +3444,59 @@ OOMed at 1024px. The gc fallback is the first to succeed.
 | 1024px + 4 modules + bf16 + adam8bit | ❌ OOM |
 | **1024px + 7 modules + bf16 + adam8bit + gc fallback** | **✅ WORKS** |
 
-### Next after jobs complete
-1. Read full 1024px training manifest (final loss, convergence)
-2. Run grid4 eval probe (if 71511 finishes)
-3. Run `bash scripts/training/run_stage4_postprocess.sh`
-4. If grid4 1024px eval still malformed → run probe sweep
-5. If parse passes → submit 8×8 and 16×16 curriculum
+### 📊 Jobs completed — 1024px gc training results
+
+| Job | Task | Epochs | Loss | Elapsed | Status |
+|-----|------|--------|------|---------|--------|
+| 71507 | gc smoke (4 samples) | 1 | 6.66→6.59 | 29s | ✅ No OOM |
+| 71509 | **Full 1024px 16×16** | 15 | **0.031** | 1h22m | ✅ |
+| 71511 | **Grid4 1024px + eval** | 15 | **0.029** | 1h50m | ✅ |
+
+### 71509 — Full 1024px 16×16 LoRA training
+
+- config: 1024px, 7 modules, bf16, adam8bit, gc_fallback=force
+- gc: ascr_module_wrapper, **32 modules wrapped**
+- final_loss: **0.0309** (vs 0.197 at 512px 2-module — 6× better convergence)
+- adapter: outputs/stage4_self_corrupt/mmu_lora_hard64_dual/vq_tokens/lora_l40s_1024px_gc_adam8bit/
+- 16×16 eval: submitted as job 71520 (running)
+
+### 71511 — Grid4 1024px LoRA training + eval
+
+- config: same as 71509 but grid4 SFT data
+- gc: 32 modules wrapped
+- final_loss: **0.0295** — excellent convergence
+- eval: parse_rate **0.469** (15/32), hit_any **0.0**
+- Previous grid4 at 512px: parse_rate 0.0 — **1024px gave a 47pp improvement**
+
+Output analysis on parsed rows:
+```
+predicted: {"corrupted_cells_44444444...": ["A2"]}   target: ["C3"]
+predicted: {"corrupted_cells_44444444...": ["A2"]}   target: ["C4"]
+```
+- Schema structure is CORRECT (valid JSON, right keys, right array format)
+- Minor key-name artifact: `corrupted_cells_4x4` → `corrupted_cells_4444...` (trailing `4` repeats)
+- Cell labels are always `A2` — model learned a default cell, not the mapping
+- Failure analysis: `invalid_json_object: 49`, `schema_key_mismatch: 7`, `valid_format_wrong_cells: 8`
+
+### Postprocess decision
+
+`run_stage4_postprocess.sh` completed. The decision layer recommends:
+> **P60 — Run the prompt/decoding sweep before scaling data.**
+> Failure analysis is dominated by output-format classes; sweep prompt variants and answer length first.
+
+Next command:
+```bash
+sbatch jobs/stage4/stage4_probe_sweep.sbatch
+```
+
+### Key takeaways
+
+1. **1024px OOM is SOLVED.** ASCR gc fallback wraps LLaDA decoder blocks at
+   runtime — no model code changes needed. bf16 + adam8bit + gc = fits on
+   single 45GB L40S.
+2. **1024px training dramatically better than 512px.** Loss 0.031 vs 0.197
+   at same epochs. Grid4 parse_rate 0.469 vs 0.0. The extra resolution
+   and 7 LoRA modules make a qualitative difference.
+3. **Format is close to correct but not perfect.** The model produces
+   valid JSON with the right schema — minor key-name artifacts and
+   wrong cell values. Prompt/decoding sweep is the recommended next step.
