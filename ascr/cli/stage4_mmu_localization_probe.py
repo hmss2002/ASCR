@@ -26,6 +26,7 @@ def build_parser():
     parser.add_argument("--max-selected-cells", type=int, default=16)
     parser.add_argument("--top-k", type=int, default=4)
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--sample-offset", type=int, default=0)
     parser.add_argument("--sample-ids-file", default=None)
     parser.add_argument("--split-manifest", default=None)
     parser.add_argument("--split", choices=["train", "eval"], default="eval")
@@ -56,6 +57,7 @@ def main(argv=None):
         max_selected_cells=int(config.get("max_selected_cells", args.max_selected_cells)),
         top_k=int(config.get("top_k", args.top_k)),
         limit=config.get("limit", args.limit),
+        sample_offset=int(config.get("sample_offset", args.sample_offset) or 0),
         sample_ids=config.get("sample_ids", _read_sample_ids(args.sample_ids_file)),
         split_manifest=config.get("split_manifest", args.split_manifest),
         split=config.get("split", args.split),

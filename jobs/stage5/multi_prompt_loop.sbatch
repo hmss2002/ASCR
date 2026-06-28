@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-#SBATCH --job-name=ascr-s4-lora-ddp
+#SBATCH --job-name=ascr-s5-mprompt
 #SBATCH --partition=gpu
 #SBATCH --gres=gpu:8
 #SBATCH --cpus-per-task=32
 #SBATCH --mem=240G
-#SBATCH --time=04:00:00
+#SBATCH --time=06:00:00
 #SBATCH --output=logs/%x-%j.out
 #SBATCH --error=logs/%x-%j.err
 
@@ -25,13 +25,16 @@ ASCR_ENV=${ASCR_ENV:-.venv-lumina}
 if [[ "$ASCR_ENV" != /* ]]; then
   ASCR_ENV="$PROJECT_ROOT/$ASCR_ENV"
 fi
-source "$ASCR_ENV/bin/activate"
+if [[ -x "$ASCR_ENV/bin/python" ]]; then
+  source "$ASCR_ENV/bin/activate"
+  export PYTHON_BIN="$ASCR_ENV/bin/python"
+else
+  export PYTHON_BIN=${PYTHON_BIN:-python}
+fi
 
 export LUMINA_REPO=${LUMINA_REPO:-third_party/Lumina-DiMOO}
 export LUMINA_MODEL_PATH=${LUMINA_MODEL_PATH:-models/lumina-dimoo}
-CONFIG=${CONFIG:-configs/stage4/self_corrupt/mmu_lora_train_hard64_grid8_vq_tokens_l40s_1024px_gc_adam8bit.yaml}
-NPROC=${NPROC:-$(bash scripts/slurm/dynamic_gpu_detect.sh --count)}
+export GPU_COUNT=${GPU_COUNT:-$(bash scripts/slurm/dynamic_gpu_detect.sh --count)}
+export PROMPTS_PER_GPU=${PROMPTS_PER_GPU:-1}
 
-# Real DDP: each rank owns one full Lumina+LoRA replica, uses DistributedSampler,
-# and rank 0 is the only writer.
-torchrun --nproc_per_node="$NPROC" -m ascr.cli.stage4_train_mmu_lora_ddp --config "$CONFIG"
+bash scripts/training/run_stage5_multi_prompt.sh

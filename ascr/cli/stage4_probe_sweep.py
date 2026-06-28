@@ -97,6 +97,7 @@ def _run_combo(base_config, combo):
         max_selected_cells=int(config.get("max_selected_cells", 16)),
         top_k=int(config.get("top_k", 4)),
         limit=config.get("limit"),
+        sample_offset=int(config.get("sample_offset", 0) or 0),
         sample_ids=config.get("sample_ids"),
         split_manifest=config.get("split_manifest"),
         split=config.get("split", "eval"),

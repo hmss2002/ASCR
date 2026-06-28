@@ -693,6 +693,7 @@ def run_mmu_localization_probe(
     max_selected_cells=16,
     top_k=4,
     limit=None,
+    sample_offset=0,
     sample_ids=None,
     split_manifest=None,
     split="eval",
@@ -724,6 +725,11 @@ def run_mmu_localization_probe(
         wanted |= sample_ids_from_split_manifest(split_manifest, split=split)
     if wanted:
         rows = [row for row in rows if str(row.get("sample_id")) in wanted]
+    sample_offset = int(sample_offset or 0)
+    if sample_offset < 0:
+        raise ValueError(f"sample_offset must be >= 0, got {sample_offset}")
+    if sample_offset:
+        rows = rows[sample_offset:]
     if limit is not None:
         rows = rows[: int(limit)]
     if not rows:
@@ -846,6 +852,7 @@ def run_mmu_localization_probe(
         "dataset": str(dataset),
         "output_dir": str(output_dir),
         "row_count": row_count,
+        "sample_offset": sample_offset,
         "parsed_count": parsed_count,
         "malformed_count": malformed_count,
         "call_error_count": call_error_count,

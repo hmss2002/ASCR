@@ -13,6 +13,7 @@ from ascr.training.stage4_mmu_lora import (
     safe_parse_mmu_localization_payload,
 )
 from ascr.cli.stage4_probe_sweep import build_sweep_plan, summarize_sweep, write_summary as write_sweep_summary
+from ascr.cli.stage4_batch_train import main as stage4_batch_train_main
 from ascr.cli.stage4_server_campaign import build_campaign_plan, write_campaign_outputs
 from ascr.cli.stage4_compare_input_modes import compare_probe_summaries, write_comparison
 from ascr.cli.stage4_analyze_probe_failures import analyze_probe_failures, write_outputs as write_failure_outputs
@@ -194,6 +195,50 @@ class Stage4MmuLoraTests(unittest.TestCase):
         self.assertEqual(summary["input_mode"], "vq_tokens")
         self.assertEqual(summary["metrics"]["hit_any_rate"], 1.0)
         self.assertEqual(summary["metrics"]["mean_iou"], 1.0)
+
+    def test_mmu_probe_sample_offset_selects_disjoint_slice(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            tokens = root / "corrupt.json"
+            write_tokens(tokens)
+            dataset = root / "dataset.jsonl"
+            write_jsonl(dataset, [
+                {
+                    "sample_id": "first",
+                    "prompt": "a red cube",
+                    "corrupted_image": "missing.ppm",
+                    "corrupted_vq_ids_path": str(tokens),
+                    "corruption_indices": [[0, 0]],
+                    "corruption_type": "block_2x2_random_replace",
+                    "token_grid_size": 4,
+                    "image_size": 64,
+                },
+                {
+                    "sample_id": "second",
+                    "prompt": "a blue sphere",
+                    "corrupted_image": "missing.ppm",
+                    "corrupted_vq_ids_path": str(tokens),
+                    "corruption_indices": [[0, 2]],
+                    "corruption_type": "block_2x2_random_replace",
+                    "token_grid_size": 4,
+                    "image_size": 64,
+                },
+            ])
+            summary = run_mmu_localization_probe(
+                dataset,
+                root / "probe",
+                grid_size=2,
+                max_selected_cells=4,
+                top_k=1,
+                limit=1,
+                sample_offset=1,
+                engine=_TokenAnswerEngine(),
+                use_vq_tokens=True,
+            )
+            rows = [json.loads(line) for line in (root / "probe" / "probe_rows.jsonl").read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(summary["sample_offset"], 1)
+        self.assertEqual(summary["row_count"], 1)
+        self.assertEqual(rows[0]["sample_id"], "second")
 
     def test_mmu_probe_scores_fake_image_answer(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -444,6 +489,21 @@ class Stage4MmuLoraTests(unittest.TestCase):
             outputs = write_next_actions(Path(temp_dir), decision)
             self.assertTrue(Path(outputs["next_actions_json"]).exists())
             self.assertTrue(Path(outputs["next_actions_md"]).exists())
+
+    def test_stage4_batch_train_dry_run_uses_current_python(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            rc = stage4_batch_train_main([
+                "--dry-run",
+                "--grids",
+                "4",
+                "--no-run-probe",
+                "--output-dir",
+                temp_dir,
+            ])
+            manifest = json.loads((Path(temp_dir) / "batch_train_manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(rc, 0)
+        self.assertEqual(manifest["results"][0]["kind"], "train")
+        self.assertTrue(manifest["results"][0]["command"][0])
 
     def test_probe_sweep_plan_and_summary(self):
         with tempfile.TemporaryDirectory() as temp_dir:

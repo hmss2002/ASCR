@@ -36,7 +36,10 @@ remaining-scripts request.
 
 - `ascr/training/stage4_mmu_lora_ddp.py`
 - `ascr/cli/stage4_train_mmu_lora_ddp.py`
+- `ascr/cli/stage4_batch_train.py`
+- `ascr/cli/stage4_resume_training.py`
 - `jobs/stage4/train_mmu_lora_ddp.sbatch`
+- `jobs/stage4/stage4_multi_gpu_eval.sbatch`
 - `ascr/cli/stage4_hyperparameter_search.py`
 - `ascr/cli/stage4_adapter_registry.py`
 - `ascr/cli/stage4_generate_config.py`
@@ -49,6 +52,7 @@ remaining-scripts request.
 
 ### Operations
 
+- `scripts/slurm/dynamic_gpu_detect.sh`
 - `scripts/slurm/qos_batch_submit.sh`
 - `ascr/cli/server_dashboard.py`
 - `ascr/cli/server_health_check.py`
@@ -106,14 +110,43 @@ Stage-4 8-GPU launch entry:
 sbatch jobs/stage4/train_mmu_lora_ddp.sbatch
 ```
 
+Stage-4 multi-GPU eval shards:
+
+```bash
+sbatch jobs/stage4/stage4_multi_gpu_eval.sbatch
+MODE=summarize OUTPUT_ROOT=outputs/stage4_self_corrupt/multi_gpu_eval/grid4_1024gc \
+  bash scripts/training/run_stage4_multi_gpu_eval.sh
+```
+
+Stage-4 grid batch train/probe in one allocation:
+
+```bash
+python -m ascr.cli.stage4_batch_train --grids 4,8,16
+```
+
+Stage-5 multi-prompt single-node run:
+
+```bash
+sbatch jobs/stage5/multi_prompt_loop.sbatch
+MODE=summarize OUTPUT_ROOT=outputs/stage5_self_corrupt/multi_prompt \
+  bash scripts/training/run_stage5_multi_prompt.sh
+```
+
 ## Current Boundaries
 
-- `stage4_train_mmu_lora_ddp` is a torchrun-safe coordinator around the current
-  single-process trainer. True DistributedSampler/gradient sync remains a
-  follow-up implementation task.
+- `stage4_train_mmu_lora_ddp` now builds one Lumina+LoRA replica per rank,
+  wraps it with `DistributedDataParallel`, uses `DistributedSampler`, and only
+  saves from rank 0. It still needs server validation on a real 8-GPU node.
+- `stage4_resume_training` skips complete adapters and relaunches interrupted
+  configs. Fine-grained mid-epoch checkpoints are not emitted yet.
+- The current cluster has 100+ GPUs across many 8-GPU nodes; ASCR's operating
+  philosophy is to request more resources for each suitable task and trade
+  parallel GPU allocation for shorter wall-clock iteration time.
 - Stage-6 `stage1_qwen` and `stage3_selector` arms are placeholder manifests in
   `stage6_multi_arm_benchmark`; plug mature runners into those arms when the
   server needs full comparisons.
+- Stage-5 defaults to `share_engine: true` to avoid loading generator, MMU, and
+  LoRA copies at the same time. Set `share_engine: false` only when GPU memory
+  is sufficient and separate generation/MMU behavior must be isolated.
 - All Stage-5/6 CLIs support `--mock` for local wiring tests without loading
   Lumina.
-

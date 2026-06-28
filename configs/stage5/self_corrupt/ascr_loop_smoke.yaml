@@ -1,4 +1,5 @@
 mock: false
+share_engine: true
 seed: 0
 grid_size: 4
 token_grid_size: 64

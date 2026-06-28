@@ -4138,3 +4138,53 @@ These are lower priority but would save server AI significant time:
 - The `gpu_shared` partition gives access to SPGL-1-2 through SPGL-1-11
   in addition to the `gpu` partition SPGL-1-12 through SPGL-1-19 —
   roughly 100+ L40S GPUs total. We just can't use them efficiently yet.
+
+---
+
+## 2026-06-28 21:20 HKT - Windows Codex: P0-P4 multi-GPU implementation push
+
+### Sync
+- Pulled and fast-forward merged server branch `feat/stage4-gc-fallback-server`
+  at `2d73907`, including the first non-zero grid4 result and the critical
+  P0-P4 multi-GPU utilization handoff.
+
+### P0/P1 training changes
+- Replaced the Stage-4 DDP coordinator with real torchrun/DDP training:
+  one Lumina+LoRA replica per rank, `DistributedSampler` row sharding,
+  gradient synchronization through `DistributedDataParallel`, and rank-0-only
+  adapter/manifest writes.
+- Added device-aware loss helpers in `train_lumina_lora_smoke.py` so the
+  single-process `device_map="auto"` path no longer blindly feeds tensors from
+  the wrong device. DDP forces `device_map=none` because each rank owns one
+  full model replica.
+
+### P2-P4 execution changes
+- Stage-5 loop configs now default to `share_engine: true`, reducing the OOM
+  path where generator, MMU, and LoRA copies were loaded together.
+- Added `scripts/training/run_stage4_multi_gpu_eval.sh` plus
+  `jobs/stage4/stage4_multi_gpu_eval.sbatch`; probe shards now pass
+  `--sample-offset`, so GPUs evaluate disjoint slices instead of repeating the
+  same rows.
+- Added `scripts/training/run_stage5_multi_prompt.sh` plus
+  `jobs/stage5/multi_prompt_loop.sbatch`; one 8-GPU allocation can run 8
+  independent Stage-5 prompt loops, with `PROMPTS_PER_GPU` for sequential work
+  per GPU.
+
+### QOL scripts and resource policy
+- Added `ascr/cli/stage4_batch_train.py` for grid4/8/16 train-probe batches,
+  `ascr/cli/stage4_resume_training.py` for skip/relaunch behavior, and
+  `scripts/slurm/dynamic_gpu_detect.sh` for Slurm/CUDA/nvidia-smi GPU count
+  detection.
+- Cluster resource philosophy: the current cluster has 100+ GPUs across many
+  8-GPU nodes, so ASCR should request more resources for every suitable task
+  and trade parallel GPU allocation for shorter wall-clock iteration time.
+
+### Server validation requested
+```bash
+torchrun --nproc_per_node=8 -m ascr.cli.stage4_train_mmu_lora_ddp \
+  --config configs/stage4/self_corrupt/mmu_lora_train_hard64_grid4_vq_tokens_l40s_1024px_gc_adam8bit.yaml \
+  --epochs 1 --limit 8
+
+sbatch jobs/stage4/stage4_multi_gpu_eval.sbatch
+sbatch jobs/stage5/multi_prompt_loop.sbatch
+```

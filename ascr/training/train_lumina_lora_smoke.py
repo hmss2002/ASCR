@@ -96,6 +96,131 @@ def _load_training_stack(repo_path):
     return torch, LoraConfig, TaskType, get_peft_model, AutoTokenizer, LLaDAForMultiModalGeneration, add_break_line
 
 
+def _dtype_value(torch, dtype_name):
+    dtype_name = str(dtype_name).lower()
+    dtype_map = {
+        "auto": "auto",
+        "float32": torch.float32,
+        "fp32": torch.float32,
+        "bfloat16": torch.bfloat16,
+        "bf16": torch.bfloat16,
+        "float16": torch.float16,
+        "fp16": torch.float16,
+    }
+    if dtype_name not in dtype_map:
+        raise ValueError(f"Unsupported torch_dtype: {dtype_name}")
+    return dtype_map[dtype_name]
+
+
+def _normalise_device(value):
+    if value is None:
+        return None
+    text = str(value)
+    if text in {"disk", "cpu"}:
+        return text
+    if text.isdigit():
+        return f"cuda:{text}"
+    return text
+
+
+def _model_input_device(model, fallback="cpu"):
+    device_map = getattr(model, "hf_device_map", None) or getattr(getattr(model, "base_model", None), "hf_device_map", None)
+    if isinstance(device_map, dict):
+        for value in device_map.values():
+            device = _normalise_device(value)
+            if device and device not in {"cpu", "disk"}:
+                return device
+    try:
+        return next(model.parameters()).device
+    except Exception:
+        return fallback
+
+
+def _extract_loss(output):
+    if hasattr(output, "loss"):
+        return output.loss
+    if isinstance(output, (list, tuple)) and output:
+        return output[0]
+    return output
+
+
+def _as_tensor_batch(torch, values, device):
+    if hasattr(values, "to"):
+        return values.to(device=device, dtype=torch.long)
+    return torch.tensor([values], dtype=torch.long, device=device)
+
+
+def _call_model_loss(torch, model, input_ids, labels, device=None):
+    device = device or _model_input_device(model)
+    input_tensor = _as_tensor_batch(torch, input_ids, device)
+    label_tensor = _as_tensor_batch(torch, labels, device)
+    candidates = [
+        ([input_tensor[0]], [label_tensor[0]]),
+        (input_tensor, label_tensor),
+    ]
+    if not hasattr(input_ids, "to") and not hasattr(labels, "to"):
+        candidates.append(([input_ids], [labels]))
+    last_type_error = None
+    for candidate_input_ids, candidate_labels in candidates:
+        try:
+            return _extract_loss(model(input_ids=candidate_input_ids, labels=candidate_labels))
+        except TypeError as exc:
+            last_type_error = exc
+    if last_type_error is not None:
+        raise last_type_error
+    return _extract_loss(model(input_ids=input_ids, labels=labels))
+
+
+def _prepare_lumina_lora_batch(torch, tokenizer, add_break_line, row, args, device=None):
+    with open(row["user_image"], "rb") as handle:
+        image_payload = pickle.load(handle)
+    image_tokens, token_h, token_w = _center_crop_tokens(
+        image_payload["input_ids"],
+        image_payload["height"],
+        image_payload["width"],
+        args.image_size,
+    )
+    image_tokens = add_break_line(image_tokens, token_h, token_w, new_number=SP["newline"])
+    instruction = "<system>" + row["system_prompt"] + "</system>" + "<user>" + row["user_prompt"] + "</user>"
+    inst_ids = tokenizer(
+        instruction,
+        truncation=True,
+        max_length=int(args.prompt_max_length),
+        padding=False,
+        return_tensors="pt",
+    ).input_ids[0].tolist()
+    inst_ids = inst_ids[:-1] + [SP["boi"]] + image_tokens + [SP["eoi"]] + inst_ids[-1:]
+    answer_ids = tokenizer(
+        row["answer_text"] + "</answer>",
+        truncation=True,
+        max_length=int(args.answer_max_length),
+        padding=False,
+        return_tensors="pt",
+    ).input_ids[0].tolist()
+    answer_ids, answer_labels = _mask_codes(answer_ids, mode=args.answer_mask_mode)
+    pad_len = max(0, int(args.answer_max_length) - len(answer_ids))
+    if args.ignore_pad_labels:
+        pad_ids = [SP["padding"]] * pad_len
+        pad_labels = [-100] * pad_len
+    else:
+        pad_ids, pad_labels = _mask_codes([SP["padding"]] * pad_len, mode=args.answer_mask_mode, force_mask=True)
+    input_ids = inst_ids + [SP["answer_start"]] + answer_ids + pad_ids
+    labels = [-100] * len(inst_ids) + [-100] + answer_labels + pad_labels
+    if len(input_ids) > int(args.max_seq_len):
+        input_ids = input_ids[: int(args.max_seq_len)]
+        labels = labels[: int(args.max_seq_len)]
+    else:
+        padding = int(args.max_seq_len) - len(input_ids)
+        input_ids += [SP["padding"]] * padding
+        labels += [-100] * padding
+    if device is None:
+        return input_ids, labels
+    return (
+        torch.tensor([input_ids], dtype=torch.long, device=device),
+        torch.tensor([labels], dtype=torch.long, device=device),
+    )
+
+
 def _is_tensor_like(value):
     return hasattr(value, "requires_grad") and hasattr(value, "detach")
 
@@ -198,19 +323,12 @@ def train_lumina_lora_smoke(args):
     random.seed(int(args.seed))
     device = "cuda" if torch.cuda.is_available() else "cpu"
     tokenizer = AutoTokenizer.from_pretrained(args.checkpoint_path, trust_remote_code=True)
-    dtype_name = str(args.torch_dtype).lower()
-    dtype_map = {
-        "auto": "auto",
-        "float32": torch.float32,
-        "fp32": torch.float32,
-        "bfloat16": torch.bfloat16,
-        "bf16": torch.bfloat16,
-        "float16": torch.float16,
-        "fp16": torch.float16,
-    }
-    if dtype_name not in dtype_map:
-        raise ValueError(f"Unsupported torch_dtype: {args.torch_dtype}")
-    model = model_cls.from_pretrained(args.checkpoint_path, torch_dtype=dtype_map[dtype_name], device_map="auto")
+    model_kwargs = {"torch_dtype": _dtype_value(torch, args.torch_dtype)}
+    if str(args.device_map or "").lower() not in {"", "none", "null"}:
+        model_kwargs["device_map"] = args.device_map
+    model = model_cls.from_pretrained(args.checkpoint_path, **model_kwargs)
+    if "device_map" not in model_kwargs and hasattr(model, "to"):
+        model = model.to(device)
     gradient_checkpointing_report = {"requested": bool(args.gradient_checkpointing), "backend": "disabled", "wrapped_module_count": 0}
     if args.gradient_checkpointing:
         gradient_checkpointing_report = _configure_gradient_checkpointing(
@@ -244,48 +362,8 @@ def train_lumina_lora_smoke(args):
         random.shuffle(rows)
         total = 0.0
         for step, row in enumerate(rows):
-            with open(row["user_image"], "rb") as handle:
-                image_payload = pickle.load(handle)
-            image_tokens, token_h, token_w = _center_crop_tokens(
-                image_payload["input_ids"],
-                image_payload["height"],
-                image_payload["width"],
-                args.image_size,
-            )
-            image_tokens = add_break_line(image_tokens, token_h, token_w, new_number=SP["newline"])
-            instruction = "<system>" + row["system_prompt"] + "</system>" + "<user>" + row["user_prompt"] + "</user>"
-            inst_ids = tokenizer(
-                instruction,
-                truncation=True,
-                max_length=int(args.prompt_max_length),
-                padding=False,
-                return_tensors="pt",
-            ).input_ids[0].tolist()
-            inst_ids = inst_ids[:-1] + [SP["boi"]] + image_tokens + [SP["eoi"]] + inst_ids[-1:]
-            answer_ids = tokenizer(
-                row["answer_text"] + "</answer>",
-                truncation=True,
-                max_length=int(args.answer_max_length),
-                padding=False,
-                return_tensors="pt",
-            ).input_ids[0].tolist()
-            answer_ids, answer_labels = _mask_codes(answer_ids, mode=args.answer_mask_mode)
-            pad_len = max(0, int(args.answer_max_length) - len(answer_ids))
-            if args.ignore_pad_labels:
-                pad_ids = [SP["padding"]] * pad_len
-                pad_labels = [-100] * pad_len
-            else:
-                pad_ids, pad_labels = _mask_codes([SP["padding"]] * pad_len, mode=args.answer_mask_mode, force_mask=True)
-            input_ids = inst_ids + [SP["answer_start"]] + answer_ids + pad_ids
-            labels = [-100] * len(inst_ids) + [-100] + answer_labels + pad_labels
-            if len(input_ids) > int(args.max_seq_len):
-                input_ids = input_ids[: int(args.max_seq_len)]
-                labels = labels[: int(args.max_seq_len)]
-            else:
-                padding = int(args.max_seq_len) - len(input_ids)
-                input_ids += [SP["padding"]] * padding
-                labels += [-100] * padding
-            loss = model(input_ids=[input_ids], labels=[labels])
+            input_ids, labels = _prepare_lumina_lora_batch(torch, tokenizer, add_break_line, row, args)
+            loss = _call_model_loss(torch, model, input_ids, labels)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -317,6 +395,7 @@ def train_lumina_lora_smoke(args):
         "answer_mask_mode": str(args.answer_mask_mode),
         "ignore_pad_labels": bool(args.ignore_pad_labels),
         "torch_dtype": str(args.torch_dtype),
+        "device_map": str(args.device_map),
         "gradient_checkpointing": bool(args.gradient_checkpointing),
         "gradient_checkpointing_report": gradient_checkpointing_report,
         "device": device,
@@ -348,6 +427,11 @@ def build_parser():
     parser.add_argument("--lora-dropout", type=float, default=0.05)
     parser.add_argument("--target-modules", default="q_proj,v_proj,k_proj,o_proj,gate_proj,up_proj,down_proj")
     parser.add_argument("--torch-dtype", default="bfloat16", choices=["auto", "float32", "fp32", "bfloat16", "bf16", "float16", "fp16"])
+    parser.add_argument(
+        "--device-map",
+        default="auto",
+        help="Model device_map for single-process training. Use 'none' under torchrun/DDP.",
+    )
     parser.add_argument("--gradient-checkpointing", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument(
         "--gradient-checkpointing-fallback",

@@ -18,6 +18,7 @@ def build_parser():
     parser.add_argument("--max-seq-len", type=int, default=None)
     parser.add_argument("--target-modules", default=None)
     parser.add_argument("--torch-dtype", default=None)
+    parser.add_argument("--device-map", default=None)
     parser.add_argument("--gradient-checkpointing", action=argparse.BooleanOptionalAction, default=None)
     parser.add_argument("--gradient-checkpointing-fallback", choices=["auto", "off", "force"], default=None)
     return parser
@@ -41,6 +42,7 @@ def main(argv=None):
         "max_seq_len",
         "target_modules",
         "torch_dtype",
+        "device_map",
         "gradient_checkpointing",
         "gradient_checkpointing_fallback",
     ):

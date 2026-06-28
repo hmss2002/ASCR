@@ -13,6 +13,7 @@ def build_parser():
     parser.add_argument("--max-selected-cells", type=int, default=16)
     parser.add_argument("--top-k", type=int, default=4)
     parser.add_argument("--limit", type=int, default=8)
+    parser.add_argument("--sample-offset", type=int, default=0)
     parser.add_argument("--repo-path", default=os.environ.get("LUMINA_REPO", "third_party/Lumina-DiMOO"))
     parser.add_argument("--checkpoint-path", default=os.environ.get("LUMINA_MODEL_PATH", "models/lumina-dimoo"))
     parser.add_argument("--device", default="cuda")
@@ -34,6 +35,7 @@ def main(argv=None):
         max_selected_cells=args.max_selected_cells,
         top_k=args.top_k,
         limit=args.limit,
+        sample_offset=args.sample_offset,
         input_mode="decoded_image",
         repo_path=args.repo_path,
         checkpoint_path=args.checkpoint_path,

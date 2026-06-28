@@ -86,6 +86,19 @@ def _engine(config, lora_path=None, mock=False):
     )
 
 
+def _maybe_attach_lora(engine, lora_path):
+    if not lora_path or isinstance(engine, MockLuminaEngine):
+        return engine
+    if getattr(engine, "lora_path", None) == str(lora_path):
+        return engine
+    # If the heavy base model is already loaded, mutating LoRA in-place is risky.
+    # Keep this path explicit so the server can choose memory vs isolation.
+    if getattr(engine, "_model", None) is None:
+        engine.lora_path = str(lora_path)
+        return engine
+    return None
+
+
 def run_stage5_loop(
     prompt,
     output_dir,
@@ -107,8 +120,12 @@ def run_stage5_loop(
     lora_path = lora_path or config.get("lora_path")
     token_grid_size = int(config.get("token_grid_size", (config.get("generator") or {}).get("token_grid_size", 64)))
 
-    gen_engine = _engine(config, mock=mock)
-    mmu_engine = _engine(config, lora_path=lora_path, mock=mock)
+    share_engine = bool(config.get("share_engine", True))
+    gen_engine = _engine(config, lora_path=lora_path if share_engine else None, mock=mock)
+    mmu_engine = gen_engine if share_engine else _engine(config, lora_path=lora_path, mock=mock)
+    if not share_engine:
+        attached = _maybe_attach_lora(mmu_engine, lora_path)
+        mmu_engine = attached or mmu_engine
     clean_vq_ids = gen_engine.generate(prompt, seed=seed)
     clean_path = output_dir / "clean.ppm"
     gen_engine.decode_to(clean_vq_ids, clean_path)
@@ -145,6 +162,7 @@ def run_stage5_loop(
         "prompt": prompt,
         "seed": seed,
         "corruption_type": corruption_type,
+        "share_engine": share_engine,
         "grid_size": grid_size,
         "token_grid_size": token_grid_size,
         "target_cells": target_cells,
@@ -202,4 +220,3 @@ def main(argv=None):
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
