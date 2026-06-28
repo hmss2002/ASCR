@@ -31,7 +31,14 @@ export LUMINA_REPO=${LUMINA_REPO:-third_party/Lumina-DiMOO}
 export LUMINA_MODEL_PATH=${LUMINA_MODEL_PATH:-models/lumina-dimoo}
 CONFIG=${CONFIG:-configs/stage4/self_corrupt/mmu_lora_train_hard64_grid8_vq_tokens_l40s_1024px_gc_adam8bit.yaml}
 NPROC=${NPROC:-$(bash scripts/slurm/dynamic_gpu_detect.sh --count)}
+TORCHRUN_ARGS=(--config "$CONFIG")
+[[ -n "${DATA_JSONL:-}" ]] && TORCHRUN_ARGS+=(--data-jsonl "$DATA_JSONL")
+[[ -n "${OUTPUT_DIR:-}" ]] && TORCHRUN_ARGS+=(--output-dir "$OUTPUT_DIR")
+[[ -n "${EPOCHS:-}" ]] && TORCHRUN_ARGS+=(--epochs "$EPOCHS")
+[[ -n "${LIMIT:-}" ]] && TORCHRUN_ARGS+=(--limit "$LIMIT")
+[[ -n "${RESUME_FROM_ADAPTER:-}" ]] && TORCHRUN_ARGS+=(--resume-from-adapter "$RESUME_FROM_ADAPTER")
+[[ -n "${CHECKPOINT_EVERY_EPOCHS:-}" ]] && TORCHRUN_ARGS+=(--checkpoint-every-epochs "$CHECKPOINT_EVERY_EPOCHS")
 
 # Real DDP: each rank owns one full Lumina+LoRA replica, uses DistributedSampler,
 # and rank 0 is the only writer.
-torchrun --nproc_per_node="$NPROC" -m ascr.cli.stage4_train_mmu_lora_ddp --config "$CONFIG"
+torchrun --nproc_per_node="$NPROC" -m ascr.cli.stage4_train_mmu_lora_ddp "${TORCHRUN_ARGS[@]}"

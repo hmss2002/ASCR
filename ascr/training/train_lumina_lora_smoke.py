@@ -171,6 +171,74 @@ def _call_model_loss(torch, model, input_ids, labels, device=None):
     return _extract_loss(model(input_ids=input_ids, labels=labels))
 
 
+def _lora_parameter_report(model, sample_limit=32):
+    trainable = []
+    lora = []
+    for name, parameter in model.named_parameters():
+        if getattr(parameter, "requires_grad", False):
+            trainable.append((name, int(parameter.numel())))
+        if "lora_" in name.lower():
+            lora.append((name, int(parameter.numel()), bool(getattr(parameter, "requires_grad", False))))
+    return {
+        "trainable_tensor_count": len(trainable),
+        "trainable_parameter_count": sum(size for _name, size in trainable),
+        "lora_tensor_count": len(lora),
+        "lora_trainable_tensor_count": sum(1 for _name, _size, trainable_flag in lora if trainable_flag),
+        "lora_parameter_count": sum(size for _name, size, _trainable_flag in lora),
+        "trainable_names_sample": [name for name, _size in trainable[:sample_limit]],
+        "lora_names_sample": [name for name, _size, _trainable_flag in lora[:sample_limit]],
+    }
+
+
+def _force_lora_trainable(model):
+    changed = 0
+    for name, parameter in model.named_parameters():
+        if "lora_" in name.lower() and not getattr(parameter, "requires_grad", False):
+            parameter.requires_grad_(True)
+            changed += 1
+    return changed
+
+
+def _trainable_parameters(model):
+    params = [parameter for parameter in model.parameters() if getattr(parameter, "requires_grad", False)]
+    if not params:
+        report = _lora_parameter_report(model)
+        raise RuntimeError(f"No trainable LoRA parameters found after PEFT setup: {json.dumps(report, sort_keys=True)}")
+    return params
+
+
+def _apply_lora_adapter(LoraConfig, TaskType, get_peft_model, model, args):
+    resume_from_adapter = getattr(args, "resume_from_adapter", None)
+    if resume_from_adapter:
+        from peft import PeftModel
+
+        model = PeftModel.from_pretrained(model, str(resume_from_adapter), is_trainable=True)
+    else:
+        lora_config = LoraConfig(
+            task_type=TaskType.CAUSAL_LM,
+            r=int(args.lora_r),
+            lora_alpha=int(args.lora_alpha),
+            lora_dropout=float(args.lora_dropout),
+            target_modules=[part.strip() for part in str(args.target_modules).split(",") if part.strip()],
+        )
+        model = get_peft_model(model, lora_config)
+    forced_trainable_count = _force_lora_trainable(model)
+    report = _lora_parameter_report(model)
+    report["resume_from_adapter"] = str(resume_from_adapter) if resume_from_adapter else None
+    report["forced_trainable_count"] = forced_trainable_count
+    if report["trainable_tensor_count"] <= 0 or report["lora_trainable_tensor_count"] <= 0:
+        raise RuntimeError(f"PEFT setup produced no trainable LoRA tensors: {json.dumps(report, sort_keys=True)}")
+    return model, report
+
+
+def _save_epoch_checkpoint(model, tokenizer, output_dir, epoch):
+    checkpoint_dir = Path(output_dir) / "checkpoints" / f"epoch_{int(epoch):04d}"
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    model.save_pretrained(checkpoint_dir)
+    tokenizer.save_pretrained(checkpoint_dir)
+    return str(checkpoint_dir)
+
+
 def _prepare_lumina_lora_batch(torch, tokenizer, add_break_line, row, args, device=None):
     with open(row["user_image"], "rb") as handle:
         image_payload = pickle.load(handle)
@@ -336,14 +404,7 @@ def train_lumina_lora_smoke(args):
             model,
             mode=args.gradient_checkpointing_fallback,
         )
-    lora_config = LoraConfig(
-        task_type=TaskType.CAUSAL_LM,
-        r=int(args.lora_r),
-        lora_alpha=int(args.lora_alpha),
-        lora_dropout=float(args.lora_dropout),
-        target_modules=[part.strip() for part in str(args.target_modules).split(",") if part.strip()],
-    )
-    model = get_peft_model(model, lora_config)
+    model, lora_parameter_report = _apply_lora_adapter(LoraConfig, TaskType, get_peft_model, model, args)
     model.train()
     rows = list(_jsonl_rows(args.data_jsonl))
     if args.limit is not None:
@@ -353,11 +414,12 @@ def train_lumina_lora_smoke(args):
     optimizer = _build_optimizer(
         torch,
         args.optimizer,
-        model.parameters(),
+        _trainable_parameters(model),
         lr=args.lr,
         weight_decay=args.weight_decay,
     )
     losses = []
+    checkpoints = []
     for epoch in range(int(args.epochs)):
         random.shuffle(rows)
         total = 0.0
@@ -371,6 +433,8 @@ def train_lumina_lora_smoke(args):
             total += value
             losses.append({"epoch": epoch, "step": step, "loss": value})
         print(f"epoch {epoch}: avg_loss={total / max(1, len(rows)):.6f}")
+        if int(args.checkpoint_every_epochs or 0) > 0 and (epoch + 1) % int(args.checkpoint_every_epochs) == 0:
+            checkpoints.append(_save_epoch_checkpoint(model, tokenizer, args.output_dir, epoch + 1))
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     model.save_pretrained(output_dir)
@@ -398,6 +462,10 @@ def train_lumina_lora_smoke(args):
         "device_map": str(args.device_map),
         "gradient_checkpointing": bool(args.gradient_checkpointing),
         "gradient_checkpointing_report": gradient_checkpointing_report,
+        "lora_parameter_report": lora_parameter_report,
+        "resume_from_adapter": str(args.resume_from_adapter) if args.resume_from_adapter else None,
+        "checkpoint_every_epochs": int(args.checkpoint_every_epochs or 0),
+        "checkpoints": checkpoints,
         "device": device,
         "losses": losses,
         "final_loss": losses[-1]["loss"] if losses else None,
@@ -426,6 +494,8 @@ def build_parser():
     parser.add_argument("--lora-alpha", type=int, default=16)
     parser.add_argument("--lora-dropout", type=float, default=0.05)
     parser.add_argument("--target-modules", default="q_proj,v_proj,k_proj,o_proj,gate_proj,up_proj,down_proj")
+    parser.add_argument("--resume-from-adapter", default=None)
+    parser.add_argument("--checkpoint-every-epochs", type=int, default=0)
     parser.add_argument("--torch-dtype", default="bfloat16", choices=["auto", "float32", "fp32", "bfloat16", "bf16", "float16", "fp16"])
     parser.add_argument(
         "--device-map",

@@ -11,13 +11,17 @@ import random
 from ascr.cli.stage4_train_mmu_lora import build_parser as build_stage4_parser
 from ascr.core.config import load_config
 from ascr.training.train_lumina_lora_smoke import (
+    _apply_lora_adapter,
     _build_optimizer,
     _call_model_loss,
     _configure_gradient_checkpointing,
     _dtype_value,
+    _lora_parameter_report,
     _jsonl_rows,
     _load_training_stack,
     _prepare_lumina_lora_batch,
+    _save_epoch_checkpoint,
+    _trainable_parameters,
     build_parser as build_lora_parser,
 )
 
@@ -49,6 +53,8 @@ def _resolve_lora_args(argv=None):
         "target_modules",
         "torch_dtype",
         "device_map",
+        "resume_from_adapter",
+        "checkpoint_every_epochs",
         "gradient_checkpointing",
         "gradient_checkpointing_fallback",
     ):
@@ -61,6 +67,33 @@ def _resolve_lora_args(argv=None):
 
 def _ddp_loss(torch, model, input_ids, labels, device):
     return _call_model_loss(torch, model, input_ids, labels, device=device)
+
+
+def _assert_rank_consistent_lora(dist, env, report, output_dir):
+    reports = [None for _ in range(env["world_size"])]
+    dist.all_gather_object(reports, report)
+    keys = ("trainable_tensor_count", "trainable_parameter_count", "lora_tensor_count", "lora_trainable_tensor_count")
+    expected = {key: reports[0].get(key) for key in keys}
+    mismatches = [
+        {"rank": index, "report": item}
+        for index, item in enumerate(reports)
+        if any(item.get(key) != expected[key] for key in keys)
+    ]
+    if mismatches:
+        payload = {
+            "schema_version": "ascr.lumina_lora_ddp.rank_consistency_error.v1",
+            "expected": expected,
+            "reports": reports,
+            "mismatches": mismatches,
+        }
+        if env["rank"] == 0:
+            path = Path(output_dir) / "ddp_rank_consistency_error.json"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        raise RuntimeError(f"PEFT/DDP rank parameter mismatch before DDP wrapping: {json.dumps(payload, sort_keys=True)}")
+    if report.get("trainable_tensor_count", 0) <= 0 or report.get("lora_trainable_tensor_count", 0) <= 0:
+        raise RuntimeError(f"Rank {env['rank']} has no trainable LoRA tensors before DDP wrapping: {json.dumps(report, sort_keys=True)}")
+    return reports
 
 
 def train_lumina_lora_ddp(argv=None):
@@ -88,22 +121,20 @@ def train_lumina_lora_ddp(argv=None):
 
     tokenizer = AutoTokenizer.from_pretrained(args.checkpoint_path, trust_remote_code=True)
     model = model_cls.from_pretrained(args.checkpoint_path, torch_dtype=_dtype_value(torch, args.torch_dtype))
+    model, lora_parameter_report = _apply_lora_adapter(LoraConfig, TaskType, get_peft_model, model, args)
     model = model.to(device)
     gradient_checkpointing_report = {"requested": bool(args.gradient_checkpointing), "backend": "disabled", "wrapped_module_count": 0}
     if args.gradient_checkpointing:
+        if hasattr(model, "enable_input_require_grads"):
+            model.enable_input_require_grads()
         gradient_checkpointing_report = _configure_gradient_checkpointing(
             torch,
             model,
             mode=args.gradient_checkpointing_fallback,
         )
-    lora_config = LoraConfig(
-        task_type=TaskType.CAUSAL_LM,
-        r=int(args.lora_r),
-        lora_alpha=int(args.lora_alpha),
-        lora_dropout=float(args.lora_dropout),
-        target_modules=[part.strip() for part in str(args.target_modules).split(",") if part.strip()],
-    )
-    model = get_peft_model(model, lora_config).to(device)
+    lora_parameter_report = _lora_parameter_report(model)
+    lora_parameter_report["resume_from_adapter"] = str(args.resume_from_adapter) if args.resume_from_adapter else None
+    rank_lora_reports = _assert_rank_consistent_lora(dist, env, lora_parameter_report, args.output_dir)
     model.train()
     ddp_model = DistributedDataParallel(
         model,
@@ -120,11 +151,12 @@ def train_lumina_lora_ddp(argv=None):
     optimizer = _build_optimizer(
         torch,
         args.optimizer,
-        ddp_model.parameters(),
+        _trainable_parameters(ddp_model),
         lr=args.lr,
         weight_decay=args.weight_decay,
     )
     local_losses = []
+    checkpoints = []
     for epoch in range(int(args.epochs)):
         sampler.set_epoch(epoch)
         total = 0.0
@@ -152,6 +184,8 @@ def train_lumina_lora_ddp(argv=None):
         avg_tensor /= env["world_size"]
         if env["rank"] == 0:
             print(f"epoch {epoch}: ddp_avg_loss={float(avg_tensor.item()):.6f}")
+            if int(args.checkpoint_every_epochs or 0) > 0 and (epoch + 1) % int(args.checkpoint_every_epochs) == 0:
+                checkpoints.append(_save_epoch_checkpoint(ddp_model.module, tokenizer, args.output_dir, epoch + 1))
     gathered_losses = [None for _ in range(env["world_size"])]
     dist.all_gather_object(gathered_losses, local_losses)
     manifest = None
@@ -185,6 +219,11 @@ def train_lumina_lora_ddp(argv=None):
             "device_map": "none",
             "gradient_checkpointing": bool(args.gradient_checkpointing),
             "gradient_checkpointing_report": gradient_checkpointing_report,
+            "lora_parameter_report": lora_parameter_report,
+            "rank_lora_reports": rank_lora_reports,
+            "resume_from_adapter": str(args.resume_from_adapter) if args.resume_from_adapter else None,
+            "checkpoint_every_epochs": int(args.checkpoint_every_epochs or 0),
+            "checkpoints": checkpoints,
             "losses": losses,
             "final_loss": losses[-1]["loss"] if losses else None,
         }

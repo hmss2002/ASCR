@@ -4339,3 +4339,49 @@ If QOS blocks → wait and retry.
 3. **Add --data-jsonl/--output-dir to DDP sbatch** (unblocks Hard256 8-GPU)
 4. **Scripts 1-6 as bandwidth allows**
 5. **Ask cluster admin for QOS increase (8→24)**
+
+---
+
+## 2026-06-29 00:05 HKT - Windows Codex: bugfix + Hard256 automation pack
+
+### Sync
+- Fast-forwarded `main` to server branch `feat/stage4-gc-fallback-server` at
+  `3ae6709`, importing the DDP PEFT rank inconsistency report, Stage5 OOM note,
+  DDP sbatch override request, and Hard256 automation script list.
+
+### Bug fixes
+- Stage-4 DDP LoRA now applies PEFT before DDP, forces `lora_*` tensors
+  trainable, uses only trainable parameters in the optimizer, and gathers a
+  per-rank LoRA parameter signature before wrapping with
+  `DistributedDataParallel`. If ranks differ, rank 0 writes
+  `ddp_rank_consistency_error.json` with the full report instead of failing
+  later with the opaque PyTorch 0/256-parameter error.
+- Stage-4 trainers now support `--checkpoint-every-epochs` and
+  `--resume-from-adapter`; DDP rank 0 saves epoch adapter checkpoints under
+  `checkpoints/epoch_XXXX`.
+- `jobs/stage4/train_mmu_lora_ddp.sbatch` now propagates `DATA_JSONL`,
+  `OUTPUT_DIR`, `EPOCHS`, `LIMIT`, `RESUME_FROM_ADAPTER`, and
+  `CHECKPOINT_EVERY_EPOCHS` into the torchrun CLI.
+- Stage-4 multi-GPU eval summarize now merges shard outputs with
+  `ascr.cli.stage4_merge_probe_shards` and recomputes aggregate metrics, rather
+  than treating shards as a cross-grid comparison.
+
+### Scripts/configs added
+- `ascr/cli/stage4_generate_config.py --batch` supports `--dataset hard256`.
+- Added Hard256 grid4/8/16 SFT, train, and probe configs under
+  `configs/stage4/self_corrupt/`.
+- Added `scripts/training/run_stage4_recovery_submit.sh` for GPU-count fallback
+  submit/recover flows (`8 4 1` by default).
+- Added `scripts/training/run_hard256_full_pipeline.sh` for config generation,
+  train submit, eval submit, summary, and registry steps.
+
+### Server validation requested
+```bash
+MODE=plan bash scripts/training/run_hard256_full_pipeline.sh
+MODE=generate_configs bash scripts/training/run_hard256_full_pipeline.sh
+CONFIG=configs/stage4/self_corrupt/mmu_lora_train_hard256_grid4_vq_tokens_l40s_1024_gc_adam8bit.yaml \
+  DATA_JSONL=outputs/stage4_self_corrupt/mmu_lora_hard256_curriculum/grid4/vq_tokens/lumina_sft/train.jsonl \
+  OUTPUT_DIR=outputs/stage4_self_corrupt/mmu_lora_hard256_curriculum/grid4/vq_tokens/lora_l40s_1024px_gc_adam8bit \
+  EPOCHS=1 LIMIT=8 CHECKPOINT_EVERY_EPOCHS=1 \
+  sbatch --gres=gpu:8 jobs/stage4/train_mmu_lora_ddp.sbatch
+```

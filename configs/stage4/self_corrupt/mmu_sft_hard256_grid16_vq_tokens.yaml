@@ -1,0 +1,12 @@
+dataset: outputs/stage3_self_corrupt/datasets/locality_hard256_v1/dataset.jsonl
+output_dir: outputs/stage4_self_corrupt/mmu_lora_hard256_curriculum/grid16/vq_tokens/sft
+grid_size: 16
+max_selected_cells: 16
+eval_mode: holdout
+train_ratio: 0.75
+seed: 0
+limit: null
+project_root: .
+input_mode: vq_tokens
+target_schema: localization_cells
+prompt_variant: schema_example

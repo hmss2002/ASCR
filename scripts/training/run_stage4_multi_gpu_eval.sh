@@ -24,14 +24,15 @@ mkdir -p "$OUTPUT_ROOT" logs
 
 if [[ "$MODE" == "summarize" ]]; then
   shopt -s nullglob
-  summaries=("$OUTPUT_ROOT"/gpu_*/summary.json)
-  if [[ ${#summaries[@]} -eq 0 ]]; then
-    echo "No summary files found under $OUTPUT_ROOT/gpu_*/summary.json" >&2
+  shard_dirs=("$OUTPUT_ROOT"/gpu_*)
+  if [[ ${#shard_dirs[@]} -eq 0 ]]; then
+    echo "No shard dirs found under $OUTPUT_ROOT/gpu_*" >&2
     exit 2
   fi
-  "$PYTHON_BIN" -m ascr.cli.stage4_cross_grid_compare \
-    --summaries "${summaries[@]}" \
-    --output-dir "$OUTPUT_ROOT/summary"
+  "$PYTHON_BIN" -m ascr.cli.stage4_merge_probe_shards \
+    --shard-dirs "${shard_dirs[@]}" \
+    --output-dir "$OUTPUT_ROOT" \
+    --label "$(basename "$OUTPUT_ROOT")"
   exit 0
 fi
 

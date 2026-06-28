@@ -14,6 +14,8 @@ from ascr.training.stage4_mmu_lora import (
 )
 from ascr.cli.stage4_probe_sweep import build_sweep_plan, summarize_sweep, write_summary as write_sweep_summary
 from ascr.cli.stage4_batch_train import main as stage4_batch_train_main
+from ascr.cli.stage4_generate_config import build_config
+from ascr.cli.stage4_merge_probe_shards import merge_probe_shards
 from ascr.cli.stage4_server_campaign import build_campaign_plan, write_campaign_outputs
 from ascr.cli.stage4_compare_input_modes import compare_probe_summaries, write_comparison
 from ascr.cli.stage4_analyze_probe_failures import analyze_probe_failures, write_outputs as write_failure_outputs
@@ -504,6 +506,48 @@ class Stage4MmuLoraTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(manifest["results"][0]["kind"], "train")
         self.assertTrue(manifest["results"][0]["command"][0])
+
+    def test_stage4_generate_config_supports_hard256(self):
+        sft = build_config(4, dataset="hard256", kind="sft")
+        train = build_config(4, dataset="hard256", kind="train")
+        probe = build_config(8, dataset="hard256", kind="probe")
+        self.assertIn("locality_hard256_v1", sft["dataset"])
+        self.assertIn("mmu_lora_hard256_curriculum/grid4", train["output_dir"])
+        self.assertIn("mmu_lora_hard256_curriculum/grid4", train["data_jsonl"])
+        self.assertEqual(train["checkpoint_every_epochs"], 1)
+        self.assertIn("locality_hard256_v1", probe["dataset"])
+        self.assertEqual(probe["grid_size"], 8)
+
+    def test_merge_probe_shards_recomputes_summary(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            for index, sample_id in enumerate(["a", "b"]):
+                shard = root / f"gpu_{index}"
+                shard.mkdir()
+                (shard / "summary.json").write_text(json.dumps({
+                    "grid_size": 2,
+                    "top_k": 1,
+                    "input_mode": "vq_tokens",
+                    "target_schema": "localization_cells",
+                    "prompt_variant": "schema_example",
+                    "lora_path": "adapter",
+                }), encoding="utf-8")
+                write_jsonl(shard / "probe_rows.jsonl", [{
+                    "sample_id": sample_id,
+                    "prompt": "prompt",
+                    "corruption_type": "block",
+                    "grid_size": 2,
+                    "status": "parsed",
+                    "target_cells": ["A1"],
+                    "predicted_cells": ["A1"] if sample_id == "a" else [],
+                    "latency_ms": 10,
+                }])
+            summary = merge_probe_shards([root / "gpu_0", root / "gpu_1"], root / "merged")
+            summary_exists = (root / "merged" / "summary.json").exists()
+        self.assertEqual(summary["row_count"], 2)
+        self.assertEqual(summary["parse_rate"], 1.0)
+        self.assertEqual(summary["metrics"]["hit_any_rate"], 0.5)
+        self.assertTrue(summary_exists)
 
     def test_probe_sweep_plan_and_summary(self):
         with tempfile.TemporaryDirectory() as temp_dir:

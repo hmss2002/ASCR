@@ -19,6 +19,8 @@ def build_parser():
     parser.add_argument("--target-modules", default=None)
     parser.add_argument("--torch-dtype", default=None)
     parser.add_argument("--device-map", default=None)
+    parser.add_argument("--resume-from-adapter", default=None)
+    parser.add_argument("--checkpoint-every-epochs", type=int, default=None)
     parser.add_argument("--gradient-checkpointing", action=argparse.BooleanOptionalAction, default=None)
     parser.add_argument("--gradient-checkpointing-fallback", choices=["auto", "off", "force"], default=None)
     return parser
@@ -43,6 +45,8 @@ def main(argv=None):
         "target_modules",
         "torch_dtype",
         "device_map",
+        "resume_from_adapter",
+        "checkpoint_every_epochs",
         "gradient_checkpointing",
         "gradient_checkpointing_fallback",
     ):

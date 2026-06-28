@@ -6,6 +6,18 @@ import argparse
 from pathlib import Path
 
 
+DATASETS = {
+    "hard64": {
+        "dataset": "outputs/stage3_self_corrupt/datasets/locality_hard64_v1/dataset.jsonl",
+        "base": "outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum",
+    },
+    "hard256": {
+        "dataset": "outputs/stage3_self_corrupt/datasets/locality_hard256_v1/dataset.jsonl",
+        "base": "outputs/stage4_self_corrupt/mmu_lora_hard256_curriculum",
+    },
+}
+
+
 def _dump_yaml(path, payload):
     lines = []
     for key, value in payload.items():
@@ -22,12 +34,15 @@ def _dump_yaml(path, payload):
     return str(path)
 
 
-def build_config(grid, profile="l40s_1024_gc", prompt_variant="schema_example", kind="train"):
+def build_config(grid, profile="l40s_1024_gc", prompt_variant="schema_example", kind="train", dataset="hard64"):
     grid = int(grid)
-    base_dir = f"outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/grid{grid}/vq_tokens"
+    if dataset not in DATASETS:
+        raise ValueError(f"Unsupported dataset: {dataset}")
+    dataset_meta = DATASETS[dataset]
+    base_dir = f"{dataset_meta['base']}/grid{grid}/vq_tokens"
     if kind == "sft":
         return {
-            "dataset": "outputs/stage3_self_corrupt/datasets/locality_hard64_v1/dataset.jsonl",
+            "dataset": dataset_meta["dataset"],
             "output_dir": f"{base_dir}/sft",
             "grid_size": grid,
             "max_selected_cells": grid,
@@ -44,7 +59,7 @@ def build_config(grid, profile="l40s_1024_gc", prompt_variant="schema_example", 
         suffix = "l40s_1024px_gc" if profile == "l40s_1024_gc" else "l40s"
         adapter = f"lora_{suffix}_adam8bit" if profile == "l40s_1024_gc" else "lora_l40s"
         return {
-            "dataset": "outputs/stage3_self_corrupt/datasets/locality_hard64_v1/dataset.jsonl",
+            "dataset": dataset_meta["dataset"],
             "output_dir": f"{base_dir}/probe_lora_{suffix}_eval",
             "grid_size": grid,
             "max_selected_cells": grid,
@@ -92,27 +107,63 @@ def build_config(grid, profile="l40s_1024_gc", prompt_variant="schema_example", 
         "gradient_checkpointing_fallback": "force",
         "answer_mask_mode": "all",
         "ignore_pad_labels": True,
+        "checkpoint_every_epochs": 1,
         "seed": 0,
     }
 
 
 def build_parser():
     parser = argparse.ArgumentParser(description="Generate Stage-4 MMU LoRA YAML configs.")
-    parser.add_argument("--grid", type=int, required=True)
+    parser.add_argument("--grid", type=int, default=None)
+    parser.add_argument("--batch", action="store_true")
+    parser.add_argument("--grids", default="4,8,16")
+    parser.add_argument("--dataset", choices=sorted(DATASETS), default="hard64")
     parser.add_argument("--profile", default="l40s_1024_gc")
     parser.add_argument("--prompt-variant", default="schema_example")
     parser.add_argument("--kind", choices=["train", "probe", "sft"], default="train")
-    parser.add_argument("--output", required=True)
+    parser.add_argument("--kinds", default="sft,train,probe")
+    parser.add_argument("--output", default=None)
+    parser.add_argument("--output-dir", default="configs/stage4/self_corrupt")
     return parser
+
+
+def _parse_csv(value, cast=str):
+    return [cast(part.strip()) for part in str(value).replace(",", " ").split() if part.strip()]
+
+
+def _batch_output_name(dataset, grid, kind, profile):
+    if kind == "sft":
+        return f"mmu_sft_{dataset}_grid{grid}_vq_tokens.yaml"
+    if kind == "train":
+        return f"mmu_lora_train_{dataset}_grid{grid}_vq_tokens_{profile}_adam8bit.yaml"
+    if kind == "probe":
+        return f"mmu_probe_lora_{dataset}_grid{grid}_vq_tokens_{profile}.yaml"
+    raise ValueError(f"Unsupported kind: {kind}")
 
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
-    path = _dump_yaml(args.output, build_config(args.grid, profile=args.profile, prompt_variant=args.prompt_variant, kind=args.kind))
+    if args.batch:
+        paths = []
+        for grid in _parse_csv(args.grids, int):
+            for kind in _parse_csv(args.kinds, str):
+                output = Path(args.output_dir) / _batch_output_name(args.dataset, grid, kind, args.profile)
+                paths.append(_dump_yaml(
+                    output,
+                    build_config(grid, profile=args.profile, prompt_variant=args.prompt_variant, kind=kind, dataset=args.dataset),
+                ))
+        for path in paths:
+            print(path)
+        return 0
+    if args.grid is None or args.output is None:
+        raise SystemExit("--grid and --output are required unless --batch is used")
+    path = _dump_yaml(
+        args.output,
+        build_config(args.grid, profile=args.profile, prompt_variant=args.prompt_variant, kind=args.kind, dataset=args.dataset),
+    )
     print(path)
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

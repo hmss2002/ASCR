@@ -43,6 +43,9 @@ remaining-scripts request.
 - `ascr/cli/stage4_hyperparameter_search.py`
 - `ascr/cli/stage4_adapter_registry.py`
 - `ascr/cli/stage4_generate_config.py`
+- `ascr/cli/stage4_merge_probe_shards.py`
+- `scripts/training/run_stage4_recovery_submit.sh`
+- `scripts/training/run_hard256_full_pipeline.sh`
 
 ### Analysis and routing
 
@@ -127,6 +130,23 @@ Stage-4 grid batch train/probe in one allocation:
 python -m ascr.cli.stage4_batch_train --grids 4,8,16
 ```
 
+Hard256 full pipeline:
+
+```bash
+MODE=plan bash scripts/training/run_hard256_full_pipeline.sh
+MODE=generate_configs bash scripts/training/run_hard256_full_pipeline.sh
+MODE=submit_train bash scripts/training/run_hard256_full_pipeline.sh
+MODE=submit_eval bash scripts/training/run_hard256_full_pipeline.sh
+MODE=summarize bash scripts/training/run_hard256_full_pipeline.sh
+```
+
+Stage-4 training fallback submit:
+
+```bash
+MODE=submit CONFIG=configs/stage4/self_corrupt/mmu_lora_train_hard256_grid4_vq_tokens_l40s_1024_gc_adam8bit.yaml \
+  GPU_FALLBACKS="8 4 1" bash scripts/training/run_stage4_recovery_submit.sh
+```
+
 Stage-5 multi-prompt single-node run:
 
 ```bash
@@ -142,9 +162,12 @@ The Stage-5 multi-prompt wrapper also honors `GPU_IDS`, `GPU_COUNT`,
 
 - `stage4_train_mmu_lora_ddp` now builds one Lumina+LoRA replica per rank,
   wraps it with `DistributedDataParallel`, uses `DistributedSampler`, and only
-  saves from rank 0. It still needs server validation on a real 8-GPU node.
+  saves from rank 0. It now also validates LoRA trainable parameter signatures
+  across ranks before DDP wrapping and writes `ddp_rank_consistency_error.json`
+  if PEFT injection differs by rank. It still needs server validation on a real
+  8-GPU node.
 - `stage4_resume_training` skips complete adapters and relaunches interrupted
-  configs. Fine-grained mid-epoch checkpoints are not emitted yet.
+  configs from the latest epoch-level adapter checkpoint when available.
 - The current cluster has 100+ GPUs across many 8-GPU nodes; ASCR's operating
   philosophy is to request more resources for each suitable task and trade
   parallel GPU allocation for shorter wall-clock iteration time.
