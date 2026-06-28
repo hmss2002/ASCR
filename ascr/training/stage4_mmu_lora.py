@@ -30,10 +30,17 @@ INPUT_MODE_DECODED_IMAGE = "decoded_image"
 INPUT_MODE_BOTH = "both"
 TARGET_SCHEMA_SEMANTIC_EVALUATION = "semantic_evaluation"
 TARGET_SCHEMA_LOCALIZATION_CELLS = "localization_cells"
-PROMPT_VARIANT_DEFAULT = "default"
+PROMPT_VARIANT_LEGACY_DEFAULT = "default"
 PROMPT_VARIANT_MINIMAL_JSON = "minimal_json"
 PROMPT_VARIANT_SCHEMA_FIRST = "schema_first"
 PROMPT_VARIANT_SCHEMA_EXAMPLE = "schema_example"
+PROMPT_VARIANT_DEFAULT = PROMPT_VARIANT_SCHEMA_EXAMPLE
+PROMPT_VARIANT_CHOICES = [
+    PROMPT_VARIANT_SCHEMA_EXAMPLE,
+    PROMPT_VARIANT_LEGACY_DEFAULT,
+    PROMPT_VARIANT_MINIMAL_JSON,
+    PROMPT_VARIANT_SCHEMA_FIRST,
+]
 
 
 def normalise_input_mode(value, allow_both=False):
@@ -79,8 +86,10 @@ def normalise_target_schema(value):
 def normalise_prompt_variant(value):
     variant = str(value or PROMPT_VARIANT_DEFAULT).strip().lower().replace("-", "_")
     aliases = {
-        "default": PROMPT_VARIANT_DEFAULT,
-        "full": PROMPT_VARIANT_DEFAULT,
+        "default": PROMPT_VARIANT_LEGACY_DEFAULT,
+        "legacy": PROMPT_VARIANT_LEGACY_DEFAULT,
+        "legacy_default": PROMPT_VARIANT_LEGACY_DEFAULT,
+        "full": PROMPT_VARIANT_LEGACY_DEFAULT,
         "minimal": PROMPT_VARIANT_MINIMAL_JSON,
         "minimal_json": PROMPT_VARIANT_MINIMAL_JSON,
         "short": PROMPT_VARIANT_MINIMAL_JSON,
@@ -93,12 +102,7 @@ def normalise_prompt_variant(value):
         "few_shot": PROMPT_VARIANT_SCHEMA_EXAMPLE,
     }
     variant = aliases.get(variant, variant)
-    allowed = {
-        PROMPT_VARIANT_DEFAULT,
-        PROMPT_VARIANT_MINIMAL_JSON,
-        PROMPT_VARIANT_SCHEMA_FIRST,
-        PROMPT_VARIANT_SCHEMA_EXAMPLE,
-    }
+    allowed = set(PROMPT_VARIANT_CHOICES)
     if variant not in allowed:
         raise ValueError(f"Unsupported Stage-4 prompt_variant: {value!r}")
     return variant

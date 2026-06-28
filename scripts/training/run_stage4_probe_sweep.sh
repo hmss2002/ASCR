@@ -9,8 +9,8 @@ cd "$PROJECT_ROOT"
 PYTHON_BIN=${PYTHON_BIN:-python}
 CONFIG=${CONFIG:-configs/stage4/self_corrupt/mmu_probe_lora_hard64_grid4_vq_tokens_l40s_1024px_gc.yaml}
 OUTPUT_ROOT=${OUTPUT_ROOT:-outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/grid4/vq_tokens/probe_sweep_l40s_1024px_gc}
-PROMPT_VARIANTS=${PROMPT_VARIANTS:-default,minimal_json,schema_first,schema_example}
-MAX_NEW_TOKENS=${MAX_NEW_TOKENS:-128,384}
+PROMPT_VARIANTS=${PROMPT_VARIANTS:-schema_example}
+MAX_NEW_TOKENS=${MAX_NEW_TOKENS:-384,512}
 ANSWER_STEPS=${ANSWER_STEPS:-64}
 ANSWER_TEMPERATURES=${ANSWER_TEMPERATURES:-0.0}
 ANSWER_CFG_SCALES=${ANSWER_CFG_SCALES:-0.0}

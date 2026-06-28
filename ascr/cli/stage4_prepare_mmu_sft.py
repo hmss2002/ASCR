@@ -2,7 +2,11 @@ import argparse
 import json
 
 from ascr.core.config import load_config
-from ascr.training.stage4_mmu_lora import prepare_mmu_sft_dataset
+from ascr.training.stage4_mmu_lora import (
+    PROMPT_VARIANT_CHOICES,
+    PROMPT_VARIANT_DEFAULT,
+    prepare_mmu_sft_dataset,
+)
 
 
 def build_parser():
@@ -19,7 +23,7 @@ def build_parser():
     parser.add_argument("--project-root", default=".")
     parser.add_argument("--input-mode", choices=["vq_tokens", "decoded_image", "both"], default="vq_tokens")
     parser.add_argument("--target-schema", choices=["localization_cells", "semantic_evaluation"], default="localization_cells")
-    parser.add_argument("--prompt-variant", choices=["default", "minimal_json", "schema_first", "schema_example"], default="default")
+    parser.add_argument("--prompt-variant", choices=PROMPT_VARIANT_CHOICES, default=PROMPT_VARIANT_DEFAULT)
     return parser
 
 

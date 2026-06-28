@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 
 from ascr.core.config import load_config
-from ascr.training.stage4_mmu_lora import normalise_prompt_variant, run_mmu_localization_probe
+from ascr.training.stage4_mmu_lora import PROMPT_VARIANT_DEFAULT, normalise_prompt_variant, run_mmu_localization_probe
 
 
 def _created_at():
@@ -44,7 +44,7 @@ def build_sweep_plan(
     answer_cfg_scales=None,
     answer_block_lengths=None,
 ):
-    prompt_variants = [normalise_prompt_variant(item) for item in (prompt_variants or ["default"])]
+    prompt_variants = [normalise_prompt_variant(item) for item in (prompt_variants or [PROMPT_VARIANT_DEFAULT])]
     max_new_tokens = [int(item) for item in (max_new_tokens or [base_config.get("max_new_tokens", 384)])]
     answer_steps = [int(item) for item in (answer_steps or [base_config.get("answer_steps", 64)])]
     answer_temperatures = [float(item) for item in (answer_temperatures or [base_config.get("answer_temperature", 0.0)])]
@@ -103,7 +103,7 @@ def _run_combo(base_config, combo):
         input_mode=config.get("input_mode"),
         use_vq_tokens=bool(config.get("use_vq_tokens", True)),
         target_schema=config.get("target_schema", "localization_cells"),
-        prompt_variant=config.get("prompt_variant", "default"),
+        prompt_variant=config.get("prompt_variant", PROMPT_VARIANT_DEFAULT),
         lora_path=config.get("lora_path"),
         repo_path=config.get("repo_path", os.environ.get("LUMINA_REPO", "third_party/Lumina-DiMOO")),
         checkpoint_path=config.get("checkpoint_path", os.environ.get("LUMINA_MODEL_PATH", "models/lumina-dimoo")),
@@ -219,8 +219,8 @@ def build_parser():
     parser = argparse.ArgumentParser(description="Run or summarize Stage-4 prompt/decoding probe sweeps.")
     parser.add_argument("--config", default="configs/stage4/self_corrupt/mmu_probe_lora_hard64_grid4_vq_tokens_l40s_1024px_gc.yaml")
     parser.add_argument("--output-root", default="outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/grid4/vq_tokens/probe_sweep_l40s_1024px_gc")
-    parser.add_argument("--prompt-variants", default="default,minimal_json,schema_first,schema_example")
-    parser.add_argument("--max-new-tokens", default="128,384")
+    parser.add_argument("--prompt-variants", default=PROMPT_VARIANT_DEFAULT)
+    parser.add_argument("--max-new-tokens", default="384,512")
     parser.add_argument("--answer-steps", default="64")
     parser.add_argument("--answer-temperatures", default="0.0")
     parser.add_argument("--answer-cfg-scales", default="0.0")

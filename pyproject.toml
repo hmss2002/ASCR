@@ -51,6 +51,7 @@ ascr-stage4-analyze-probe-failures = "ascr.cli.stage4_analyze_probe_failures:mai
 ascr-stage4-build-run-registry = "ascr.cli.stage4_build_run_registry:main"
 ascr-stage4-decide-next = "ascr.cli.stage4_decide_next:main"
 ascr-stage4-probe-sweep = "ascr.cli.stage4_probe_sweep:main"
+ascr-stage4-server-campaign = "ascr.cli.stage4_server_campaign:main"
 ascr-train-lumina-evaluator = "ascr.training.train_lumina_evaluator:main"
 ascr-prepare-lumina-sft-data = "ascr.training.prepare_lumina_sft_data:main"
 ascr-train-lumina-lora-smoke = "ascr.training.train_lumina_lora_smoke:main"

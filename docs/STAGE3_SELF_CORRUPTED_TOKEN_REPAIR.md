@@ -1022,24 +1022,42 @@ invent JSON structure from scratch — it copies the example structure and
 fills in cell labels. The sweep confirmed that example-driven prompting
 is categorically better for structured output.
 
-**What needs cleanup (Windows Codex)**:
-- Scan all Stage 4 configs, CLIs, and scripts for `prompt_variant` references
-- Remove `default`, `minimal_json`, `schema_first` variants or gate them behind
-  an explicit `--legacy-prompt-variant` flag
-- Make `schema_example` the hard default (no `--prompt-variant` needed)
-- Update `stage4_prepare_mmu_sft.py` to default to `schema_example`
-- Update `stage4_mmu_localization_probe.py` to default to `schema_example`
-- Remove the sweep infrastructure (`stage4_probe_sweep.py`, sweep sbatch,
-  sweep shell runner) or repurpose it for other hyperparameter sweeps
-- Regenerate all existing SFT data with `schema_example` (server can do this
-  as a batch operation on the login node)
+**Windows Codex follow-up implemented (2026-06-28)**:
+- `stage4_prepare_mmu_sft.py`, `stage4_mmu_localization_probe.py`, and the
+  shared Stage-4 MMU helpers now default to `schema_example`.
+- Legacy variants (`default`, `minimal_json`, `schema_first`) remain explicit
+  choices for reproducibility, but omitted configs now follow the
+  `schema_example` policy.
+- The old probe sweep has been narrowed to a `schema_example` decoding-length
+  diagnostic (`384,512` tokens by default) instead of a prompt-selection tool.
+- Grid8/grid16 now have 1024px GC Adam8bit train/probe configs matching the
+  grid4 breakthrough config.
+- `PROFILE=l40s_1024_gc` in `run_stage4_curriculum.sh` dispatches grid4/8/16
+  schema-example curriculum runs through the existing Slurm array.
+- `scripts/training/run_stage4_server_campaign.sh` generates a server campaign
+  manifest and exact Slurm commands for one-shot or split-array execution.
 
 **Server action**: All new SFT data from now on uses `--prompt-variant schema_example`.
 Existing `default` SFT data under `outputs/` will be regenerated as needed.
 
-Prompt/decoding sweep is deprecated in favor of this decision. The sweep jobs
-(71524/71525) will still complete for reference data, but results will not
-change the direction.
+Prompt/decoding sweep is deprecated as a prompt-selection step. It is retained
+only as an optional schema-example decoding diagnostic if malformed JSON remains.
+
+Server campaign:
+
+```bash
+# Generate/read the plan without submitting jobs.
+bash scripts/training/run_stage4_server_campaign.sh
+
+# Submit grid4/grid8/grid16 as one Slurm array when QOS allows.
+MODE=submit_curriculum bash scripts/training/run_stage4_server_campaign.sh
+
+# If QOS rejects the combined array, submit one grid per job.
+MODE=split_curriculum bash scripts/training/run_stage4_server_campaign.sh
+
+# After jobs finish, build summaries/registry/next-action docs.
+MODE=summarize bash scripts/training/run_stage4_server_campaign.sh
+```
 
 ## Phase 5: ASCR Loop Integration
 

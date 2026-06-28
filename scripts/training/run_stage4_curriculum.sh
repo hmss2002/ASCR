@@ -34,10 +34,25 @@ config_for() {
     train:grid4:l40s) echo configs/stage4/self_corrupt/mmu_lora_train_hard64_grid4_vq_tokens_l40s.yaml ;;
     train:grid8:l40s) echo configs/stage4/self_corrupt/mmu_lora_train_hard64_grid8_vq_tokens_l40s.yaml ;;
     train:grid16:l40s) echo configs/stage4/self_corrupt/mmu_lora_train_hard64_grid16_vq_tokens_l40s.yaml ;;
+    train:grid4:l40s_1024_gc) echo configs/stage4/self_corrupt/mmu_lora_train_hard64_grid4_vq_tokens_l40s_1024px_gc_adam8bit.yaml ;;
+    train:grid8:l40s_1024_gc) echo configs/stage4/self_corrupt/mmu_lora_train_hard64_grid8_vq_tokens_l40s_1024px_gc_adam8bit.yaml ;;
+    train:grid16:l40s_1024_gc) echo configs/stage4/self_corrupt/mmu_lora_train_hard64_grid16_vq_tokens_l40s_1024px_gc_adam8bit.yaml ;;
     probe:grid4:l40s) echo configs/stage4/self_corrupt/mmu_probe_lora_hard64_grid4_vq_tokens_l40s.yaml ;;
     probe:grid8:l40s) echo configs/stage4/self_corrupt/mmu_probe_lora_hard64_grid8_vq_tokens_l40s.yaml ;;
     probe:grid16:l40s) echo configs/stage4/self_corrupt/mmu_probe_lora_hard64_grid16_vq_tokens_l40s.yaml ;;
+    probe:grid4:l40s_1024_gc) echo configs/stage4/self_corrupt/mmu_probe_lora_hard64_grid4_vq_tokens_l40s_1024px_gc.yaml ;;
+    probe:grid8:l40s_1024_gc) echo configs/stage4/self_corrupt/mmu_probe_lora_hard64_grid8_vq_tokens_l40s_1024px_gc.yaml ;;
+    probe:grid16:l40s_1024_gc) echo configs/stage4/self_corrupt/mmu_probe_lora_hard64_grid16_vq_tokens_l40s_1024px_gc.yaml ;;
     *) echo "Unsupported curriculum grid/profile/kind: grid${grid}/${PROFILE}/${kind}" >&2; return 2 ;;
+  esac
+}
+
+probe_dir_for() {
+  local grid=$1
+  case "$PROFILE" in
+    l40s_1024_gc) echo "$BASE_DIR/grid${grid}/vq_tokens/probe_lora_l40s_1024px_gc_eval" ;;
+    l40s) echo "$BASE_DIR/grid${grid}/vq_tokens/probe_lora_l40s_eval" ;;
+    *) echo "Unsupported curriculum summary profile: $PROFILE" >&2; return 2 ;;
   esac
 }
 
@@ -79,8 +94,8 @@ if [[ "$RUN_SUMMARY" == "1" ]]; then
   SUMMARY_ARGS=()
   LABEL_ARGS=()
   for grid in $GRIDS; do
-    SUMMARY_ARGS+=("$BASE_DIR/grid${grid}/vq_tokens/probe_lora_l40s_eval/summary.json")
-    LABEL_ARGS+=("grid${grid}_vq_tokens_l40s")
+    SUMMARY_ARGS+=("$(probe_dir_for "$grid")/summary.json")
+    LABEL_ARGS+=("grid${grid}_vq_tokens_${PROFILE}")
   done
   "$PYTHON_BIN" -m ascr.cli.stage4_summarize_curriculum \
     --summaries "${SUMMARY_ARGS[@]}" \

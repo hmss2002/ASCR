@@ -226,9 +226,9 @@ def decide_stage4_next_actions(
                 actions.append(_action(
                     "format",
                     60,
-                    "Run the prompt/decoding sweep before scaling data.",
-                    "sbatch jobs/stage4/stage4_probe_sweep.sbatch\n# after completion:\nMODE=summarize bash scripts/training/run_stage4_probe_sweep.sh\ncat outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/grid4/vq_tokens/probe_sweep_l40s_1024px_gc/probe_sweep_summary.md",
-                    "Failure analysis is dominated by output-format classes; sweep prompt variants and answer length first.",
+                    "Standardize on schema_example and rerun the 1024px GC curriculum campaign.",
+                    "bash scripts/training/run_stage4_server_campaign.sh\n# submit on the server when ready:\nMODE=submit_curriculum bash scripts/training/run_stage4_server_campaign.sh",
+                    "Failure analysis is dominated by output-format classes; schema_example is now the Stage-4 prompt policy.",
                 ))
             else:
                 actions.append(_action(
@@ -250,8 +250,8 @@ def decide_stage4_next_actions(
             actions.append(_action(
                 "scale",
                 80,
-                "Grid4 GC probe is useful; scale to grid8/grid16 and Hard256.",
-                "PROFILE=l40s GRIDS='8 16' sbatch --array=0-1 jobs/stage4/train_mmu_lora_curriculum.sbatch",
+                "Grid4 GC probe is useful; scale schema_example 1024px GC to grid8/grid16 and Hard256.",
+                "PROFILE=l40s_1024_gc sbatch --array=1-2 jobs/stage4/train_mmu_lora_curriculum.sbatch",
                 "Grid4 parse and hit_any rates both cleared the configured gates.",
             ))
 

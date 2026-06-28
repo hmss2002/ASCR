@@ -3554,3 +3554,38 @@ Training will be submitted once sweep jobs complete and QOS frees up.
 2. If sweep finds a winning prompt variant → submit grid8 1024px gc training
 3. If parse_rate stays low despite sweep → Codex needs to investigate training vs eval prompt mismatch
 4. If parse_rate > 0.7 on any variant → proceed to Hard256 data expansion
+
+## 2026-06-28 13:05 HKT — Windows Codex: schema_example policy + server campaign layer
+
+### Branch/source sync
+- Fast-forwarded `main` to `origin/feat/stage4-gc-fallback-server` at `32a7dcd`.
+- Imported the server results: 1024px GC fallback works on a single L40S,
+  grid4 parse_rate improved to 0.469, and remaining blocker is localization
+  quality / default-cell bias rather than CUDA memory.
+
+### Implemented locally
+- Made `schema_example` the Stage-4 default prompt variant in the shared MMU
+  LoRA helpers and the SFT/probe CLIs.
+- Kept `default`, `minimal_json`, and `schema_first` as explicit legacy
+  variants for old experiment reproduction.
+- Narrowed `stage4_probe_sweep` defaults to a schema-example answer-length
+  diagnostic (`384,512`) and reduced the default Slurm array to `0-1`.
+- Added grid8/grid16 1024px GC Adam8bit train/probe configs so the server does
+  not need to clone-edit the grid4 config.
+- Added `PROFILE=l40s_1024_gc` to `scripts/training/run_stage4_curriculum.sh`
+  so grid4/grid8/grid16 can run through the same array runner.
+- Added `ascr.cli.stage4_server_campaign` plus
+  `scripts/training/run_stage4_server_campaign.sh` to generate a campaign
+  manifest, Markdown plan, and executable server helper.
+- Updated the decision layer so format-dominated failures recommend the
+  schema-example 1024px GC campaign first; sweep is now optional diagnostic.
+
+### Server handoff intent
+- The server AI should run:
+  `bash scripts/training/run_stage4_server_campaign.sh` to inspect the plan.
+- Submit all grids with:
+  `MODE=submit_curriculum bash scripts/training/run_stage4_server_campaign.sh`.
+- If Slurm QOS rejects the array, use:
+  `MODE=split_curriculum bash scripts/training/run_stage4_server_campaign.sh`.
+- After completion:
+  `MODE=summarize bash scripts/training/run_stage4_server_campaign.sh`.

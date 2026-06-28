@@ -13,6 +13,7 @@ from ascr.training.stage4_mmu_lora import (
     safe_parse_mmu_localization_payload,
 )
 from ascr.cli.stage4_probe_sweep import build_sweep_plan, summarize_sweep, write_summary as write_sweep_summary
+from ascr.cli.stage4_server_campaign import build_campaign_plan, write_campaign_outputs
 from ascr.cli.stage4_compare_input_modes import compare_probe_summaries, write_comparison
 from ascr.cli.stage4_analyze_probe_failures import analyze_probe_failures, write_outputs as write_failure_outputs
 from ascr.cli.stage4_build_run_registry import build_registry, write_outputs as write_registry_outputs
@@ -51,7 +52,8 @@ class Stage4MmuLoraTests(unittest.TestCase):
         prompt = mmu_localization_prompt("a red cube", grid_size=2, max_selected_cells=2)
         self.assertIn("Return exactly one compact JSON object", prompt)
         self.assertIn('"corrupted_cells_2x2": string[]', prompt)
-        self.assertIn("Do not put cell lists inside correction_instruction", prompt)
+        self.assertIn("Positive example", prompt)
+        self.assertIn('"corrupted_cells_2x2":["A1"]', prompt)
         self.assertIn("A1, A2, B1, B2", prompt)
 
     def test_prompt_variants_change_format_instruction(self):
@@ -437,7 +439,7 @@ class Stage4MmuLoraTests(unittest.TestCase):
         failures = [{"classification_counts": {"wrong_key_has_cells": 4}}]
         decision = decide_stage4_next_actions(registry, failure_summaries=failures)
         titles = [action["title"] for action in decision["actions"]]
-        self.assertTrue(any("prompt/decoding sweep" in title for title in titles))
+        self.assertTrue(any("schema_example" in title for title in titles))
         with tempfile.TemporaryDirectory() as temp_dir:
             outputs = write_next_actions(Path(temp_dir), decision)
             self.assertTrue(Path(outputs["next_actions_json"]).exists())
@@ -471,6 +473,19 @@ class Stage4MmuLoraTests(unittest.TestCase):
             self.assertEqual(summary["complete_count"], 1)
             self.assertEqual(summary["best"][0]["label"], plan["combos"][0]["label"])
             self.assertTrue(Path(outputs["sweep_summary_json"]).exists())
+
+    def test_server_campaign_plan_writes_parallel_curriculum_commands(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            plan = build_campaign_plan(grids=[4, 8, 16], output_dir=root)
+            outputs = write_campaign_outputs(root, plan)
+            self.assertEqual(plan["slurm_array"], "0-2")
+            self.assertIn("schema_example", plan["prompt_policy"])
+            self.assertIn("PROFILE=l40s_1024_gc sbatch --parsable --array=0-2", plan["primary_submit_command"])
+            self.assertEqual([item["grid"] for item in plan["split_submit_commands"]], [4, 8, 16])
+            shell_text = Path(outputs["campaign_shell"]).read_text(encoding="utf-8")
+            self.assertIn("MODE=${MODE:-plan}", shell_text)
+            self.assertTrue(Path(outputs["campaign_manifest"]).exists())
 
 
 if __name__ == "__main__":

@@ -3,7 +3,11 @@ import json
 import os
 
 from ascr.core.config import load_config
-from ascr.training.stage4_mmu_lora import run_mmu_localization_probe
+from ascr.training.stage4_mmu_lora import (
+    PROMPT_VARIANT_CHOICES,
+    PROMPT_VARIANT_DEFAULT,
+    run_mmu_localization_probe,
+)
 
 
 def _read_sample_ids(path):
@@ -28,7 +32,7 @@ def build_parser():
     parser.add_argument("--input-mode", choices=["vq_tokens", "decoded_image"], default=None)
     parser.add_argument("--use-vq-tokens", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--target-schema", choices=["localization_cells", "semantic_evaluation"], default="localization_cells")
-    parser.add_argument("--prompt-variant", choices=["default", "minimal_json", "schema_first", "schema_example"], default="default")
+    parser.add_argument("--prompt-variant", choices=PROMPT_VARIANT_CHOICES, default=PROMPT_VARIANT_DEFAULT)
     parser.add_argument("--lora-path", default=None)
     parser.add_argument("--repo-path", default=os.environ.get("LUMINA_REPO", "third_party/Lumina-DiMOO"))
     parser.add_argument("--checkpoint-path", default=os.environ.get("LUMINA_MODEL_PATH", "models/lumina-dimoo"))
