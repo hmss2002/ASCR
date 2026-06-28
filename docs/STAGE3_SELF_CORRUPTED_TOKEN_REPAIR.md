@@ -72,12 +72,27 @@ Windows Codex or server AI patches the Lumina model code.
 
 **Updated priority**:
 1. ~~bf16 + gradient checkpointing~~ → **blocked** (model doesn't support gc)
-2. **8-bit Adam optimizer** → try next (no model code change needed)
+2. **8-bit Adam optimizer** → implemented in the training CLI; server should
+   validate whether it fits 1024px full-module LoRA on L40S.
 3. 4 attention modules (q/k/v/o) → if 8-bit Adam still OOMs
 4. 512px fallback → current working config; only keep as last resort
 
 **Validation**: After any memory fix, re-run a single-epoch smoke to confirm
 training loss decreases before committing to the full 15-epoch run.
+
+**Implemented local follow-up (2026-06-28)**:
+
+- `ascr.training.train_lumina_lora_smoke` supports
+  `--optimizer {adamw,adamw8bit}`.
+- `ascr.cli.stage4_train_mmu_lora` exposes common overrides such as
+  `--epochs`, `--optimizer`, `--image-size`, `--max-seq-len`, and
+  `--target-modules`, so server smoke runs do not need temporary YAML edits.
+- Added 1024px memory-probe configs:
+  - `mmu_lora_train_hard64_vq_tokens_l40s_1024px_adam8bit.yaml`
+  - `mmu_lora_train_hard64_vq_tokens_l40s_1024px_attn4_adam8bit.yaml`
+- Added coarse-to-fine curriculum configs and runners for grid4/grid8/grid16:
+  `scripts/training/run_stage4_curriculum.sh` and
+  `jobs/stage4/train_mmu_lora_curriculum.sbatch`.
 
 ---
 
@@ -195,6 +210,32 @@ outputs/stage3_self_corrupt/locality_probe_smoke/
   images/
   tokens/
 ```
+
+Parallel scale-out tooling:
+
+```bash
+# Submit prompt-windowed Slurm array shards.
+PROMPT_FILE=configs/benchmarks/prompts/t2i_compbench_hard64.txt \
+PROMPT_COUNT=256 \
+PROMPTS_PER_TASK=8 \
+OUTPUT_ROOT=outputs/stage3_self_corrupt/locality_probe_hard256 \
+bash scripts/training/run_stage3_locality_parallel.sh
+
+# Merge completed shards and build a Phase-2 dataset.
+python -m ascr.cli.stage3_merge_probe_shards \
+  --shard-dirs outputs/stage3_self_corrupt/locality_probe_hard256/shard_* \
+  --output-dir outputs/stage3_self_corrupt/locality_probe_hard256
+
+python -m ascr.cli.stage3_self_corrupt_dataset \
+  --manifest outputs/stage3_self_corrupt/locality_probe_hard256/manifest.jsonl \
+  --summary outputs/stage3_self_corrupt/locality_probe_hard256/summary.json \
+  --output-dir outputs/stage3_self_corrupt/datasets/locality_hard256_v1
+```
+
+`token_locality_probe.py` supports `--prompt-offset` and `--prompt-limit`,
+also readable from `PROMPT_OFFSET` and `PROMPT_LIMIT`, so Slurm array tasks no
+longer need manually split prompt files. When prompt windowing is active, the
+config-level `limit` is ignored unless `--limit` or `LIMIT` is explicitly set.
 
 Decision gate:
 

@@ -72,6 +72,58 @@ It uses 512-token/image cropping and two LoRA target modules, so use the full
 1024 config whenever bf16 + gradient checkpointing fits for final localization
 metrics.
 
+After the 2026-06-28 dual-path server run, the current best evidence is:
+
+- vq_tokens beats decoded_image for LoRA parse rate (0.406 vs 0.156);
+- hit_any is still 0.0 at 16x16, so cell-value learning is the blocker;
+- decoded_image zero-shot/image smoke does not solve localization;
+- gradient checkpointing is not supported by the current Lumina/LLaDA model
+  class, so `optimizer: adamw8bit` is the next low-risk memory fix.
+
+Next recommended server queue:
+
+```bash
+# 1. Try 1024px full-module LoRA with 8-bit Adam. Run a one-epoch smoke first.
+python -m ascr.cli.stage4_train_mmu_lora \
+  --config configs/stage4/self_corrupt/mmu_lora_train_hard64_vq_tokens_l40s_1024px_adam8bit.yaml \
+  --epochs 1 \
+  --output-dir outputs/stage4_self_corrupt/mmu_lora_hard64_dual/vq_tokens/lora_l40s_1024px_adam8bit_smoke
+
+# If full 7-module 1024px still OOMs, try attention-only 4-module 1024px.
+python -m ascr.cli.stage4_train_mmu_lora \
+  --config configs/stage4/self_corrupt/mmu_lora_train_hard64_vq_tokens_l40s_1024px_attn4_adam8bit.yaml \
+  --epochs 1 \
+  --output-dir outputs/stage4_self_corrupt/mmu_lora_hard64_dual/vq_tokens/lora_l40s_1024px_attn4_adam8bit_smoke
+
+# 2. Run coarse-to-fine curriculum in parallel on 3 GPUs.
+PROFILE=l40s sbatch jobs/stage4/train_mmu_lora_curriculum.sbatch
+
+# After the array finishes, summarize grid4/grid8/grid16.
+python -m ascr.cli.stage4_summarize_curriculum \
+  --summaries \
+    outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/grid4/vq_tokens/probe_lora_l40s_eval/summary.json \
+    outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/grid8/vq_tokens/probe_lora_l40s_eval/summary.json \
+    outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/grid16/vq_tokens/probe_lora_l40s_eval/summary.json \
+  --labels grid4 grid8 grid16 \
+  --output-dir outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/curriculum_summary_l40s
+```
+
+The two 1024px commands above are memory probes. Do not commit the generated
+smoke adapters.
+
+For prompt scale-out after curriculum gives a nonzero hit_any:
+
+```bash
+# Example: 256 prompts, 8 prompts per GPU task, merge, then build dataset.
+PROMPT_FILE=configs/benchmarks/prompts/t2i_compbench_hard64.txt \
+PROMPT_COUNT=256 \
+PROMPTS_PER_TASK=8 \
+OUTPUT_ROOT=outputs/stage3_self_corrupt/locality_probe_hard256 \
+WAIT=1 MERGE_AFTER=1 BUILD_DATASET_AFTER=1 \
+DATASET_OUTPUT_DIR=outputs/stage3_self_corrupt/datasets/locality_hard256_v1 \
+bash scripts/training/run_stage3_locality_parallel.sh
+```
+
 Parallel Slurm array route:
 
 ```bash

@@ -11,6 +11,14 @@ def build_parser():
     parser.add_argument("--config", default="configs/stage4/self_corrupt/mmu_lora_train_hard64.yaml")
     parser.add_argument("--data-jsonl", default=None)
     parser.add_argument("--output-dir", default=None)
+    parser.add_argument("--epochs", type=int, default=None)
+    parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--optimizer", choices=["adamw", "adamw8bit"], default=None)
+    parser.add_argument("--image-size", type=int, default=None)
+    parser.add_argument("--max-seq-len", type=int, default=None)
+    parser.add_argument("--target-modules", default=None)
+    parser.add_argument("--torch-dtype", default=None)
+    parser.add_argument("--gradient-checkpointing", action=argparse.BooleanOptionalAction, default=None)
     return parser
 
 
@@ -24,6 +32,19 @@ def main(argv=None):
         lora_args.data_jsonl = args.data_jsonl
     if args.output_dir:
         lora_args.output_dir = args.output_dir
+    for key in (
+        "epochs",
+        "limit",
+        "optimizer",
+        "image_size",
+        "max_seq_len",
+        "target_modules",
+        "torch_dtype",
+        "gradient_checkpointing",
+    ):
+        value = getattr(args, key)
+        if value is not None:
+            setattr(lora_args, key, value)
     manifest = train_lumina_lora_smoke(lora_args)
     print(json.dumps(manifest, indent=2, sort_keys=True))
     return 0

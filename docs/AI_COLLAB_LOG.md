@@ -3041,3 +3041,90 @@ python -m ascr.benchmarks.api_image_judge --manifest .../manifest.jsonl
 
 The server has 32-48 available L40S GPUs. The bottleneck is no longer
 compute — it's the engineering to use them efficiently.
+
+## 2026-06-28: Windows Codex follow-up after dual-path server results
+
+### Remote sync and server result absorbed
+- Fetched `origin/feat/stage4-mmu-lora-dual-server`.
+- Fast-forwarded local `main` to include the server commits through `db62939`.
+- Server evidence:
+  - vq_tokens LoRA parse_rate improved from 0.156 to 0.406 after schema fix.
+  - decoded_image LoRA parse_rate was weaker at 0.156.
+  - hit_any stayed 0.0 for both paths at 16x16.
+  - decoded-image smoke was also weak; vq_tokens remains the preferred path.
+  - gradient checkpointing is not supported by the current LLaDA model class.
+
+### Local implementation added
+- Added `--optimizer {adamw,adamw8bit}` to Lumina LoRA training.
+- Added server-friendly overrides to `ascr.cli.stage4_train_mmu_lora`:
+  `--epochs`, `--limit`, `--optimizer`, `--image-size`, `--max-seq-len`,
+  `--target-modules`, `--torch-dtype`, and `--gradient-checkpointing`.
+- Added 1024px L40S memory-probe configs:
+  - `mmu_lora_train_hard64_vq_tokens_l40s_1024px_adam8bit.yaml`
+  - `mmu_lora_train_hard64_vq_tokens_l40s_1024px_attn4_adam8bit.yaml`
+- Added prompt windowing to `ascr.cli.token_locality_probe`:
+  `--prompt-offset`, `--prompt-limit`, `PROMPT_OFFSET`, and `PROMPT_LIMIT`.
+- Added official shard merger:
+  `python -m ascr.cli.stage3_merge_probe_shards`.
+- Added Stage-3 locality Slurm array and wrapper:
+  - `jobs/stage3/self_corrupt_locality_probe_array.sbatch`
+  - `scripts/training/run_stage3_locality_parallel.sh`
+- Added Stage-4 coarse-to-fine curriculum configs for grid4/grid8/grid16.
+- Added curriculum summary CLI:
+  `python -m ascr.cli.stage4_summarize_curriculum`.
+- Added curriculum runner and Slurm array:
+  - `scripts/training/run_stage4_curriculum.sh`
+  - `jobs/stage4/train_mmu_lora_curriculum.sbatch`
+
+### Local validation
+- `python -m compileall ascr` passed.
+- Loaded 34 Stage-4 YAML configs successfully.
+- `bash -n` passed for the new Stage-3/Stage-4 shell and Slurm wrappers.
+- CLI help passed for `stage3_merge_probe_shards`,
+  `stage4_summarize_curriculum`, and `stage4_train_mmu_lora`.
+- Focused tests passed:
+  `python -m unittest tests.test_stage3_self_corrupt tests.test_stage4_mmu_lora tests.test_lumina_native_stage2`.
+- Full smoke passed locally with 173 tests:
+  `python scripts/smoke_test.py`.
+
+### Next server queue
+Run these from latest `main` on a server branch:
+
+```bash
+# 1. One-epoch 1024px memory probes.
+python -m ascr.cli.stage4_train_mmu_lora \
+  --config configs/stage4/self_corrupt/mmu_lora_train_hard64_vq_tokens_l40s_1024px_adam8bit.yaml \
+  --epochs 1 \
+  --output-dir outputs/stage4_self_corrupt/mmu_lora_hard64_dual/vq_tokens/lora_l40s_1024px_adam8bit_smoke
+
+python -m ascr.cli.stage4_train_mmu_lora \
+  --config configs/stage4/self_corrupt/mmu_lora_train_hard64_vq_tokens_l40s_1024px_attn4_adam8bit.yaml \
+  --epochs 1 \
+  --output-dir outputs/stage4_self_corrupt/mmu_lora_hard64_dual/vq_tokens/lora_l40s_1024px_attn4_adam8bit_smoke
+
+# 2. Run grid4/grid8/grid16 curriculum in parallel.
+PROFILE=l40s sbatch jobs/stage4/train_mmu_lora_curriculum.sbatch
+
+# 3. Summarize after the array finishes.
+python -m ascr.cli.stage4_summarize_curriculum \
+  --summaries \
+    outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/grid4/vq_tokens/probe_lora_l40s_eval/summary.json \
+    outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/grid8/vq_tokens/probe_lora_l40s_eval/summary.json \
+    outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/grid16/vq_tokens/probe_lora_l40s_eval/summary.json \
+  --labels grid4 grid8 grid16 \
+  --output-dir outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/curriculum_summary_l40s
+```
+
+If curriculum hit_any becomes nonzero, scale the dataset:
+
+```bash
+PROMPT_FILE=configs/benchmarks/prompts/t2i_compbench_hard64.txt \
+PROMPT_COUNT=256 \
+PROMPTS_PER_TASK=8 \
+OUTPUT_ROOT=outputs/stage3_self_corrupt/locality_probe_hard256 \
+WAIT=1 MERGE_AFTER=1 BUILD_DATASET_AFTER=1 \
+DATASET_OUTPUT_DIR=outputs/stage3_self_corrupt/datasets/locality_hard256_v1 \
+bash scripts/training/run_stage3_locality_parallel.sh
+```
+
+Do not commit generated outputs, LoRA adapters, token caches, or datasets.

@@ -1,0 +1,23 @@
+# Second 1024px memory-recovery attempt: attention modules only + 8-bit Adam.
+repo_path: third_party/Lumina-DiMOO
+checkpoint_path: models/lumina-dimoo
+data_jsonl: outputs/stage4_self_corrupt/mmu_lora_hard64_dual/vq_tokens/lumina_sft/train.jsonl
+output_dir: outputs/stage4_self_corrupt/mmu_lora_hard64_dual/vq_tokens/lora_l40s_1024px_attn4_adam8bit
+epochs: 15
+limit: null
+lr: 3.0e-5
+weight_decay: 0.01
+optimizer: adamw8bit
+image_size: 1024
+max_seq_len: 6144
+prompt_max_length: 512
+answer_max_length: 512
+lora_r: 8
+lora_alpha: 16
+lora_dropout: 0.05
+target_modules: q_proj,k_proj,v_proj,o_proj
+torch_dtype: bfloat16
+gradient_checkpointing: false
+answer_mask_mode: all
+ignore_pad_labels: true
+seed: 0

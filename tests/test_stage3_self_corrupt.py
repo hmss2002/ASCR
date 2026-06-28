@@ -12,8 +12,10 @@ from ascr.analysis.stage3_self_corrupt import (
     build_self_corrupt_dataset,
     read_jsonl,
 )
+from ascr.cli.stage3_merge_probe_shards import merge_probe_shards
 from ascr.cli.stage3_locality_report import main as locality_report_main
 from ascr.cli.stage3_self_corrupt_dataset import main as dataset_main
+from ascr.cli.token_locality_probe import _read_prompts
 
 
 def _write_json(path, payload):
@@ -86,6 +88,28 @@ def _probe_rows():
 
 
 class Stage3SelfCorruptTests(unittest.TestCase):
+    def test_token_locality_prompt_window_uses_offset_and_limit(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            prompt_file = root / "prompts.txt"
+            prompt_file.write_text("p0\np1\np2\np3\np4\n", encoding="utf-8")
+
+            class _Args:
+                pass
+
+            args = _Args()
+            args.prompt = None
+            args.prompt_file = str(prompt_file)
+            args.limit = None
+            args.prompt_offset = 2
+            args.prompt_limit = 2
+
+            prompts, window = _read_prompts({"limit": 1}, args)
+        self.assertEqual(prompts, ["p2", "p3"])
+        self.assertEqual(window["source_prompt_count"], 5)
+        self.assertEqual(window["prompt_offset"], 2)
+        self.assertEqual(window["prompt_limit"], 2)
+
     def test_locality_report_aggregates_by_corruption_and_grid(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -122,6 +146,30 @@ class Stage3SelfCorruptTests(unittest.TestCase):
             self.assertTrue((output / "dataset_manifest.json").exists())
         self.assertEqual(result["row_count"], 2)
         self.assertEqual(len(dataset_rows), 2)
+
+    def test_merge_probe_shards_rewrites_offset_sample_ids(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            shard0 = root / "shard_0000"
+            shard1 = root / "shard_0001"
+            shard0.mkdir()
+            shard1.mkdir()
+            rows0 = [_probe_rows()[0]]
+            rows1 = [_probe_rows()[0]]
+            _write_jsonl(shard0 / "manifest.jsonl", rows0)
+            _write_jsonl(shard1 / "manifest.jsonl", rows1)
+            _write_json(shard0 / "summary.json", {"prompt_offset": 0, "prompt_count": 1})
+            _write_json(shard1 / "summary.json", {"prompt_offset": 4, "prompt_count": 1})
+            summary = merge_probe_shards(
+                [shard0, shard1],
+                root / "merged",
+                project_root=root,
+                allow_missing_paths=True,
+            )
+            merged_rows = read_jsonl(root / "merged" / "manifest.jsonl")
+        self.assertEqual(summary["row_count"], 2)
+        self.assertEqual([row["sample_id"] for row in merged_rows], ["p0000_c000", "p0004_c000"])
+        self.assertEqual(summary["prompt_indices"], [0, 4])
 
     def test_clis_print_help(self):
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):

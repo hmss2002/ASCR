@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -12,7 +13,7 @@ from ascr.evaluators.lumina_native import attach_lumina_native_engine_if_availab
 from ascr.generators.base import _write_mock_ppm
 from ascr.generators.lumina_native import LuminaNativeEngine, align_answer_generation_lengths
 from ascr.training.prepare_lumina_sft_data import convert_sft_examples
-from ascr.training.train_lumina_lora_smoke import _mask_codes
+from ascr.training.train_lumina_lora_smoke import _build_optimizer, _mask_codes
 from ascr.training.train_lumina_evaluator import prepare_sft_dataset
 
 
@@ -153,6 +154,22 @@ class LuminaNativeStage2Tests(unittest.TestCase):
         masked, labels = _mask_codes([10, 11, 12], mode="all")
         self.assertEqual(masked, [126336, 126336, 126336])
         self.assertEqual(labels, [10, 11, 12])
+
+    def test_adamw8bit_optimizer_reports_missing_bitsandbytes(self):
+        class _Torch:
+            class optim:
+                class AdamW:
+                    def __init__(self, parameters, lr, weight_decay):
+                        self.parameters = parameters
+                        self.lr = lr
+                        self.weight_decay = weight_decay
+
+        optimizer = _build_optimizer(_Torch, "adamw", [], lr=1e-4, weight_decay=0.01)
+        self.assertEqual(optimizer.lr, 1e-4)
+        with mock.patch.dict(sys.modules, {"bitsandbytes": None}):
+            with self.assertRaises(RuntimeError) as caught:
+                _build_optimizer(_Torch, "adamw8bit", [], lr=1e-4, weight_decay=0.01)
+        self.assertIn("bitsandbytes", str(caught.exception))
 
     def test_shared_lumina_engine_is_attached(self):
         engine = object()

@@ -1,6 +1,7 @@
 import argparse
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
 
 from ascr.analysis.token_locality import diff_energy_grid_from_paths, summarise_locality, write_heatmap_ppm, write_json
@@ -17,22 +18,54 @@ def _created_at():
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
+def _int_or_none(value):
+    if value is None or value == "":
+        return None
+    return int(value)
+
+
 def _read_prompts(config, args):
     prompts = []
     prompts.extend(args.prompt or [])
-    prompt_file = args.prompt_file or config.get("prompt_file")
+    prompt_file = args.prompt_file or os.environ.get("PROMPT_FILE") or config.get("prompt_file")
     if prompt_file:
         for line in Path(prompt_file).read_text(encoding="utf-8").splitlines():
             text = line.strip()
             if text and not text.startswith("#"):
                 prompts.append(text)
     prompts.extend(config.get("prompts", []) or [])
-    limit = args.limit if args.limit is not None else config.get("limit")
+    source_prompt_count = len(prompts)
+    prompt_offset = args.prompt_offset
+    if prompt_offset is None:
+        prompt_offset = _int_or_none(os.environ.get("PROMPT_OFFSET", config.get("prompt_offset", 0)))
+    prompt_limit = args.prompt_limit
+    if prompt_limit is None:
+        prompt_limit = _int_or_none(os.environ.get("PROMPT_LIMIT", config.get("prompt_limit")))
+    windowed = prompt_offset not in (None, 0) or prompt_limit is not None
+    if args.limit is not None:
+        limit = args.limit
+    elif os.environ.get("LIMIT") not in (None, ""):
+        limit = _int_or_none(os.environ.get("LIMIT"))
+    elif windowed:
+        limit = None
+    else:
+        limit = _int_or_none(config.get("limit"))
     if limit is not None:
         prompts = prompts[: int(limit)]
+        source_prompt_count = len(prompts)
+    prompt_offset = int(prompt_offset or 0)
+    if prompt_offset < 0:
+        raise ValueError("--prompt-offset must be >= 0")
+    prompts = prompts[prompt_offset:]
+    if prompt_limit is not None:
+        prompts = prompts[: int(prompt_limit)]
     if not prompts:
         raise ValueError("No prompts supplied. Use --prompt, --prompt-file, or config prompts.")
-    return prompts
+    return prompts, {
+        "source_prompt_count": int(source_prompt_count),
+        "prompt_offset": int(prompt_offset),
+        "prompt_limit": int(prompt_limit) if prompt_limit is not None else None,
+    }
 
 
 def _config_list(config, key, default):
@@ -73,13 +106,14 @@ def run_probe(args):
     config = load_config(args.config) if args.config else {}
     output_dir = Path(args.output_dir or config.get("output_dir", "outputs/stage3_self_corrupt/locality_probe"))
     output_dir.mkdir(parents=True, exist_ok=True)
-    prompts = _read_prompts(config, args)
+    prompts, prompt_window = _read_prompts(config, args)
     corruption_types = args.corruption_type or _config_list(config, "corruption_types", DEFAULT_CORRUPTION_TYPES)
     analysis_grids = [int(value) for value in (args.analysis_grid or _config_list(config, "analysis_grids", DEFAULT_ANALYSIS_GRIDS))]
     seed = int(args.seed if args.seed is not None else config.get("seed", 1234))
     engine = _engine_from_config(config, args)
     rows = []
-    for prompt_index, prompt in enumerate(prompts):
+    for local_prompt_index, prompt in enumerate(prompts):
+        prompt_index = int(prompt_window["prompt_offset"]) + local_prompt_index
         clean_vq_ids = engine.generate(prompt, seed=seed + prompt_index)
         clean_dir = output_dir / "images" / f"p{prompt_index:04d}"
         clean_path = clean_dir / "clean.png"
@@ -116,6 +150,8 @@ def run_probe(args):
                 "schema_version": "ascr.stage3.token_locality_probe.row.v1",
                 "created_at_utc": _created_at(),
                 "sample_id": sample_id,
+                "prompt_index": prompt_index,
+                "local_prompt_index": local_prompt_index,
                 "prompt": prompt,
                 "clean_vq_ids_path": str(clean_token_path),
                 "corrupted_vq_ids_path": str(corrupted_token_path),
@@ -132,6 +168,9 @@ def run_probe(args):
         "schema_version": "ascr.stage3.token_locality_probe.summary.v1",
         "created_at_utc": _created_at(),
         "output_dir": str(output_dir),
+        "source_prompt_count": int(prompt_window["source_prompt_count"]),
+        "prompt_offset": int(prompt_window["prompt_offset"]),
+        "prompt_limit": prompt_window["prompt_limit"],
         "prompt_count": len(prompts),
         "row_count": len(rows),
         "corruption_types": list(corruption_types),
@@ -150,6 +189,8 @@ def build_parser():
     parser.add_argument("--prompt", action="append", default=None)
     parser.add_argument("--prompt-file", default=None)
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--prompt-offset", type=int, default=None)
+    parser.add_argument("--prompt-limit", type=int, default=None)
     parser.add_argument("--output-dir", default=None)
     parser.add_argument("--corruption-type", action="append", default=None)
     parser.add_argument("--analysis-grid", action="append", type=int, default=None)

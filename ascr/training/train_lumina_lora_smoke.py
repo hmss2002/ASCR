@@ -19,6 +19,22 @@ SP = {
 }
 
 
+def _build_optimizer(torch, optimizer_name, parameters, lr, weight_decay):
+    name = str(optimizer_name or "adamw").strip().lower().replace("-", "_")
+    if name == "adamw":
+        return torch.optim.AdamW(parameters, lr=float(lr), weight_decay=float(weight_decay))
+    if name in {"adamw8bit", "adamw_8bit", "8bit_adamw"}:
+        try:
+            import bitsandbytes as bnb
+        except Exception as exc:
+            raise RuntimeError(
+                "optimizer=adamw8bit requires bitsandbytes on the training server. "
+                "Install it in .venv-lumina or use optimizer=adamw."
+            ) from exc
+        return bnb.optim.AdamW8bit(parameters, lr=float(lr), weight_decay=float(weight_decay))
+    raise ValueError(f"Unsupported optimizer: {optimizer_name}")
+
+
 def _mask_codes(codes, mode="random", force_mask=False):
     if not codes:
         return [], []
@@ -100,7 +116,7 @@ def train_lumina_lora_smoke(args):
     if args.gradient_checkpointing:
         try:
             model.gradient_checkpointing_enable()
-        except (ValueError, NotImplementedError) as e:
+        except (AttributeError, ValueError, NotImplementedError) as e:
             print(f"warning: gradient_checkpointing not supported ({e}); continuing without it")
     lora_config = LoraConfig(
         task_type=TaskType.CAUSAL_LM,
@@ -116,7 +132,13 @@ def train_lumina_lora_smoke(args):
         rows = rows[: int(args.limit)]
     if not rows:
         raise ValueError(f"No training rows found in {args.data_jsonl}")
-    optimizer = torch.optim.AdamW(model.parameters(), lr=float(args.lr), weight_decay=float(args.weight_decay))
+    optimizer = _build_optimizer(
+        torch,
+        args.optimizer,
+        model.parameters(),
+        lr=args.lr,
+        weight_decay=args.weight_decay,
+    )
     losses = []
     for epoch in range(int(args.epochs)):
         random.shuffle(rows)
@@ -186,6 +208,7 @@ def train_lumina_lora_smoke(args):
         "epochs": int(args.epochs),
         "lr": float(args.lr),
         "weight_decay": float(args.weight_decay),
+        "optimizer": str(args.optimizer),
         "image_size": int(args.image_size),
         "max_seq_len": int(args.max_seq_len),
         "lora_r": int(args.lora_r),
@@ -214,6 +237,7 @@ def build_parser():
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--lr", type=float, default=5e-5)
     parser.add_argument("--weight-decay", type=float, default=0.01)
+    parser.add_argument("--optimizer", choices=["adamw", "adamw8bit"], default="adamw")
     parser.add_argument("--image-size", type=int, default=512)
     parser.add_argument("--max-seq-len", type=int, default=2048)
     parser.add_argument("--prompt-max-length", type=int, default=512)

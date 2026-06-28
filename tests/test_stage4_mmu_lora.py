@@ -12,6 +12,7 @@ from ascr.training.stage4_mmu_lora import (
     safe_parse_mmu_localization_payload,
 )
 from ascr.cli.stage4_compare_input_modes import compare_probe_summaries, write_comparison
+from ascr.cli.stage4_summarize_curriculum import summarize_curriculum, write_outputs as write_curriculum_outputs
 
 
 def write_jsonl(path, rows):
@@ -245,6 +246,41 @@ class Stage4MmuLoraTests(unittest.TestCase):
             self.assertEqual(comparison["metrics"][1]["winner"], "decoded_image")
             self.assertTrue(Path(outputs["comparison_json"]).exists())
             self.assertTrue(Path(outputs["comparison_md"]).exists())
+
+    def test_summarize_curriculum_writes_outputs(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            grid4 = root / "grid4" / "summary.json"
+            grid8 = root / "grid8" / "summary.json"
+            grid4.parent.mkdir()
+            grid8.parent.mkdir()
+            grid4.write_text(json.dumps({
+                "grid_size": 4,
+                "input_mode": "vq_tokens",
+                "row_count": 2,
+                "parse_rate": 1.0,
+                "parsed_count": 2,
+                "malformed_count": 0,
+                "call_error_count": 0,
+                "mean_latency_ms": 10.0,
+                "metrics": {"hit_any_rate": 0.5, "mean_f1_at_k": 0.25, "mean_iou": 0.2},
+            }), encoding="utf-8")
+            grid8.write_text(json.dumps({
+                "grid_size": 8,
+                "input_mode": "vq_tokens",
+                "row_count": 2,
+                "parse_rate": 0.5,
+                "parsed_count": 1,
+                "malformed_count": 1,
+                "call_error_count": 0,
+                "mean_latency_ms": 12.0,
+                "metrics": {"hit_any_rate": 0.0, "mean_f1_at_k": 0.0, "mean_iou": 0.0},
+            }), encoding="utf-8")
+            summary = summarize_curriculum([grid4, grid8], labels=["grid4", "grid8"])
+            outputs = write_curriculum_outputs(root / "out", summary)
+            self.assertEqual(summary["best_hit_any_rate"], 0.5)
+            self.assertTrue(Path(outputs["summary_json"]).exists())
+            self.assertTrue(Path(outputs["summary_md"]).exists())
 
 
 if __name__ == "__main__":
