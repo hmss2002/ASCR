@@ -918,6 +918,84 @@ The next server run should rerun SFT prep and LoRA training from scratch; do
 not reuse the previous adapter because it was trained against the old target
 schema.
 
+### Phase 4.5: GC-first UMM/LoRA Scaleout
+
+Server testing showed that 1024px LoRA training on a single L40S is activation
+bound. 8-bit Adam reduces optimizer state but does not reduce the forward-pass
+activation footprint enough. The current repo therefore treats gradient
+checkpointing as a first-class Stage-4 training option rather than a manual
+patch note.
+
+Implementation:
+
+- `ascr.training.train_lumina_lora_smoke` still tries native HuggingFace
+  `model.gradient_checkpointing_enable()` when requested.
+- If Lumina/LLaDA does not advertise support, `--gradient-checkpointing-fallback
+  force` wraps detected decoder/block modules with `torch.utils.checkpoint`.
+- Every LoRA `training_manifest.json` records `gradient_checkpointing_report`.
+  A run where `wrapped_module_count` is 0 should be treated as not using real
+  gradient checkpointing.
+
+Server smoke:
+
+```bash
+EPOCHS=1 sbatch jobs/stage4/train_mmu_lora_gc_probe.sbatch
+```
+
+The Slurm job has only two array tasks to avoid the earlier
+`QOSMaxSubmitJobPerUserLimit` issue:
+
+| Task | Purpose |
+|------|---------|
+| 0 | hard64 vq-token 1024px full-module GC + adam8bit memory smoke |
+| 1 | grid4 1024px full-module GC + adam8bit train/probe/failure analysis |
+
+Manual commands:
+
+```bash
+python -m ascr.cli.stage4_train_mmu_lora \
+  --config configs/stage4/self_corrupt/mmu_lora_train_hard64_vq_tokens_l40s_1024px_gc_adam8bit.yaml \
+  --epochs 1
+
+python -m ascr.cli.stage4_train_mmu_lora \
+  --config configs/stage4/self_corrupt/mmu_lora_train_hard64_grid4_vq_tokens_l40s_1024px_gc_adam8bit.yaml \
+  --epochs 1
+
+python -m ascr.cli.stage4_mmu_localization_probe \
+  --config configs/stage4/self_corrupt/mmu_probe_lora_hard64_grid4_vq_tokens_l40s_1024px_gc.yaml
+```
+
+Probe failure analysis:
+
+```bash
+python -m ascr.cli.stage4_analyze_probe_failures \
+  --probe-rows outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/grid4/vq_tokens/probe_lora_l40s_1024px_gc_eval/probe_rows.jsonl \
+  --summary outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/grid4/vq_tokens/probe_lora_l40s_1024px_gc_eval/summary.json \
+  --sft-examples outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/grid4/vq_tokens/sft/train_sft_examples.jsonl \
+  --train-jsonl outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/grid4/vq_tokens/lumina_sft/train.jsonl \
+  --output-dir outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/grid4/vq_tokens/probe_lora_l40s_1024px_gc_eval/failure_analysis
+```
+
+Registry:
+
+```bash
+python -m ascr.cli.stage4_build_run_registry \
+  --roots outputs/stage4_self_corrupt \
+  --output-dir outputs/stage4_self_corrupt/registry
+```
+
+Decision rules:
+
+- If GC smoke fits and `gradient_checkpointing_report.backend` is
+  `ascr_module_wrapper`, proceed to 15 epochs at 1024px.
+- If GC smoke still OOMs but wrapped modules are nonzero, single-L40S is still
+  too small; next architecture step is multi-GPU model/pipeline parallelism or
+  shorter sequence length.
+- If grid4 1024px trains to low loss but failure analysis remains dominated by
+  `wrong_key_*` or `non_json_cell_label_text`, the bottleneck is format control
+  rather than image resolution/capacity. Test stricter decoding or constrained
+  JSON generation before scaling data.
+
 ## Phase 5: ASCR Loop Integration
 
 Add a Stage-3 loop only after a selector is useful:

@@ -13,7 +13,7 @@ from ascr.evaluators.lumina_native import attach_lumina_native_engine_if_availab
 from ascr.generators.base import _write_mock_ppm
 from ascr.generators.lumina_native import LuminaNativeEngine, align_answer_generation_lengths
 from ascr.training.prepare_lumina_sft_data import convert_sft_examples
-from ascr.training.train_lumina_lora_smoke import _build_optimizer, _mask_codes
+from ascr.training.train_lumina_lora_smoke import _build_optimizer, _enable_ascr_gradient_checkpointing, _mask_codes
 from ascr.training.train_lumina_evaluator import prepare_sft_dataset
 
 
@@ -56,6 +56,53 @@ class _ProbeEngine:
 
 class _Args:
     pass
+
+
+class _FakeTensor:
+    requires_grad = True
+
+    def detach(self):
+        return self
+
+
+class _FakeCheckpoint:
+    calls = 0
+
+    @staticmethod
+    def checkpoint(fn, *args, use_reentrant=False):
+        _FakeCheckpoint.calls += 1
+        return fn(*args)
+
+
+class _FakeTorch:
+    class utils:
+        checkpoint = _FakeCheckpoint
+
+    @staticmethod
+    def is_grad_enabled():
+        return True
+
+
+class _FakeDecoderLayer:
+    training = True
+
+    def __init__(self):
+        self.calls = 0
+
+    def forward(self, hidden_states):
+        self.calls += 1
+        return hidden_states
+
+
+class _FakeModel:
+    def __init__(self):
+        self.layer = _FakeDecoderLayer()
+
+    def named_modules(self):
+        return [
+            ("", self),
+            ("model.layers.0", self.layer),
+        ]
 
 
 def write_jsonl(path, rows):
@@ -170,6 +217,16 @@ class LuminaNativeStage2Tests(unittest.TestCase):
             with self.assertRaises(RuntimeError) as caught:
                 _build_optimizer(_Torch, "adamw8bit", [], lr=1e-4, weight_decay=0.01)
         self.assertIn("bitsandbytes", str(caught.exception))
+
+    def test_ascr_gradient_checkpointing_wraps_decoder_layers(self):
+        _FakeCheckpoint.calls = 0
+        model = _FakeModel()
+        report = _enable_ascr_gradient_checkpointing(_FakeTorch, model)
+        self.assertEqual(report["wrapped_module_count"], 1)
+        result = model.layer.forward(_FakeTensor())
+        self.assertIsInstance(result, _FakeTensor)
+        self.assertEqual(_FakeCheckpoint.calls, 1)
+        self.assertTrue(model.layer._ascr_gradient_checkpoint_wrapped)
 
     def test_shared_lumina_engine_is_attached(self):
         engine = object()

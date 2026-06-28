@@ -12,6 +12,8 @@ from ascr.training.stage4_mmu_lora import (
     safe_parse_mmu_localization_payload,
 )
 from ascr.cli.stage4_compare_input_modes import compare_probe_summaries, write_comparison
+from ascr.cli.stage4_analyze_probe_failures import analyze_probe_failures, write_outputs as write_failure_outputs
+from ascr.cli.stage4_build_run_registry import build_registry, write_outputs as write_registry_outputs
 from ascr.cli.stage4_summarize_curriculum import summarize_curriculum, write_outputs as write_curriculum_outputs
 
 
@@ -281,6 +283,109 @@ class Stage4MmuLoraTests(unittest.TestCase):
             self.assertEqual(summary["best_hit_any_rate"], 0.5)
             self.assertTrue(Path(outputs["summary_json"]).exists())
             self.assertTrue(Path(outputs["summary_md"]).exists())
+
+    def test_analyze_probe_failures_classifies_bad_keys_and_prompt_alignment(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            probe_rows = root / "probe_rows.jsonl"
+            sft_examples = root / "sft_examples.jsonl"
+            train_jsonl = root / "train.jsonl"
+            expected_prompt = mmu_localization_prompt(
+                "a red cube",
+                grid_size=4,
+                max_selected_cells=4,
+                target_schema="localization_cells",
+            )
+            write_jsonl(probe_rows, [
+                {
+                    "sample_id": "p0000_c000",
+                    "status": "abstained_malformed_json",
+                    "raw_text": '{"has cells":[["A_4_4x4"]]}',
+                    "grid_size": 4,
+                    "max_selected_cells": 4,
+                    "target_schema": "localization_cells",
+                    "input_mode": "vq_tokens",
+                    "prompt": "a red cube",
+                    "target_cells": ["A1"],
+                    "predicted_cells": [],
+                },
+                {
+                    "sample_id": "p0000_c001",
+                    "status": "abstained_malformed_json",
+                    "raw_text": "A1\nA2",
+                    "grid_size": 4,
+                    "max_selected_cells": 4,
+                    "target_schema": "localization_cells",
+                    "input_mode": "vq_tokens",
+                    "prompt": "a red cube",
+                    "target_cells": ["A2"],
+                    "predicted_cells": [],
+                },
+            ])
+            write_jsonl(sft_examples, [{
+                "sample_id": "p0000_c000",
+                "input_text": expected_prompt,
+                "input_mode": "vq_tokens",
+                "target_schema": "localization_cells",
+            }])
+            write_jsonl(train_jsonl, [{
+                "answer_text": json.dumps({"has_error": True, "corrupted_cells_4x4": ["A1"]}, separators=(",", ":")),
+            }])
+            analysis = analyze_probe_failures(
+                probe_rows,
+                sft_examples_path=sft_examples,
+                train_jsonl_path=train_jsonl,
+            )
+            outputs = write_failure_outputs(root / "analysis", analysis)
+            self.assertEqual(analysis["classification_counts"]["wrong_key_has_cells"], 1)
+            self.assertEqual(analysis["classification_counts"]["non_json_cell_label_text"], 1)
+            self.assertEqual(analysis["prompt_alignment_counts"]["true"], 1)
+            self.assertEqual(analysis["training_targets"]["answer_parse_error_count"], 0)
+            self.assertTrue(Path(outputs["failure_summary"]).exists())
+            self.assertTrue(Path(outputs["failure_rows"]).exists())
+
+    def test_build_run_registry_collects_sft_adapter_and_probe(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            sft_dir = root / "grid4" / "sft"
+            adapter_dir = root / "grid4" / "lora_gc"
+            probe_dir = root / "grid4" / "probe_lora_gc"
+            sft_dir.mkdir(parents=True)
+            adapter_dir.mkdir(parents=True)
+            probe_dir.mkdir(parents=True)
+            (sft_dir / "manifest.json").write_text(json.dumps({
+                "schema_version": "ascr.stage4.mmu_lora_sft_manifest.v1",
+                "grid_size": 4,
+                "input_mode": "vq_tokens",
+                "target_schema": "localization_cells",
+                "train_rows": 2,
+                "eval_rows": 1,
+            }), encoding="utf-8")
+            (adapter_dir / "training_manifest.json").write_text(json.dumps({
+                "schema_version": "ascr.lumina_lora_smoke.v1",
+                "row_count": 2,
+                "final_loss": 0.1,
+                "gradient_checkpointing": True,
+                "gradient_checkpointing_report": {"backend": "ascr_module_wrapper", "wrapped_module_count": 32},
+            }), encoding="utf-8")
+            (probe_dir / "summary.json").write_text(json.dumps({
+                "schema_version": "ascr.stage4.mmu_localization_probe.summary.v1",
+                "row_count": 1,
+                "grid_size": 4,
+                "input_mode": "vq_tokens",
+                "parse_rate": 1.0,
+                "lora_path": str(adapter_dir),
+                "metrics": {"hit_any_rate": 0.5, "mean_iou": 0.25},
+            }), encoding="utf-8")
+            registry = build_registry([root])
+            outputs = write_registry_outputs(root / "registry", registry)
+            self.assertEqual(registry["row_count"], 3)
+            kinds = {row["kind"] for row in registry["rows"]}
+            self.assertEqual(kinds, {"sft_dataset", "lora_adapter", "probe_summary"})
+            probe = [row for row in registry["rows"] if row["kind"] == "probe_summary"][0]
+            self.assertIn("adapter_artifact_id", probe)
+            self.assertTrue(Path(outputs["registry_json"]).exists())
+            self.assertTrue(Path(outputs["registry_md"]).exists())
 
 
 if __name__ == "__main__":

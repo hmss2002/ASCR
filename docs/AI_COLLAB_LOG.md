@@ -3241,3 +3241,70 @@ sbatch calls) remains the workaround, or submit fewer array tasks.
   once QOS allows
 - Manual-shard parallel probes at Hard64 scale (8 shards, already proven)
 - Run anything that fits in 512px 2-module config
+
+## 2026-06-28 11:35 HKT - Windows Codex: GC fallback + failure-analysis handoff
+
+### Branch integration
+- Fast-forwarded `origin/feat/stage4-scaleout-server` into local `main`.
+- Server branch conclusion accepted: 1024px single-L40S training is activation
+  bound; 8-bit Adam and attention-only LoRA do not solve it without gradient
+  checkpointing.
+
+### Implemented locally
+- `train_lumina_lora_smoke.py` now has an ASCR gradient-checkpointing fallback:
+  if the Lumina model class does not support HuggingFace
+  `gradient_checkpointing_enable()`, `--gradient-checkpointing-fallback force`
+  wraps detected decoder/block modules with `torch.utils.checkpoint`.
+- The training manifest now records `gradient_checkpointing_report`, including
+  the backend and the number of wrapped modules. This prevents silent "gc
+  requested but not actually active" reruns.
+- Added 1024px GC configs:
+  - `configs/stage4/self_corrupt/mmu_lora_train_hard64_vq_tokens_l40s_1024px_gc_adam8bit.yaml`
+  - `configs/stage4/self_corrupt/mmu_lora_train_hard64_grid4_vq_tokens_l40s_1024px_gc_adam8bit.yaml`
+  - `configs/stage4/self_corrupt/mmu_probe_lora_hard64_grid4_vq_tokens_l40s_1024px_gc.yaml`
+- Added `ascr.cli.stage4_analyze_probe_failures` to classify `probe_rows.jsonl`
+  into concrete failure classes such as `wrong_key_has_cells`,
+  `wrong_key_cell_key`, `non_json_cell_label_text`, `schema_key_mismatch`, and
+  `valid_format_wrong_cells`.
+- Added `ascr.cli.stage4_build_run_registry` to scan Stage-4 output roots and
+  summarize SFT manifests, LoRA training manifests, and probe summaries into a
+  single registry.
+- Added `scripts/training/run_stage4_gc_probe.sh` and
+  `jobs/stage4/train_mmu_lora_gc_probe.sbatch`. The Slurm job uses only a
+  2-task array:
+  - task 0: full hard64 vq-token 1024px GC+adam8bit smoke;
+  - task 1: grid4 1024px high-capacity GC+adam8bit train + probe + failure
+    analysis.
+
+### Next server queue
+Run this first from latest `main`:
+
+```bash
+EPOCHS=1 sbatch jobs/stage4/train_mmu_lora_gc_probe.sbatch
+```
+
+If task 0 fits, rerun full hard64 1024px training with more epochs:
+
+```bash
+python -m ascr.cli.stage4_train_mmu_lora \
+  --config configs/stage4/self_corrupt/mmu_lora_train_hard64_vq_tokens_l40s_1024px_gc_adam8bit.yaml \
+  --epochs 15
+```
+
+If task 1 still has `parse_rate=0.0`, inspect:
+
+```bash
+cat outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/grid4/vq_tokens/probe_lora_l40s_1024px_gc_eval/failure_analysis/failure_summary.md
+cat outputs/stage4_self_corrupt/registry/stage4_run_registry.md
+```
+
+Interpretation rule:
+- If 1024px GC OOMs and `wrapped_module_count > 0`, single-L40S is still too
+  small and the next path is model/pipeline parallelism or lower sequence
+  length.
+- If `wrapped_module_count == 0`, the fallback did not find LLaDA blocks; inspect
+  `model.named_modules()` in `third_party/Lumina-DiMOO` and add the block class
+  name to `_is_checkpoint_candidate()`.
+- If 4x4 1024px GC trains but eval format remains wrong, the issue is no longer
+  just 512px crop or two-module LoRA capacity; prioritize decoding/template
+  alignment or constrained JSON generation.

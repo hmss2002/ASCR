@@ -1,5 +1,6 @@
 import argparse
 from datetime import datetime, timezone
+import importlib
 import json
 import math
 import os
@@ -95,6 +96,103 @@ def _load_training_stack(repo_path):
     return torch, LoraConfig, TaskType, get_peft_model, AutoTokenizer, LLaDAForMultiModalGeneration, add_break_line
 
 
+def _is_tensor_like(value):
+    return hasattr(value, "requires_grad") and hasattr(value, "detach")
+
+
+def _is_checkpoint_candidate(name, module):
+    if not name or not hasattr(module, "forward"):
+        return False
+    lowered_name = name.lower()
+    class_name = module.__class__.__name__.lower()
+    if "decoderlayer" in class_name or "transformerblock" in class_name:
+        return True
+    if "llada" in class_name and "block" in class_name:
+        return True
+    leaf = lowered_name.rsplit(".", 1)[-1]
+    in_transformer_stack = any(marker in lowered_name for marker in (".layers.", ".blocks.", ".h."))
+    return leaf.isdigit() and in_transformer_stack
+
+
+def _checkpoint_function(torch):
+    if not hasattr(torch, "utils") or not hasattr(torch.utils, "checkpoint"):
+        importlib.import_module("torch.utils.checkpoint")
+    return torch.utils.checkpoint.checkpoint
+
+
+def _wrap_forward_with_checkpoint(torch, module):
+    if getattr(module, "_ascr_gradient_checkpoint_wrapped", False):
+        return False
+    original_forward = module.forward
+    checkpoint = _checkpoint_function(torch)
+
+    def checkpointed_forward(*args, **kwargs):
+        if not getattr(module, "training", False) or not torch.is_grad_enabled():
+            return original_forward(*args, **kwargs)
+        if not any(_is_tensor_like(arg) for arg in args):
+            return original_forward(*args, **kwargs)
+
+        def custom_forward(*inner_args):
+            return original_forward(*inner_args, **kwargs)
+
+        return checkpoint(custom_forward, *args, use_reentrant=False)
+
+    module._ascr_original_forward = original_forward
+    module._ascr_gradient_checkpoint_wrapped = True
+    module.gradient_checkpointing = True
+    module.forward = checkpointed_forward
+    return True
+
+
+def _enable_ascr_gradient_checkpointing(torch, model):
+    wrapped = []
+    for name, module in model.named_modules():
+        if _is_checkpoint_candidate(name, module) and _wrap_forward_with_checkpoint(torch, module):
+            wrapped.append(name)
+    return {
+        "backend": "ascr_module_wrapper",
+        "wrapped_module_count": len(wrapped),
+        "wrapped_modules": wrapped[:128],
+        "wrapped_modules_truncated": len(wrapped) > 128,
+    }
+
+
+def _configure_gradient_checkpointing(torch, model, mode="auto"):
+    mode = str(mode or "auto").strip().lower().replace("-", "_")
+    if mode not in {"auto", "off", "force"}:
+        raise ValueError(f"Unsupported gradient checkpointing fallback mode: {mode}")
+    report = {
+        "requested": True,
+        "backend": "disabled",
+        "wrapped_module_count": 0,
+        "error": None,
+    }
+    if mode != "force":
+        try:
+            model.gradient_checkpointing_enable()
+            report["backend"] = "huggingface"
+            report["wrapped_module_count"] = None
+            return report
+        except (AttributeError, ValueError, NotImplementedError) as exc:
+            report["error"] = str(exc)
+            if mode == "off":
+                print(f"warning: gradient_checkpointing not supported ({exc}); continuing without it")
+                return report
+    fallback = _enable_ascr_gradient_checkpointing(torch, model)
+    report.update(fallback)
+    if report["wrapped_module_count"] <= 0:
+        raise RuntimeError(
+            "gradient_checkpointing was requested but neither HuggingFace support nor "
+            "the ASCR fallback wrapper found decoder/block modules to checkpoint."
+        )
+    if report.get("error"):
+        print(
+            "warning: native gradient_checkpointing unsupported; "
+            f"using ASCR fallback on {report['wrapped_module_count']} modules"
+        )
+    return report
+
+
 def train_lumina_lora_smoke(args):
     torch, LoraConfig, TaskType, get_peft_model, AutoTokenizer, model_cls, add_break_line = _load_training_stack(args.repo_path)
     random.seed(int(args.seed))
@@ -113,11 +211,13 @@ def train_lumina_lora_smoke(args):
     if dtype_name not in dtype_map:
         raise ValueError(f"Unsupported torch_dtype: {args.torch_dtype}")
     model = model_cls.from_pretrained(args.checkpoint_path, torch_dtype=dtype_map[dtype_name], device_map="auto")
+    gradient_checkpointing_report = {"requested": bool(args.gradient_checkpointing), "backend": "disabled", "wrapped_module_count": 0}
     if args.gradient_checkpointing:
-        try:
-            model.gradient_checkpointing_enable()
-        except (AttributeError, ValueError, NotImplementedError) as e:
-            print(f"warning: gradient_checkpointing not supported ({e}); continuing without it")
+        gradient_checkpointing_report = _configure_gradient_checkpointing(
+            torch,
+            model,
+            mode=args.gradient_checkpointing_fallback,
+        )
     lora_config = LoraConfig(
         task_type=TaskType.CAUSAL_LM,
         r=int(args.lora_r),
@@ -218,6 +318,7 @@ def train_lumina_lora_smoke(args):
         "ignore_pad_labels": bool(args.ignore_pad_labels),
         "torch_dtype": str(args.torch_dtype),
         "gradient_checkpointing": bool(args.gradient_checkpointing),
+        "gradient_checkpointing_report": gradient_checkpointing_report,
         "device": device,
         "losses": losses,
         "final_loss": losses[-1]["loss"] if losses else None,
@@ -248,6 +349,12 @@ def build_parser():
     parser.add_argument("--target-modules", default="q_proj,v_proj,k_proj,o_proj,gate_proj,up_proj,down_proj")
     parser.add_argument("--torch-dtype", default="bfloat16", choices=["auto", "float32", "fp32", "bfloat16", "bf16", "float16", "fp16"])
     parser.add_argument("--gradient-checkpointing", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument(
+        "--gradient-checkpointing-fallback",
+        choices=["auto", "off", "force"],
+        default="auto",
+        help="Fallback when the Lumina model class does not advertise HuggingFace gradient checkpointing support.",
+    )
     parser.add_argument(
         "--answer-mask-mode",
         choices=["random", "all"],

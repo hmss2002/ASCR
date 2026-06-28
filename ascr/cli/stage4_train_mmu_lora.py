@@ -19,6 +19,7 @@ def build_parser():
     parser.add_argument("--target-modules", default=None)
     parser.add_argument("--torch-dtype", default=None)
     parser.add_argument("--gradient-checkpointing", action=argparse.BooleanOptionalAction, default=None)
+    parser.add_argument("--gradient-checkpointing-fallback", choices=["auto", "off", "force"], default=None)
     return parser
 
 
@@ -41,6 +42,7 @@ def main(argv=None):
         "target_modules",
         "torch_dtype",
         "gradient_checkpointing",
+        "gradient_checkpointing_fallback",
     ):
         value = getattr(args, key)
         if value is not None:
