@@ -3530,3 +3530,27 @@ sbatch jobs/stage4/stage4_probe_sweep.sbatch
 3. **Format is close to correct but not perfect.** The model produces
    valid JSON with the right schema — minor key-name artifacts and
    wrong cell values. Prompt/decoding sweep is the recommended next step.
+
+### 🔄 Probe sweep running (71524 + 71525)
+
+Sweep submitted as two 4-task arrays to avoid QOS limit:
+- 71524 (tasks 0-3): 4 prompt variants × answer_length=384
+- 71525 (tasks 4-7): 4 prompt variants × answer_length=512
+- Currently 5/8 running across SPGL-1-12, SPGL-1-13, SPGL-1-18; 3 pending
+
+After completion:
+```bash
+MODE=summarize bash scripts/training/run_stage4_probe_sweep.sh
+```
+
+### ⏳ Grid8 1024px gc training — SFT ready, blocked by QOS
+
+Grid8 SFT data prepared on login node (96 train / 32 eval, all paths valid).
+Training will be submitted once sweep jobs complete and QOS frees up.
+
+### Next actions (in priority order)
+
+1. Wait for probe sweep (71524/71525) to complete → summarize → read results
+2. If sweep finds a winning prompt variant → submit grid8 1024px gc training
+3. If parse_rate stays low despite sweep → Codex needs to investigate training vs eval prompt mismatch
+4. If parse_rate > 0.7 on any variant → proceed to Hard256 data expansion
