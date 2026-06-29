@@ -4909,3 +4909,92 @@ python -m unittest tests.test_stage4_mmu_lora tests.test_stage4_shell_scripts
 Passed locally. Still required on the server: real 8-GPU DDP validation,
 NCCL-abort diagnosis with the new debug env, and a real Stage5 non-mock run to
 confirm the offload mitigation fits on the target GPU.
+
+---
+
+## 🔴 2026-06-29 22:00 HKT — Server AI: Codex update merge + DDP v2 test + Bench512 eval launched
+
+Context:
+- Machine: hpcr4300a, GPU nodes SPGL-1-[5,7,11] (8×L40s each)
+- Branch before: 6a869ce
+- Branch after: 93155c3 (fast-forward merge from origin/main)
+- Commit: 93155c3 "Harden stage4 DDP setup after server debug"
+
+### Codex updates merged
+
+Fast-forward from 6a869ce → 93155c3. Key changes:
+
+1. **`ascr/core/peft_compat.py`** (NEW) — official peft/transformers compatibility module.
+   Replaces our temporary dummy `tensor_parallel.py` in venvs.
+
+2. **`ascr/training/stage4_mmu_lora_ddp.py`** — major DDP hardening:
+   - `_mark_ddp_ignored_frozen_parameters()` — marks frozen params as ignored in DDP
+   - `_ddp_constructor_options()` — configurable DDP constructor (broadcast_buffers,
+     gradient_as_bucket_view, bucket_cap_mb, static_graph, init_sync)
+   - All options controllable via env vars (ASCR_DDP_*)
+   - Validation split support with early stopping (patience + min_delta)
+   - `_copy_checkpoint_to_output()` — copies best checkpoint to output root
+
+3. **`jobs/stage4/train_mmu_lora_ddp.sbatch`** — enhanced:
+   - `PYTHONUNBUFFERED=1` ✅ (fixes stdout buffering)
+   - `NCCL_TIMEOUT=1800`, `NCCL_ASYNC_ERROR_HANDLING=1`
+   - `ASCR_DDP_IGNORE_FROZEN=1` (key fix attempt for DDP hang)
+   - `ASCR_DDP_BROADCAST_BUFFERS=0`, `ASCR_DDP_GRADIENT_AS_BUCKET_VIEW=1`
+   - `VAL_JSONL`, `EARLY_STOPPING_PATIENCE`, `EARLY_STOPPING_MIN_DELTA` support
+
+4. **`ascr/training/train_lumina_lora_smoke.py`** — validation split + early stopping
+   for single-GPU path
+
+5. **Configs**: hard256 train configs now include `early_stopping_patience: 5`,
+   `early_stopping_min_delta: 0.001`, `val_split: 0.15`
+
+6. **Tests**: `test_stage4_ddp_compat.py`, `test_stage4_shell_scripts.py`,
+   `test_stage4_mmu_lora.py` — 26 new test cases
+
+### DDP v2 test (71787) — STILL HANGS
+
+Tested with grid16, 8 GPUs, `ASCR_DDP_IGNORE_FROZEN=1`, `PYTHONUNBUFFERED=1`:
+- NCCL init: ✅ all 8 ranks complete
+- `all_gather_object` for LoRA consistency: ✅ (stderr shows _object_to_tensor)
+- `constructing DDP with options=...` print: 🔴 NEVER REACHED
+- Hang location: between `_assert_rank_consistent_lora` (line 198) and DDP wrap (line 210)
+- No epoch output, no checkpoint created
+
+The `ASCR_DDP_IGNORE_FROZEN` fix didn't solve the hang because the code never
+reaches DDP construction. Hang is in `all_gather_object` completion or the
+subsequent CPU operations. Need Codex to add more debug prints between lines
+198-210 to narrow down exact hang point.
+
+### Bench512 eval launched
+
+6 eval jobs comparing zero-shot baseline vs LoRA (epoch_0014) on Bench512:
+
+| Job ID | Grid | Mode | Limit | Status |
+|--------|------|------|-------|--------|
+| 71780 | 4 | zero | 64 | RUNNING ~40min |
+| 71781 | 4 | lora | 64 | RUNNING ~40min |
+| 71782 | 8 | zero | 64 | RUNNING ~40min |
+| 71783 | 8 | lora | 64 | RUNNING ~40min |
+| 71784 | 16 | zero | 64 | RUNNING ~40min |
+| 71785 | 16 | lora | 64 | COMPLETED (needs check) |
+
+Each job: 64 rows × 2 corruption types = 128 inferences × ~51s ≈ 1.8h total.
+Expected completion: ~22:30-23:00 HKT.
+
+### Bench512 single-GPU training (resumed from epoch_0013)
+
+| Grid | Job ID | Node | Checkpoint | Loss | Status |
+|------|--------|------|------------|------|--------|
+| 4 | 71761 | SPGL-1-11 | epoch_0001 (resumed) | 0.008 | RUNNING |
+| 8 | 71763 | SPGL-1-11 | epoch_0001 (resumed) | - | RUNNING |
+| 16 | 71788 | - | epoch_0014 | - | PENDING (QOS limit) |
+
+Note: Resumed training restarts epoch counter from 0 internally but continues
+from loaded adapter weights. New checkpoints overwrite old epoch_0001+.
+
+### Next actions
+
+1. Wait for eval to complete, capture zero-shot vs LoRA comparison
+2. Once eval frees GPU slots, grid16 training + Stage5 tests can start
+3. DDP hang needs Codex to add debug prints between all_gather and DDP wrap
+4. After eval completes, push results to GitHub
