@@ -4498,3 +4498,30 @@ sbatch --gres=gpu:8 jobs/stage4/train_mmu_lora_ddp.sbatch
 
 71619/71621/71623: Grid4/8/16 at ~3h. 336 samples × 15 epochs.
 Should complete within ~1-2h. Eval chains (71620/71622/71624) will auto-fire.
+
+## 🎉 2026-06-29 — Hard256 full curriculum results (71648-71653)
+
+All 3 grids trained on Hard256 (336 train / 112 eval) and evaluated.
+
+| Grid | Train Loss | Parse Rate | **Hit Any** | F1 | IoU |
+|------|-----------|-----------|---------|-----|------|
+| 4×4 | 0.066 | 0.411 | **0.0804** | 0.032 | 0.020 |
+| 8×8 | 0.187 | 0.741 | **0.0446** 🆕 | 0.016 | 0.009 |
+| 16×16 | 0.488 | 0.509 | 0.0 | 0.0 | 0.0 |
+
+### Hard64 → Hard256 comparison
+
+| Grid | Hard64 Hit | Hard256 Hit | Delta |
+|------|-----------|------------|-------|
+| 4×4 | 0.0625 | 0.0804 | **+29%** |
+| 8×8 | 0.0 | 0.0446 | **FIRST HIT** |
+| 16×16 | 0.0 | 0.0 | — |
+
+Grid8 achieved first-ever non-zero hit_any. Grid4 improved 29%.
+Grid16 loss degraded (0.046→0.488) — 336 samples insufficient for
+256-class task. More data or lower learning rate needed.
+
+Training took 4.8h per grid on 1 GPU (336 samples × 15 epochs).
+8-GPU DDP would reduce this to ~30 min but NCCL comm abort during
+training remains unresolved. Codex PEFT rank fix is confirmed working
+(DDP init succeeds), NCCL crash is a separate distributed comm issue.
