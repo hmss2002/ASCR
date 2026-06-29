@@ -5092,3 +5092,193 @@ test_stage4_shell_scripts.py  3/3 ✅
 |------|-----|-------|------|
 | 4 | 71761 | 2 (≈16) | 0.008 |
 | 8 | 71763 | 2 (≈16) | - |
+
+---
+
+## 🔴🔴 2026-06-30 02:00 HKT — Server AI: COMPREHENSIVE HANDOFF — Multi-GPU blocked, need Codex solution
+
+### 1. Current Status
+
+**Training (single-GPU, bench512, epoch 13→30)**:
+| Grid | Job | Node | Runtime | Latest ckpt | Loss |
+|------|-----|------|---------|-------------|------|
+| 4 | 71761 | SPGL-1-11 | 4.6h | epoch_0007 @ 01:34 (≈20 total) | ~0.008 |
+| 8 | 71763 | SPGL-1-11 | 4.5h | epoch_0007 @ 01:39 (≈20 total) | converging |
+| 16 | cancelled | - | - | epoch_0014 | 0.130 |
+
+~38 min/epoch on single GPU. 30 epochs total with ~10 remaining → ~6h to completion.
+
+### 2. Bench512 Eval Results (limit=64, 32 block_4x4 + 32 local_shuffle)
+
+**FULL RAW DATA:**
+
+Grid4 Zero-shot:
+- hit_any=1/64 (1.56%), parse=10/64 (15.6%), malformed=54
+- block_4x4: 1/32 (3.1%), shuffle: 0/32 (0%)
+- mean_iou=0.004, latency=39.5s
+
+Grid4 LoRA (epoch_0014):
+- hit_any=2/64 (3.12%), parse=21/64 (32.8%), malformed=43
+- block_4x4: 1/32 (3.1%), shuffle: 1/32 (3.1%) ← FIRST shuffle hit!
+- mean_iou=0.008, latency=50.4s
+
+Grid8 Zero-shot:
+- hit_any=1/64 (1.56%), parse=22/64 (34.4%), malformed=42
+- block_4x4: 1/32 (3.1%), shuffle: 0/32 (0%)
+- mean_iou=0.003, latency=41.2s
+
+Grid8 LoRA (epoch_0014):
+- hit_any=1/64 (1.56%), parse=29/64 (45.3%), malformed=35
+- block_4x4: 1/32 (3.1%), shuffle: 0/32 (0%)
+- mean_iou=0.003, mean_distance=4.21 (closer than zero-shot 4.30), latency=52.5s
+
+Grid16 Zero-shot:
+- hit_any=0/64 (0%), parse=2/64 (3.1%), malformed=62
+- block_4x4: 0%, shuffle: 0%, latency=47.8s
+
+Grid16 LoRA (epoch_0014):
+- hit_any=0/64 (0%), parse=32/64 (50.0%), malformed=32
+- mean_distance=9.09 cells (model outputs cells but all wrong)
+- block_4x4: 0%, shuffle: 0%, latency=61.4s
+
+### 3. Multi-GPU Problem — COMPLETE ANALYSIS
+
+**3a. NCCL DDP: 9 attempts, ALL hang at first collective**
+
+Test matrix:
+| Test | Job | GPUs | Backend | P2P | Interface | Result |
+|------|-----|------|---------|-----|-----------|--------|
+| v1 | 71745 | 8 | nccl | default | default | NCCL init OK, all_gather hang |
+| v2 | 71749 | 8 | nccl | default | default | same (peft compat fix) |
+| v3 | 71755 | 8 | nccl | default | lo | find_unused=False, same hang |
+| v4 | 71759 | 8 | nccl | default | lo | NCCL_DEBUG=INFO, init OK, hang |
+| v5 | 71787 | 8 | nccl | default | lo | Codex DDP refactor, same hang |
+| v6 | 71792 | 8 | nccl | 0 | lo | ASCR_DDP_DEBUG=1 pinpoint: |
+| v7 | 71793 | 2 | nccl | default | lo | 2-GPU also hangs — NOT 8-GPU specific |
+| v8 | 71794 | 2 | nccl | 1 | eth0 | P2P disable + eth0, same hang |
+| v9 | 71795 | 2 | gloo | - | - | DDP INIT FULLY WORKS ✅ |
+
+**DDP v6 (71792) debug trace** — this is the critical data:
+```
+All 8 ranks, identical timing at 15:05:29Z:
+✅ rank_lora_consistency_start
+✅ rank_consistency_tensor_gather_start (256 LoRA tensors, 10.5M params)
+🔴 dist.all_gather(gathered_tensors, value_tensor) — NEVER RETURNS
+❌ rank_consistency_tensor_gather_done — never printed
+❌ mark_ddp_ignored_frozen — never reached
+❌ constructing DDP — never reached
+```
+
+The `all_gather` is collecting 4×int64 = 32 bytes. NCCL init messages show all 8 ranks
+complete initialization. But the first collective operation after init hangs forever.
+There is NO `dist.barrier()` before this `all_gather()` call (only barrier in the
+file is at line 411, after training completes).
+
+**Hypothesis**: NCCL on L40s nodes requires an explicit barrier before the first
+collective operation. Or the NCCL communicator needs additional initialization
+that PyTorch's `init_process_group` doesn't provide on this particular GPU topology.
+
+**3b. GLOO DDP: DDP init works, crashes in Lumina model**
+
+Test matrix:
+| Test | Job | GPUs | Result |
+|------|-----|------|--------|
+| v9 | 71795 | 2 | DDP init COMPLETE ✅, crash in training ❌ |
+| v10 | 71797 | 2 | same — val.jsonl FileNotFoundError |
+| v11 | 71798 | 2 | val.jsonl fixed → crash in Lumina forward() |
+
+**GLOO DDP v9 (71795) debug trace** — DDP pipeline works perfectly:
+```
+✅ rank_lora_consistency_start/done
+✅ rank_consistency_tensor_gather_start/done (values match both ranks)
+✅ ddp_ignore_frozen_collect_start/done (291 frozen params)
+✅ ddp_ignore_frozen_attribute_start/done
+✅ ddp_constructor_options_start/done
+✅ constructing DDP with options=...
+✅ ddp_constructor_start/done (both ranks)
+```
+
+But then crashes with:
+```
+TypeError: unsupported operand type(s) for +: 'Tensor' and 'list'
+```
+Location: Lumina model's internal batch processing. The model's forward() receives
+input_ids in a format it can't handle — likely tensors from DDP's DistributedSampler
+vs lists from single-GPU path.
+
+**3c. Cluster environment**
+
+| Partition | Nodes | GPUs/node | GPU type | NCCL |
+|-----------|-------|-----------|----------|------|
+| gpu | 8 (1 drain) | 8 | L40s | collective hang |
+| gpu_shared | 10 | 8 | L40s | collective hang |
+
+QOS: max 28 GPUs/user. 4 idle nodes in gpu_shared.
+
+### 4. Proposed Solutions (for Codex to evaluate)
+
+**Option A: Data-shard embarrassingly parallel (EASIEST, NO CODE CHANGE NEEDED)**
+
+Split train.jsonl into N shards. Launch N independent single-GPU jobs per grid,
+each training on its shard. Zero communication overhead.
+
+```
+train.jsonl (672 lines) → shard_0.jsonl (84 lines, GPU 0)
+                        → shard_1.jsonl (84 lines, GPU 1)
+                        → ...
+                        → shard_7.jsonl (84 lines, GPU 7)
+```
+
+Pros: Works TODAY, no NCCL/GLOO needed, proven single-GPU code path.
+Cons: Each GPU trains on less data (84 vs 672 samples); need checkpoint merging
+logic; no gradient synchronization between shards.
+
+For 3 grids × 8 GPUs = 24 GPUs < 28 QOS limit. All 3 grids can run simultaneously.
+
+**Option B: Fix GLOO batch compatibility**
+
+The GLOO DDP path passes all initialization. Only the Lumina model's forward()
+crashes on batch format. If we trace and fix the Tensor+list TypeError (likely
+in `third_party/Lumina-DiMOO/modeling_llada.py` or `_prepare_lumina_lora_batch`),
+GLOO DDP would work for multi-GPU training.
+
+Pros: True data-parallel training with gradient sync.
+Cons: GLOO is CPU-based, slower than NCCL for gradient all_reduce. But with only
+~10M LoRA params to sync (291 frozen params excluded), overhead is manageable.
+
+**Option C: Fix NCCL with barrier**
+
+Add `dist.barrier()` before the first `all_gather()` at line 100 of
+`stage4_mmu_lora_ddp.py`. This might resolve the NCCL hang.
+
+Pros: If it works, full-speed NCCL DDP.
+Cons: Multiple attempts with different NCCL configs all failed. May be a
+fundamental cluster NCCL issue that a barrier won't fix.
+
+**Option D: DP (DataParallel) instead of DDP**
+
+`nn.DataParallel` uses threads instead of processes, no NCCL needed.
+Works with any model but is slower and memory-inefficient (replicates
+outputs on GPU 0).
+
+### 5. Recommended action for Codex
+
+**Priority order:**
+1. Try Option C first (add barrier before all_gather) — one-line fix, huge payoff
+2. If C fails, pursue Option B (fix GLOO batch bug) — DDP init works, just model forward needs fixing
+3. Option A as immediate fallback — server can run data-sharded single-GPU today
+
+**Files that need Codex attention:**
+- `ascr/training/stage4_mmu_lora_ddp.py:98-100` — add barrier before all_gather
+- `third_party/Lumina-DiMOO/modeling_llada.py` — fix Tensor+list TypeError for GLOO DDP
+- `ascr/training/train_lumina_lora_smoke.py:_prepare_lumina_lora_batch` — ensure batch format compatible with DDP
+- `ascr/cli/stage4_train_mmu_lora.py` — add --shard-id/--num-shards for Option A
+
+### 6. What the server can run immediately
+
+Once Codex provides any fix, the server can test:
+- 8-GPU DDP with NCCL (if barrier fix works)
+- 8-GPU DDP with GLOO (if batch bug fixed)
+- 24-GPU data-sharded training (3 grids × 8 GPUs simultaneous)
+
+Current single-GPU training runs autonomously until epoch 30 (~6h remaining).
