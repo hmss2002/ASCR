@@ -4536,3 +4536,113 @@ Training took 4.8h per grid on 1 GPU (336 samples × 15 epochs). 8-GPU DDP would
 ### Grid8 per-prompt: best hits on medium (0.14), spatial (0.14), long (0.10)
 ### Grid16 failure: 42% valid-format-wrong-cells, 32% invalid JSON, 2 hidden hits found
 ### 57 adapters in registry. Best: schema_example + 1024px gc + adam8bit
+
+---
+
+## 🔴 2026-06-29 — Server AI: Critical fixes needed from Codex
+
+### P0 — BLOCKERS
+
+#### 1. Train/Validation/Test split (NO SPLIT EXISTS)
+
+Current: `stage4_prepare_mmu_sft.py` only does binary split (train/eval = 75/25).
+No validation set. Training blindly runs 15 epochs with no way to detect
+overfitting or pick the best checkpoint.
+
+Fix:
+- Add `--val-ratio` to SFT prep (e.g., 60/20/20 train/val/test)
+- Write `split_manifest.json` with three subsets
+- Training loop reads separate train.jsonl and val.jsonl
+
+#### 2. Early stopping + validation-based checkpointing (FIXED 15 EPOCHS)
+
+Current: `train_lumina_lora_smoke.py` hardcodes 15 epochs. No validation loss
+tracking. Checkpoints save every epoch regardless of whether the model is
+improving or overfitting.
+
+Fix:
+- After each epoch, evaluate on validation set
+- Track best_val_loss
+- Only save checkpoint when val_loss improves
+- Stop early if val_loss hasn't improved for N epochs (patience)
+- Final model = best checkpoint, not last epoch
+
+```
+epoch 1: train_loss=6.5, val_loss=6.8 → save checkpoint (best so far)
+epoch 2: train_loss=3.2, val_loss=4.1 → save checkpoint (improved)
+...
+epoch 9: train_loss=0.03, val_loss=0.85 → SKIP (overfitting, val worse)
+epoch 10: train_loss=0.02, val_loss=1.2 → SKIP
+epoch 11: train_loss=0.01, val_loss=1.5 → patience=3 exceeded → STOP
+best model = epoch 9 checkpoint
+```
+
+#### 3. NCCL comm abort — blocks all 8-GPU training
+
+Status: DDP init succeeds (PEFT rank fix works), but training crashes at
+~10 min with `torch.distributed.DistBackendError: NCCL communicator aborted`.
+All 3 attempts (71608/71610/71612, 71630, 71632/71634/71636) failed
+identically. Single-GPU fallback takes 8-11h per training — unacceptable
+with 100+ idle GPUs.
+
+Likely causes to investigate:
+- One rank OOMs mid-training (gradient accumulation + gc taxed differently per rank?)
+- NCCL timeout too short for slow 1024px steps with gc
+- GPU topology: gpu_shared nodes may have different NVLink config
+- Need `NCCL_DEBUG=INFO` and `NCCL_TIMEOUT=1800` in sbatch env
+
+Debug command:
+```bash
+NCCL_DEBUG=INFO NCCL_TIMEOUT=1800 TORCH_DISTRIBUTED_DEBUG=DETAIL \
+  torchrun --nproc_per_node=8 -m ascr.cli.stage4_train_mmu_lora_ddp \
+  --config ... --epochs 1 --limit 4
+```
+
+### P1 — HIGH PRIORITY
+
+#### 4. Stage5 share_engine still OOMs
+
+All 8 Stage5 attempts (71577-71581, 71583-71585) OOMed. `share_engine: true`
+config exists but Lumina model + LoRA adapter + generation state still
+exceeds 45GB in one process.
+
+Fix: In `stage5_self_corrupt_loop.py`, after generation completes, explicitly
+offload/delete the generator model before loading LoRA for MMU. Or use
+`accelerate` to shard the combined pipeline across available GPUs.
+
+#### 5. Separate training data per grid for train/val/test
+
+Currently all 3 grids (4/8/16) share the same eval split. Over time, the
+model "sees" eval prompts during grid4 training, grid8 training, and
+grid16 training — this leaks the holdout set. Each grid should have its
+own independent split.
+
+### P2 — QUALITY OF LIFE
+
+#### 6. stdout buffering in training loop ✅ (fixed locally, needs upstream merge)
+
+#### 7. `--checkpoint-every-epochs` default 0 ✅ (fixed locally, needs upstream merge)
+
+#### 8. Training progress log: add step-level progress bar (tqdm) or per-epoch timing
+
+Currently completely silent for hours. Even with flush fix, users want to
+know "epoch 9/15, ~40min/epoch, ~4h remaining".
+
+#### 9. Bench512 full-32-shard re-merge
+
+28/32 shards were merged when building Bench512 dataset (last 4 were still
+running). Re-merge all 32 for the full 512-prompt dataset.
+
+### Summary table
+
+| # | Priority | What | Impact |
+|---|----------|------|--------|
+| 1 | P0 | Train/val/test split | Can't detect overfitting |
+| 2 | P0 | Early stopping + val checkpoint | 15 fixed epochs = blind |
+| 3 | P0 | NCCL comm abort fix | Unblocks 6-8x training speedup |
+| 4 | P1 | Stage5 share_engine OOM | Unblocks ASCR end-to-end loop |
+| 5 | P1 | Per-grid independent splits | Holdout leakage |
+| 6 | P2 | stdout flush merge | Already fixed locally |
+| 7 | P2 | Checkpoint default merge | Already fixed locally |
+| 8 | P2 | Progress bar / tqdm | Training visibility |
+| 9 | P2 | Bench512 full re-merge | Data completeness |
