@@ -4521,7 +4521,18 @@ Grid8 achieved first-ever non-zero hit_any. Grid4 improved 29%.
 Grid16 loss degraded (0.046→0.488) — 336 samples insufficient for
 256-class task. More data or lower learning rate needed.
 
-Training took 4.8h per grid on 1 GPU (336 samples × 15 epochs).
-8-GPU DDP would reduce this to ~30 min but NCCL comm abort during
-training remains unresolved. Codex PEFT rank fix is confirmed working
-(DDP init succeeds), NCCL crash is a separate distributed comm issue.
+Training took 4.8h per grid on 1 GPU (336 samples × 15 epochs). 8-GPU DDP would reduce to ~30 min but NCCL comm abort remains. PEFT rank fix works, NCCL is separate issue.
+
+## 2026-06-29 — Analysis report
+
+### Cross-grid (Hard256)
+| Grid | Parse | Hit | Malformed |
+|------|-------|-----|-----------|
+| 4×4 | 0.411 | 0.080 | 66 |
+| 8×8 | 0.741 | 0.045 | 29 |
+| 16×16 | 0.509 | 0.0 | 55 |
+
+### Grid4 per-prompt: best hits on medium (0.14), text (0.12), spatial (0.11)
+### Grid8 per-prompt: best hits on medium (0.14), spatial (0.14), long (0.10)
+### Grid16 failure: 42% valid-format-wrong-cells, 32% invalid JSON, 2 hidden hits found
+### 57 adapters in registry. Best: schema_example + 1024px gc + adam8bit
