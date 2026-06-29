@@ -9,9 +9,12 @@ cd "$PROJECT_ROOT"
 MODE=${MODE:-plan}  # plan, submit, recover
 CONFIG=${CONFIG:-configs/stage4/self_corrupt/mmu_lora_train_hard256_grid4_vq_tokens_l40s_1024_gc_adam8bit.yaml}
 DATA_JSONL=${DATA_JSONL:-}
+VAL_JSONL=${VAL_JSONL:-}
 OUTPUT_DIR=${OUTPUT_DIR:-}
 GPU_FALLBACKS=${GPU_FALLBACKS:-"8 4 1"}
 CHECKPOINT_EVERY_EPOCHS=${CHECKPOINT_EVERY_EPOCHS:-1}
+EARLY_STOPPING_PATIENCE=${EARLY_STOPPING_PATIENCE:-3}
+EARLY_STOPPING_MIN_DELTA=${EARLY_STOPPING_MIN_DELTA:-0.0}
 PARTITION=${PARTITION:-gpu}
 TIME=${TIME:-04:00:00}
 MEM=${MEM:-240G}
@@ -43,8 +46,9 @@ next_gpu_count() {
 submit_with_gpus() {
   local gpu_count=$1
   local job_id
-  local export_args="ALL,CONFIG=$CONFIG,NPROC=$gpu_count,CHECKPOINT_EVERY_EPOCHS=$CHECKPOINT_EVERY_EPOCHS"
+  local export_args="ALL,CONFIG=$CONFIG,NPROC=$gpu_count,CHECKPOINT_EVERY_EPOCHS=$CHECKPOINT_EVERY_EPOCHS,EARLY_STOPPING_PATIENCE=$EARLY_STOPPING_PATIENCE,EARLY_STOPPING_MIN_DELTA=$EARLY_STOPPING_MIN_DELTA"
   [[ -n "$DATA_JSONL" ]] && export_args+=",DATA_JSONL=$DATA_JSONL"
+  [[ -n "$VAL_JSONL" ]] && export_args+=",VAL_JSONL=$VAL_JSONL"
   [[ -n "$OUTPUT_DIR" ]] && export_args+=",OUTPUT_DIR=$OUTPUT_DIR"
   if [[ "$DRY_RUN" == "1" ]]; then
     echo "DRY_RUN sbatch --parsable --partition=$PARTITION --gres=gpu:$gpu_count --mem=$MEM --time=$TIME --export=$export_args $SBATCH_EXTRA_ARGS jobs/stage4/train_mmu_lora_ddp.sbatch"
@@ -61,29 +65,36 @@ submit_with_gpus() {
     jobs/stage4/train_mmu_lora_ddp.sbatch)
   mkdir -p "$(dirname "$ATTEMPT_LOG")"
   if [[ ! -s "$ATTEMPT_LOG" ]]; then
-    printf "created_at_utc\tjob_id\tgpu_count\tpartition\tconfig\tdata_jsonl\toutput_dir\tcheckpoint_every_epochs\n" >"$ATTEMPT_LOG"
+    printf "created_at_utc\tjob_id\tgpu_count\tpartition\tconfig\tdata_jsonl\tval_jsonl\toutput_dir\tcheckpoint_every_epochs\tearly_stopping_patience\tearly_stopping_min_delta\n" >"$ATTEMPT_LOG"
   fi
-  printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
+  printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     "$job_id" \
     "$gpu_count" \
     "$PARTITION" \
     "$CONFIG" \
     "${DATA_JSONL:-}" \
+    "${VAL_JSONL:-}" \
     "${OUTPUT_DIR:-}" \
-    "$CHECKPOINT_EVERY_EPOCHS" >>"$ATTEMPT_LOG"
+    "$CHECKPOINT_EVERY_EPOCHS" \
+    "$EARLY_STOPPING_PATIENCE" \
+    "$EARLY_STOPPING_MIN_DELTA" >>"$ATTEMPT_LOG"
   echo "$job_id"
 }
 
 job_state() {
   local job_id=$1
   local state
-  state=$(sacct -j "$job_id" --format=State --noheader 2>/dev/null | awk 'NF { print $1; exit }')
-  if [[ -n "$state" ]]; then
-    echo "$state"
-    return
+  if command -v sacct >/dev/null 2>&1; then
+    state=$(sacct -j "$job_id" --format=State --noheader 2>/dev/null | awk 'NF { print $1; exit }' || true)
+    if [[ -n "$state" ]]; then
+      echo "$state"
+      return
+    fi
   fi
-  squeue -h -j "$job_id" -o "%T" 2>/dev/null | awk 'NF { print $1; exit }'
+  if command -v squeue >/dev/null 2>&1; then
+    squeue -h -j "$job_id" -o "%T" 2>/dev/null | awk 'NF { print $1; exit }' || true
+  fi
 }
 
 gpu_count_from_attempt_log() {
@@ -95,17 +106,19 @@ gpu_count_from_attempt_log() {
 
 gpu_count_from_sacct() {
   local job_id=$1
-  sacct -j "$job_id" --format=AllocTRES --noheader -P 2>/dev/null | \
-    awk -F',' '
-      NF {
-        for (i = 1; i <= NF; i++) {
-          if ($i ~ /^gres\/gpu=/) {
-            split($i, a, "=")
-            print a[2]
-            exit
+  if command -v sacct >/dev/null 2>&1; then
+    sacct -j "$job_id" --format=AllocTRES --noheader -P 2>/dev/null | \
+      awk -F',' '
+        NF {
+          for (i = 1; i <= NF; i++) {
+            if ($i ~ /^gres\/gpu=/) {
+              split($i, a, "=")
+              print a[2]
+              exit
+            }
           }
-        }
-      }'
+        }' || true
+  fi
 }
 
 infer_current_gpus() {
@@ -131,9 +144,12 @@ case "$MODE" in
   plan)
     echo "CONFIG=$CONFIG"
     echo "DATA_JSONL=${DATA_JSONL:-<from config>}"
+    echo "VAL_JSONL=${VAL_JSONL:-<from config>}"
     echo "OUTPUT_DIR=${OUTPUT_DIR:-<from config>}"
     echo "GPU_FALLBACKS=$GPU_FALLBACKS"
     echo "CHECKPOINT_EVERY_EPOCHS=$CHECKPOINT_EVERY_EPOCHS"
+    echo "EARLY_STOPPING_PATIENCE=$EARLY_STOPPING_PATIENCE"
+    echo "EARLY_STOPPING_MIN_DELTA=$EARLY_STOPPING_MIN_DELTA"
     echo "ATTEMPT_LOG=$ATTEMPT_LOG"
     echo "First submit would request gpu:$(first_gpu_count)"
     ;;
@@ -147,7 +163,7 @@ case "$MODE" in
     fi
     state=$(job_state "$JOB_ID")
     if [[ -z "$state" ]]; then
-      echo "No sacct state found for JOB_ID=$JOB_ID; leaving unchanged" >&2
+      echo "No Slurm state found for JOB_ID=$JOB_ID; leaving unchanged" >&2
       exit 0
     fi
     retry=0

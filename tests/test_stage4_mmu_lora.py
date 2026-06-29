@@ -10,6 +10,7 @@ from ascr.training.stage4_mmu_lora import (
     mmu_localization_prompt,
     prepare_mmu_sft_dataset,
     run_mmu_localization_probe,
+    sample_ids_from_split_manifest,
     safe_parse_mmu_localization_payload,
 )
 from ascr.cli.stage4_probe_sweep import build_sweep_plan, summarize_sweep, write_summary as write_sweep_summary
@@ -98,6 +99,54 @@ class Stage4MmuLoraTests(unittest.TestCase):
         self.assertEqual(rows[0]["target_schema"], "localization_cells")
         self.assertEqual(set(target), {"has_error", "corrupted_cells_2x2"})
         self.assertEqual(target["corrupted_cells_2x2"], ["A1"])
+
+    def test_prepare_mmu_sft_dataset_writes_train_val_test_splits(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            tokens = root / "corrupt.json"
+            write_tokens(tokens)
+            dataset = root / "dataset.jsonl"
+            rows = []
+            for index in range(10):
+                rows.append({
+                    "sample_id": f"p{index:04d}_c000",
+                    "prompt": f"prompt {index}",
+                    "corrupted_image": "missing.ppm",
+                    "corrupted_vq_ids_path": str(tokens),
+                    "corruption_indices": [[0, index % 4]],
+                    "corruption_type": "block_2x2_random_replace",
+                    "token_grid_size": 4,
+                    "image_size": 64,
+                })
+            write_jsonl(dataset, rows)
+            manifest = prepare_mmu_sft_dataset(
+                dataset,
+                root / "sft",
+                grid_size=2,
+                max_selected_cells=4,
+                train_ratio=0.6,
+                val_ratio=0.2,
+                eval_mode="holdout",
+            )
+            split_manifest = json.loads(Path(manifest["split_manifest"]).read_text(encoding="utf-8"))
+            train_ids = sample_ids_from_split_manifest(manifest["split_manifest"], split="train")
+            val_ids = sample_ids_from_split_manifest(manifest["split_manifest"], split="val")
+            test_ids = sample_ids_from_split_manifest(manifest["split_manifest"], split="test")
+            eval_ids = sample_ids_from_split_manifest(manifest["split_manifest"], split="eval")
+            val_examples_exists = Path(manifest["val_sft_examples"]).exists()
+            test_examples_exists = Path(manifest["test_sft_examples"]).exists()
+        self.assertEqual(manifest["train_rows"], 6)
+        self.assertEqual(manifest["val_rows"], 2)
+        self.assertEqual(manifest["test_rows"], 2)
+        self.assertEqual(manifest["eval_rows"], 2)
+        self.assertEqual(split_manifest["val_ratio"], 0.2)
+        self.assertEqual(len(train_ids | val_ids | test_ids), 10)
+        self.assertFalse(train_ids & val_ids)
+        self.assertFalse(train_ids & test_ids)
+        self.assertFalse(val_ids & test_ids)
+        self.assertEqual(eval_ids, test_ids)
+        self.assertTrue(val_examples_exists)
+        self.assertTrue(test_examples_exists)
 
     def test_lumina_sft_conversion_can_use_vq_tokens_without_image_tokenizer(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -512,9 +561,14 @@ class Stage4MmuLoraTests(unittest.TestCase):
         train = build_config(4, dataset="hard256", kind="train")
         probe = build_config(8, dataset="hard256", kind="probe")
         self.assertIn("locality_hard256_v1", sft["dataset"])
+        self.assertEqual(sft["train_ratio"], 0.6)
+        self.assertEqual(sft["val_ratio"], 0.2)
         self.assertIn("mmu_lora_hard256_curriculum/grid4", train["output_dir"])
         self.assertIn("mmu_lora_hard256_curriculum/grid4", train["data_jsonl"])
+        self.assertIn("mmu_lora_hard256_curriculum/grid4", train["val_jsonl"])
         self.assertEqual(train["checkpoint_every_epochs"], 1)
+        self.assertEqual(train["early_stopping_patience"], 3)
+        self.assertEqual(train["early_stopping_min_delta"], 0.0)
         self.assertIn("locality_hard256_v1", probe["dataset"])
         self.assertEqual(probe["grid_size"], 8)
 

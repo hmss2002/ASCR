@@ -20,6 +20,8 @@ GPU_FALLBACKS=${GPU_FALLBACKS:-"8 4 1"}
 SAMPLES_PER_GPU=${SAMPLES_PER_GPU:-4}
 CHUNKS_PER_GPU=${CHUNKS_PER_GPU:-1}
 CHECKPOINT_EVERY_EPOCHS=${CHECKPOINT_EVERY_EPOCHS:-1}
+EARLY_STOPPING_PATIENCE=${EARLY_STOPPING_PATIENCE:-3}
+EARLY_STOPPING_MIN_DELTA=${EARLY_STOPPING_MIN_DELTA:-0.0}
 IMAGE_SIZE=${IMAGE_SIZE:-1024}
 export LUMINA_REPO=${LUMINA_REPO:-third_party/Lumina-DiMOO}
 export LUMINA_MODEL_PATH=${LUMINA_MODEL_PATH:-models/lumina-dimoo}
@@ -60,12 +62,29 @@ grid_dir() {
 
 sft_examples_path() {
   local grid=$1
-  echo "$(grid_dir "$grid")/sft/train_sft_examples.jsonl"
+  local split=${2:-train}
+  echo "$(grid_dir "$grid")/sft/${split}_sft_examples.jsonl"
+}
+
+lumina_jsonl_path() {
+  local grid=$1
+  local split=${2:-train}
+  echo "$(grid_dir "$grid")/lumina_sft/${split}.jsonl"
 }
 
 train_jsonl_path() {
   local grid=$1
-  echo "$(grid_dir "$grid")/lumina_sft/train.jsonl"
+  lumina_jsonl_path "$grid" train
+}
+
+val_jsonl_path() {
+  local grid=$1
+  lumina_jsonl_path "$grid" val
+}
+
+test_jsonl_path() {
+  local grid=$1
+  lumina_jsonl_path "$grid" test
 }
 
 require_nonempty_file() {
@@ -83,14 +102,17 @@ prepare_grid_sft() {
   local grid_root
   grid_root=$(grid_dir "$grid")
   "$PYTHON_BIN" -m ascr.cli.stage4_prepare_mmu_sft --config "$(config_path sft "$grid")"
-  require_nonempty_file "$(sft_examples_path "$grid")" \
-    "Stage-4 SFT prep did not produce train examples for grid${grid}."
-  "$PYTHON_BIN" -m ascr.training.prepare_lumina_sft_data \
-    --sft-examples "$(sft_examples_path "$grid")" \
-    --output-dir "$grid_root/lumina_sft" \
-    --repo-path "$LUMINA_REPO" \
-    --checkpoint-path "$LUMINA_MODEL_PATH" \
-    --image-size "$IMAGE_SIZE"
+  for split in train val test; do
+    require_nonempty_file "$(sft_examples_path "$grid" "$split")" \
+      "Stage-4 SFT prep did not produce ${split} examples for grid${grid}."
+    "$PYTHON_BIN" -m ascr.training.prepare_lumina_sft_data \
+      --sft-examples "$(sft_examples_path "$grid" "$split")" \
+      --output-dir "$grid_root/lumina_sft" \
+      --repo-path "$LUMINA_REPO" \
+      --checkpoint-path "$LUMINA_MODEL_PATH" \
+      --image-size "$IMAGE_SIZE" \
+      --split-name "$split"
+  done
 }
 
 check_training_inputs() {
@@ -103,12 +125,16 @@ check_training_inputs() {
       "Run MODE=generate_configs before checking grid${grid}."
     require_nonempty_file "$(train_jsonl_path "$grid")" \
       "Run MODE=prepare_sft before MODE=submit_train for grid${grid}."
+    require_nonempty_file "$(val_jsonl_path "$grid")" \
+      "Run MODE=prepare_sft before MODE=submit_train for grid${grid}."
   done
 }
 
 case "$MODE" in
   plan)
     echo "Hard256 pipeline plan"
+    echo "early_stopping_patience=$EARLY_STOPPING_PATIENCE"
+    echo "early_stopping_min_delta=$EARLY_STOPPING_MIN_DELTA"
     echo "1. MODE=generate_configs bash $0"
     echo "2. MODE=prepare_sft bash $0"
     echo "3. MODE=check_inputs bash $0"
@@ -123,6 +149,8 @@ case "$MODE" in
       echo "  train=$(config_path train "$grid")"
       echo "  probe=$(config_path probe "$grid")"
       echo "  train_jsonl=$(train_jsonl_path "$grid")"
+      echo "  val_jsonl=$(val_jsonl_path "$grid")"
+      echo "  test_jsonl=$(test_jsonl_path "$grid")"
     done
     ;;
   generate_configs)
@@ -149,8 +177,12 @@ case "$MODE" in
     fi
     for grid in $GRIDS; do
       CONFIG="$(config_path train "$grid")" \
+      DATA_JSONL="$(train_jsonl_path "$grid")" \
+      VAL_JSONL="$(val_jsonl_path "$grid")" \
       GPU_FALLBACKS="$GPU_FALLBACKS" \
       CHECKPOINT_EVERY_EPOCHS="$CHECKPOINT_EVERY_EPOCHS" \
+      EARLY_STOPPING_PATIENCE="$EARLY_STOPPING_PATIENCE" \
+      EARLY_STOPPING_MIN_DELTA="$EARLY_STOPPING_MIN_DELTA" \
       MODE=submit bash scripts/training/run_stage4_recovery_submit.sh
     done
     ;;

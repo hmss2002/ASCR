@@ -4646,3 +4646,49 @@ running). Re-merge all 32 for the full 512-prompt dataset.
 | 7 | P2 | Checkpoint default merge | Already fixed locally |
 | 8 | P2 | Progress bar / tqdm | Training visibility |
 | 9 | P2 | Bench512 full re-merge | Data completeness |
+
+---
+
+## 2026-06-29 - Codex local follow-up: P0/P1 fixes implemented
+
+Pulled and fast-forwarded local `main` with the server branch
+`origin/feat/stage4-gc-fallback-server` through commit `6ac65d9`, then
+continued from the server's critical-fix list.
+
+Implemented P0 training-stop controls:
+
+- Stage-4 SFT prep now supports explicit train/val/test holdout via
+  `val_ratio`; hard256 generated defaults are 60/20/20.
+- SFT prep writes `train_sft_examples.jsonl`, `val_sft_examples.jsonl`,
+  `test_sft_examples.jsonl`, and keeps `eval_sft_examples.jsonl` as the test
+  compatibility alias.
+- Lumina conversion can emit `train.jsonl`, `val.jsonl`, and `test.jsonl`
+  with split-scoped image-token caches.
+- Single-GPU and DDP LoRA training can read `--val-jsonl`, evaluate validation
+  loss every epoch, save only improved validation checkpoints, stop with
+  patience, and copy the best checkpoint to the final adapter directory.
+- `jobs/stage4/train_mmu_lora_ddp.sbatch` now defaults to
+  `PYTHONUNBUFFERED=1`, `NCCL_DEBUG=INFO`, `NCCL_TIMEOUT=1800`,
+  `NCCL_ASYNC_ERROR_HANDLING=1`, and `TORCH_DISTRIBUTED_DEBUG=DETAIL`.
+- `run_hard256_full_pipeline.sh` now prepares and checks train/val/test
+  Lumina JSONL files and passes `VAL_JSONL` plus early-stopping controls into
+  the recovery submit wrapper.
+
+Implemented P1 Stage5 memory mitigation:
+
+- `LuminaNativeEngine.unload()` releases loaded model/tokenizer/VQ-VAE state
+  and clears CUDA cache when available.
+- Stage5 `share_engine` now defaults to offloading the generator before LoRA
+  MMU answering when `offload_generator_before_mmu: true` and a LoRA path is
+  configured. This preserves the unified engine API while reducing peak memory
+  before the LoRA MMU phase.
+
+Local validation run:
+
+```bash
+python -m unittest tests.test_stage4_mmu_lora tests.test_stage4_shell_scripts
+```
+
+Passed locally. Still required on the server: real 8-GPU DDP validation,
+NCCL-abort diagnosis with the new debug env, and a real Stage5 non-mock run to
+confirm the offload mitigation fits on the target GPU.

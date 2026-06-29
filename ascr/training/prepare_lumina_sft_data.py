@@ -103,6 +103,7 @@ def convert_sft_examples(
     image_size=1024,
     limit=None,
     image_tokenizer=None,
+    split_name="train",
 ):
     if repo_path:
         import sys
@@ -111,7 +112,8 @@ def convert_sft_examples(
         if repo not in sys.path:
             sys.path.insert(0, repo)
     output_dir = Path(output_dir)
-    image_cache_dir = output_dir / "image_tokens"
+    split_name = str(split_name or "train").strip().lower().replace("-", "_")
+    image_cache_dir = output_dir / "image_tokens" / split_name
     image_cache_dir.mkdir(parents=True, exist_ok=True)
 
     rows = []
@@ -189,8 +191,8 @@ def convert_sft_examples(
             "target_schema": example.get("target_schema"),
         })
 
-    train_path = output_dir / "train.jsonl"
-    with train_path.open("w", encoding="utf-8") as handle:
+    output_jsonl = output_dir / f"{split_name}.jsonl"
+    with output_jsonl.open("w", encoding="utf-8") as handle:
         for row in rows:
             json.dump(row, handle, ensure_ascii=False, sort_keys=True)
             handle.write("\n")
@@ -201,6 +203,7 @@ def convert_sft_examples(
         "sft_examples": str(sft_examples),
         "checkpoint_path": str(checkpoint_path),
         "repo_path": str(repo_path) if repo_path else None,
+        "split_name": split_name,
         "image_size": int(image_size),
         "example_count": len(rows),
         "skipped_count": len(skipped),
@@ -211,10 +214,14 @@ def convert_sft_examples(
             INPUT_MODE_DECODED_IMAGE: decoded_image_count,
         },
         "skipped": skipped,
-        "train_jsonl": str(train_path),
+        "output_jsonl": str(output_jsonl),
+        f"{split_name}_jsonl": str(output_jsonl),
         "image_cache_dir": str(image_cache_dir),
     }
-    write_json(output_dir / "manifest.json", manifest)
+    if split_name == "train":
+        manifest["train_jsonl"] = str(output_jsonl)
+        write_json(output_dir / "manifest.json", manifest)
+    write_json(output_dir / f"manifest_{split_name}.json", manifest)
     return manifest
 
 
@@ -227,6 +234,7 @@ def build_parser():
     parser.add_argument("--device", default=os.environ.get("DEVICE", "cuda"))
     parser.add_argument("--image-size", type=int, default=1024)
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--split-name", default=os.environ.get("SPLIT_NAME", "train"))
     return parser
 
 
@@ -240,6 +248,7 @@ def main(argv=None):
         device=args.device,
         image_size=args.image_size,
         limit=args.limit,
+        split_name=args.split_name,
     )
     print(json.dumps(manifest, indent=2, sort_keys=True))
     return 0

@@ -15,10 +15,12 @@ from ascr.training.train_lumina_lora_smoke import (
     _build_optimizer,
     _call_model_loss,
     _configure_gradient_checkpointing,
+    _copy_checkpoint_to_output,
     _dtype_value,
     _lora_parameter_report,
     _jsonl_rows,
     _load_training_stack,
+    _mean_lora_loss,
     _prepare_lumina_lora_batch,
     _save_epoch_checkpoint,
     _trainable_parameters,
@@ -42,6 +44,8 @@ def _resolve_lora_args(argv=None):
         setattr(lora_args, key.replace("-", "_"), value)
     if args.data_jsonl:
         lora_args.data_jsonl = args.data_jsonl
+    if args.val_jsonl:
+        lora_args.val_jsonl = args.val_jsonl
     if args.output_dir:
         lora_args.output_dir = args.output_dir
     for key in (
@@ -55,6 +59,8 @@ def _resolve_lora_args(argv=None):
         "device_map",
         "resume_from_adapter",
         "checkpoint_every_epochs",
+        "early_stopping_patience",
+        "early_stopping_min_delta",
         "gradient_checkpointing",
         "gradient_checkpointing_fallback",
     ):
@@ -147,6 +153,9 @@ def train_lumina_lora_ddp(argv=None):
         rows = rows[: int(args.limit)]
     if not rows:
         raise ValueError(f"No training rows found in {args.data_jsonl}")
+    val_rows = list(_jsonl_rows(args.val_jsonl)) if args.val_jsonl else []
+    if args.limit is not None and val_rows:
+        val_rows = val_rows[: int(args.limit)]
     sampler = DistributedSampler(rows, num_replicas=env["world_size"], rank=env["rank"], shuffle=True, seed=int(args.seed))
     optimizer = _build_optimizer(
         torch,
@@ -157,6 +166,10 @@ def train_lumina_lora_ddp(argv=None):
     )
     local_losses = []
     checkpoints = []
+    best_val_loss = None
+    best_checkpoint = None
+    epochs_without_improvement = 0
+    stopped_early = False
     for epoch in range(int(args.epochs)):
         sampler.set_epoch(epoch)
         total = 0.0
@@ -182,29 +195,74 @@ def train_lumina_lora_ddp(argv=None):
         avg_tensor = torch.tensor([local_avg], dtype=torch.float32, device=device)
         dist.all_reduce(avg_tensor, op=dist.ReduceOp.SUM)
         avg_tensor /= env["world_size"]
+        val_loss = None
+        if val_rows:
+            local_val_rows = val_rows[env["rank"]::env["world_size"]]
+            local_val_loss = _mean_lora_loss(
+                torch,
+                ddp_model,
+                tokenizer,
+                add_break_line,
+                local_val_rows,
+                args,
+                device=device,
+            )
+            local_val_count = len(local_val_rows)
+            local_val_total = float(local_val_loss or 0.0) * local_val_count
+            val_tensor = torch.tensor([local_val_total, float(local_val_count)], dtype=torch.float32, device=device)
+            dist.all_reduce(val_tensor, op=dist.ReduceOp.SUM)
+            val_loss = float((val_tensor[0] / val_tensor[1].clamp_min(1.0)).item())
+        stop_tensor = torch.tensor([0], dtype=torch.int64, device=device)
         if env["rank"] == 0:
-            print(f"epoch {epoch}: ddp_avg_loss={float(avg_tensor.item()):.6f}")
-            if int(args.checkpoint_every_epochs or 0) > 0 and (epoch + 1) % int(args.checkpoint_every_epochs) == 0:
+            suffix = f", val_loss={val_loss:.6f}" if val_loss is not None else ""
+            print(f"epoch {epoch}: ddp_avg_loss={float(avg_tensor.item()):.6f}{suffix}", flush=True)
+            should_save_epoch = int(args.checkpoint_every_epochs or 0) > 0 and (epoch + 1) % int(args.checkpoint_every_epochs) == 0
+            if val_loss is not None:
+                improved = best_val_loss is None or val_loss < best_val_loss - float(args.early_stopping_min_delta)
+                if improved:
+                    best_val_loss = val_loss
+                    epochs_without_improvement = 0
+                    best_checkpoint = _save_epoch_checkpoint(ddp_model.module, tokenizer, args.output_dir, epoch + 1)
+                    checkpoints.append(best_checkpoint)
+                else:
+                    epochs_without_improvement += 1
+                if int(args.early_stopping_patience or 0) > 0 and epochs_without_improvement >= int(args.early_stopping_patience):
+                    stopped_early = True
+                    stop_tensor[0] = 1
+                    print(
+                        f"early stopping at epoch {epoch}: best_val_loss={best_val_loss:.6f}, "
+                        f"patience={int(args.early_stopping_patience)}",
+                        flush=True,
+                    )
+            elif should_save_epoch:
                 checkpoints.append(_save_epoch_checkpoint(ddp_model.module, tokenizer, args.output_dir, epoch + 1))
+        dist.broadcast(stop_tensor, src=0)
+        if int(stop_tensor.item()) == 1:
+            break
     gathered_losses = [None for _ in range(env["world_size"])]
     dist.all_gather_object(gathered_losses, local_losses)
     manifest = None
     if env["rank"] == 0:
         output_dir = Path(args.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
-        ddp_model.module.save_pretrained(output_dir)
-        tokenizer.save_pretrained(output_dir)
+        if best_checkpoint:
+            _copy_checkpoint_to_output(best_checkpoint, output_dir)
+        else:
+            ddp_model.module.save_pretrained(output_dir)
+            tokenizer.save_pretrained(output_dir)
         losses = [item for rank_losses in gathered_losses for item in (rank_losses or [])]
         losses.sort(key=lambda item: (item["epoch"], item["step"], item["rank"]))
         manifest = {
             "schema_version": "ascr.lumina_lora_ddp.v1",
             "created_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
             "data_jsonl": str(args.data_jsonl),
+            "val_jsonl": str(args.val_jsonl) if args.val_jsonl else None,
             "checkpoint_path": str(args.checkpoint_path),
             "repo_path": str(args.repo_path),
             "output_dir": str(output_dir),
             "row_count": len(rows),
             "epochs": int(args.epochs),
+            "completed_epochs": max((item["epoch"] for item in losses), default=-1) + 1,
             "world_size": env["world_size"],
             "backend": backend,
             "optimizer": str(args.optimizer),
@@ -223,6 +281,11 @@ def train_lumina_lora_ddp(argv=None):
             "rank_lora_reports": rank_lora_reports,
             "resume_from_adapter": str(args.resume_from_adapter) if args.resume_from_adapter else None,
             "checkpoint_every_epochs": int(args.checkpoint_every_epochs or 0),
+            "early_stopping_patience": int(args.early_stopping_patience or 0),
+            "early_stopping_min_delta": float(args.early_stopping_min_delta),
+            "stopped_early": stopped_early,
+            "best_val_loss": best_val_loss,
+            "best_checkpoint": best_checkpoint,
             "checkpoints": checkpoints,
             "losses": losses,
             "final_loss": losses[-1]["loss"] if losses else None,

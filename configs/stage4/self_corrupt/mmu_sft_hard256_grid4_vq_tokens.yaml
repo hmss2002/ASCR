@@ -3,7 +3,8 @@ output_dir: outputs/stage4_self_corrupt/mmu_lora_hard256_curriculum/grid4/vq_tok
 grid_size: 4
 max_selected_cells: 4
 eval_mode: holdout
-train_ratio: 0.75
+train_ratio: 0.6
+val_ratio: 0.2
 seed: 0
 limit: null
 project_root: .

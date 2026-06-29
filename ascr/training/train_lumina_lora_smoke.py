@@ -7,6 +7,8 @@ import os
 import pickle
 from pathlib import Path
 import random
+import shutil
+import time
 
 
 SP = {
@@ -239,6 +241,49 @@ def _save_epoch_checkpoint(model, tokenizer, output_dir, epoch):
     return str(checkpoint_dir)
 
 
+def _copy_checkpoint_to_output(checkpoint_dir, output_dir):
+    checkpoint_dir = Path(checkpoint_dir)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for item in checkpoint_dir.iterdir():
+        target = output_dir / item.name
+        if item.is_dir():
+            if target.exists():
+                shutil.rmtree(target)
+            shutil.copytree(item, target)
+        else:
+            shutil.copy2(item, target)
+
+
+def _mean_lora_loss(torch, model, tokenizer, add_break_line, rows, args, device=None):
+    if not rows:
+        return None
+    was_training = bool(getattr(model, "training", False))
+    model.eval()
+    total = 0.0
+    with torch.no_grad():
+        for row in rows:
+            input_ids, labels = _prepare_lumina_lora_batch(
+                torch,
+                tokenizer,
+                add_break_line,
+                row,
+                args,
+                device=device,
+            )
+            loss = _call_model_loss(torch, model, input_ids, labels, device=device)
+            if hasattr(loss, "detach"):
+                value = loss.detach().item()
+            elif hasattr(loss, "item"):
+                value = loss.item()
+            else:
+                value = loss
+            total += float(value)
+    if was_training:
+        model.train()
+    return total / max(1, len(rows))
+
+
 def _prepare_lumina_lora_batch(torch, tokenizer, add_break_line, row, args, device=None):
     with open(row["user_image"], "rb") as handle:
         image_payload = pickle.load(handle)
@@ -411,6 +456,9 @@ def train_lumina_lora_smoke(args):
         rows = rows[: int(args.limit)]
     if not rows:
         raise ValueError(f"No training rows found in {args.data_jsonl}")
+    val_rows = list(_jsonl_rows(args.val_jsonl)) if args.val_jsonl else []
+    if args.limit is not None and val_rows:
+        val_rows = val_rows[: int(args.limit)]
     optimizer = _build_optimizer(
         torch,
         args.optimizer,
@@ -420,7 +468,12 @@ def train_lumina_lora_smoke(args):
     )
     losses = []
     checkpoints = []
+    best_val_loss = None
+    best_checkpoint = None
+    epochs_without_improvement = 0
+    stopped_early = False
     for epoch in range(int(args.epochs)):
+        started_at = time.monotonic()
         random.shuffle(rows)
         total = 0.0
         for step, row in enumerate(rows):
@@ -432,22 +485,52 @@ def train_lumina_lora_smoke(args):
             value = float(loss.item())
             total += value
             losses.append({"epoch": epoch, "step": step, "loss": value})
-        print(f"epoch {epoch}: avg_loss={total / max(1, len(rows)):.6f}", flush=True)
-        if int(args.checkpoint_every_epochs or 0) > 0 and (epoch + 1) % int(args.checkpoint_every_epochs) == 0:
+        train_loss = total / max(1, len(rows))
+        val_loss = _mean_lora_loss(torch, model, tokenizer, add_break_line, val_rows, args) if val_rows else None
+        elapsed_s = time.monotonic() - started_at
+        suffix = f", val_loss={val_loss:.6f}" if val_loss is not None else ""
+        print(
+            f"epoch {epoch}: avg_loss={train_loss:.6f}{suffix}, elapsed_s={elapsed_s:.1f}",
+            flush=True,
+        )
+        should_save_epoch = int(args.checkpoint_every_epochs or 0) > 0 and (epoch + 1) % int(args.checkpoint_every_epochs) == 0
+        if val_loss is not None:
+            improved = best_val_loss is None or val_loss < best_val_loss - float(args.early_stopping_min_delta)
+            if improved:
+                best_val_loss = val_loss
+                epochs_without_improvement = 0
+                best_checkpoint = _save_epoch_checkpoint(model, tokenizer, args.output_dir, epoch + 1)
+                checkpoints.append(best_checkpoint)
+            else:
+                epochs_without_improvement += 1
+            if int(args.early_stopping_patience or 0) > 0 and epochs_without_improvement >= int(args.early_stopping_patience):
+                stopped_early = True
+                print(
+                    f"early stopping at epoch {epoch}: best_val_loss={best_val_loss:.6f}, "
+                    f"patience={int(args.early_stopping_patience)}",
+                    flush=True,
+                )
+                break
+        elif should_save_epoch:
             checkpoints.append(_save_epoch_checkpoint(model, tokenizer, args.output_dir, epoch + 1))
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    model.save_pretrained(output_dir)
-    tokenizer.save_pretrained(output_dir)
+    if best_checkpoint:
+        _copy_checkpoint_to_output(best_checkpoint, output_dir)
+    else:
+        model.save_pretrained(output_dir)
+        tokenizer.save_pretrained(output_dir)
     manifest = {
         "schema_version": "ascr.lumina_lora_smoke.v1",
         "created_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
         "data_jsonl": str(args.data_jsonl),
+        "val_jsonl": str(args.val_jsonl) if args.val_jsonl else None,
         "checkpoint_path": str(args.checkpoint_path),
         "repo_path": str(args.repo_path),
         "output_dir": str(output_dir),
         "row_count": len(rows),
         "epochs": int(args.epochs),
+        "completed_epochs": max((item["epoch"] for item in losses), default=-1) + 1,
         "lr": float(args.lr),
         "weight_decay": float(args.weight_decay),
         "optimizer": str(args.optimizer),
@@ -465,6 +548,11 @@ def train_lumina_lora_smoke(args):
         "lora_parameter_report": lora_parameter_report,
         "resume_from_adapter": str(args.resume_from_adapter) if args.resume_from_adapter else None,
         "checkpoint_every_epochs": int(args.checkpoint_every_epochs or 0),
+        "early_stopping_patience": int(args.early_stopping_patience or 0),
+        "early_stopping_min_delta": float(args.early_stopping_min_delta),
+        "stopped_early": stopped_early,
+        "best_val_loss": best_val_loss,
+        "best_checkpoint": best_checkpoint,
         "checkpoints": checkpoints,
         "device": device,
         "losses": losses,
@@ -480,6 +568,7 @@ def build_parser():
     parser.add_argument("--repo-path", default=os.environ.get("LUMINA_REPO", "third_party/Lumina-DiMOO"))
     parser.add_argument("--checkpoint-path", default=os.environ.get("LUMINA_MODEL_PATH", "models/lumina-dimoo"))
     parser.add_argument("--data-jsonl", default="outputs/stage2_lumina_native/lumina_sft_data_v2/train.jsonl")
+    parser.add_argument("--val-jsonl", default=None)
     parser.add_argument("--output-dir", default="outputs/stage2_lumina_native/lora_v2")
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--limit", type=int, default=None)
@@ -496,6 +585,8 @@ def build_parser():
     parser.add_argument("--target-modules", default="q_proj,v_proj,k_proj,o_proj,gate_proj,up_proj,down_proj")
     parser.add_argument("--resume-from-adapter", default=None)
     parser.add_argument("--checkpoint-every-epochs", type=int, default=1)
+    parser.add_argument("--early-stopping-patience", type=int, default=3)
+    parser.add_argument("--early-stopping-min-delta", type=float, default=0.0)
     parser.add_argument("--torch-dtype", default="bfloat16", choices=["auto", "float32", "fp32", "bfloat16", "bf16", "float16", "fp16"])
     parser.add_argument(
         "--device-map",

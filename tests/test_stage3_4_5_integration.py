@@ -18,9 +18,13 @@ class _CountingStage5Engine:
 
     def __init__(self):
         self.lora_path = None
+        self._model = object()
+        self._tokenizer = object()
+        self._vqvae = object()
         self.generated = 0
         self.answered = 0
         self.reopened = 0
+        self.unloaded = 0
 
     def generate(self, prompt, seed=0):
         self.generated += 1
@@ -43,6 +47,15 @@ class _CountingStage5Engine:
     def answer_vq_tokens(self, question, vq_ids, max_new_tokens=384):
         self.answered += 1
         return '{"has_error":true,"corrupted_cells_4x4":["A1"]}'
+
+    def unload(self, clear_lora=False):
+        self.unloaded += 1
+        self._model = None
+        self._tokenizer = None
+        self._vqvae = None
+        if clear_lora:
+            self.lora_path = None
+        return True
 
 
 class Stage345IntegrationTests(unittest.TestCase):
@@ -97,8 +110,10 @@ class Stage345IntegrationTests(unittest.TestCase):
         self.assertEqual(created[0].generated, 1)
         self.assertEqual(created[0].answered, 1)
         self.assertEqual(created[0].reopened, 1)
+        self.assertEqual(created[0].unloaded, 1)
         self.assertEqual(created[0].lora_path, "outputs/adapters/grid4")
         self.assertTrue(trace["share_engine"])
+        self.assertTrue(trace["offloaded_generator_before_mmu"])
         self.assertEqual(trace["answer_method"], "answer_vq_tokens")
 
     def test_prompt_sampler_removes_holdout_and_stratifies(self):

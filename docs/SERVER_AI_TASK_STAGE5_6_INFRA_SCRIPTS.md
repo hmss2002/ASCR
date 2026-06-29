@@ -113,6 +113,11 @@ Stage-4 8-GPU launch entry:
 sbatch jobs/stage4/train_mmu_lora_ddp.sbatch
 ```
 
+The DDP sbatch now exports `PYTHONUNBUFFERED=1`, `NCCL_DEBUG=INFO`,
+`NCCL_TIMEOUT=1800`, `NCCL_ASYNC_ERROR_HANDLING=1`, and
+`TORCH_DISTRIBUTED_DEBUG=DETAIL` by default. Override them only when debugging
+shows a better cluster-specific setting.
+
 Stage-4 multi-GPU eval shards:
 
 ```bash
@@ -146,6 +151,12 @@ MODE=summarize bash scripts/training/run_hard256_full_pipeline.sh
 MODE=registry bash scripts/training/run_hard256_full_pipeline.sh
 ```
 
+Hard256 generated configs now use a 60/20/20 train/val/test split. The
+pipeline's `prepare_sft` mode creates `lumina_sft/train.jsonl`,
+`lumina_sft/val.jsonl`, and `lumina_sft/test.jsonl` per grid. Training uses
+train plus val only: `val.jsonl` drives best-checkpoint selection and early
+stopping, while test remains held out for final probe/reporting.
+
 Stage-4 training fallback submit:
 
 ```bash
@@ -159,6 +170,10 @@ MODE=recover JOB_ID=<failed_job_id> \
 so a later `MODE=recover JOB_ID=...` can infer whether the failed job was the
 8-GPU, 4-GPU, or 1-GPU attempt. Use `DRY_RUN=1` to print the exact `sbatch`
 command without submitting.
+
+The recovery submit wrapper also passes `VAL_JSONL`,
+`EARLY_STOPPING_PATIENCE`, and `EARLY_STOPPING_MIN_DELTA` through to the DDP
+training job. Default patience is 3.
 
 Stage-5 multi-prompt single-node run:
 
@@ -190,13 +205,16 @@ The Stage-5 multi-prompt wrapper also honors `GPU_IDS`, `GPU_COUNT`,
 - Stage-5 defaults to `share_engine: true` to avoid loading generator, MMU, and
   LoRA copies at the same time. The loop now reuses one
   `LuminaNativeEngine` instance and lazily attaches the LoRA adapter before
-  the MMU answer call; this behavior is covered by
+  the MMU answer call; it also defaults to
+  `offload_generator_before_mmu: true`, which releases loaded generator
+  model/tokenizer/VQ-VAE state and clears CUDA cache before the LoRA MMU phase.
+  This behavior is covered by
   `test_stage5_share_engine_reuses_one_lumina_instance_and_attaches_lora_lazily`.
   Set `share_engine: false` only when GPU memory is sufficient and separate
   generation/MMU behavior must be isolated.
 - `run_hard256_full_pipeline.sh` now includes explicit `prepare_sft` and
   `check_inputs` modes. `submit_train` refuses to submit if the Hard256 dataset
-  or per-grid Lumina SFT `train.jsonl` files are missing, unless
+  or per-grid Lumina SFT `train.jsonl`/`val.jsonl` files are missing, unless
   `SKIP_INPUT_CHECK=1` is set intentionally.
 - Stage-4 multi-GPU eval supports per-GPU chunking through `CHUNKS_PER_GPU`;
   Hard256 `submit_eval_recovery` defaults to two chunks per GPU to retry failed

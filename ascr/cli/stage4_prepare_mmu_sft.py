@@ -17,6 +17,7 @@ def build_parser():
     parser.add_argument("--grid-size", type=int, default=16)
     parser.add_argument("--max-selected-cells", type=int, default=16)
     parser.add_argument("--train-ratio", type=float, default=0.75)
+    parser.add_argument("--val-ratio", type=float, default=0.0)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--eval-mode", choices=["holdout", "resubstitution"], default="holdout")
     parser.add_argument("--limit", type=int, default=None)
@@ -36,6 +37,7 @@ def main(argv=None):
         grid_size=int(config.get("grid_size", args.grid_size)),
         max_selected_cells=int(config.get("max_selected_cells", args.max_selected_cells)),
         train_ratio=float(config.get("train_ratio", args.train_ratio)),
+        val_ratio=float(config.get("val_ratio", args.val_ratio)),
         seed=int(config.get("seed", args.seed)),
         eval_mode=config.get("eval_mode", args.eval_mode),
         limit=config.get("limit", args.limit),

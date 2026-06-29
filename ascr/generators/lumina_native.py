@@ -83,6 +83,22 @@ class LuminaNativeEngine:
         self._lumina = None
         self._torch = None
 
+    def unload(self, clear_lora=False):
+        """Release loaded Lumina weights so the same engine can reload later."""
+        had_loaded_state = any(value is not None for value in (self._model, self._tokenizer, self._vqvae))
+        torch = self._torch
+        self._model = None
+        self._tokenizer = None
+        self._vqvae = None
+        if clear_lora:
+            self.lora_path = None
+        import gc
+
+        gc.collect()
+        if torch is not None and hasattr(torch, "cuda") and torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        return had_loaded_state
+
     # ------------------------------------------------------------------ load
     def _ensure_repo_on_path(self):
         repo = str(Path(self.repo_path).resolve())

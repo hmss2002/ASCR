@@ -102,6 +102,14 @@ def _maybe_attach_lora(engine, lora_path):
     return engine
 
 
+def _offload_engine_before_mmu(engine, lora_path):
+    if not lora_path or isinstance(engine, MockLuminaEngine):
+        return False
+    if hasattr(engine, "unload"):
+        return bool(engine.unload(clear_lora=False))
+    return False
+
+
 def run_stage5_loop(
     prompt,
     output_dir,
@@ -144,6 +152,9 @@ def run_stage5_loop(
         max_selected_cells=max_selected_cells,
         target_schema="localization_cells",
     )
+    offloaded_generator_before_mmu = False
+    if share_engine and bool(config.get("offload_generator_before_mmu", True)):
+        offloaded_generator_before_mmu = _offload_engine_before_mmu(mmu_engine, lora_path)
     mmu_engine = _maybe_attach_lora(mmu_engine, lora_path)
     raw_text, answer_method = call_native_answer(
         mmu_engine,
@@ -164,6 +175,7 @@ def run_stage5_loop(
         "seed": seed,
         "corruption_type": corruption_type,
         "share_engine": share_engine,
+        "offloaded_generator_before_mmu": offloaded_generator_before_mmu,
         "grid_size": grid_size,
         "token_grid_size": token_grid_size,
         "target_cells": target_cells,

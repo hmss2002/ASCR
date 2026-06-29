@@ -1,5 +1,6 @@
 mock: false
 share_engine: true
+offload_generator_before_mmu: true
 seed: 0
 grid_size: 4
 token_grid_size: 64

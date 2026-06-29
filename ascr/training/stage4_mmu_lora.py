@@ -252,31 +252,47 @@ def repair_target_payload(
     }
 
 
-def _split_indices(rows, eval_mode="holdout", train_ratio=0.75, seed=0):
+def _split_indices(rows, eval_mode="holdout", train_ratio=0.75, val_ratio=0.0, seed=0):
     indices = list(range(len(rows)))
     if eval_mode == "resubstitution":
-        return indices, indices
+        return indices, indices, indices
     if eval_mode != "holdout":
         raise ValueError(f"Unsupported eval_mode: {eval_mode}")
     if len(indices) <= 1:
-        return indices, indices
+        return indices, [], indices
+    train_ratio = float(train_ratio)
+    val_ratio = max(0.0, float(val_ratio or 0.0))
+    if train_ratio <= 0.0 or train_ratio >= 1.0:
+        raise ValueError(f"train_ratio must be in (0, 1), got {train_ratio}")
+    if train_ratio + val_ratio >= 1.0:
+        raise ValueError(f"train_ratio + val_ratio must be < 1.0, got {train_ratio + val_ratio}")
     rng = random.Random(int(seed))
     by_type = {}
     for index, row in enumerate(rows):
         by_type.setdefault(row.get("corruption_type", "unknown"), []).append(index)
     train_indices = []
-    eval_indices = []
+    val_indices = []
+    test_indices = []
     for group in by_type.values():
         group = list(group)
         rng.shuffle(group)
         if len(group) == 1:
             train_indices.extend(group)
             continue
-        train_count = int(len(group) * float(train_ratio))
+        train_count = int(len(group) * train_ratio)
         train_count = max(1, min(len(group) - 1, train_count))
+        remaining = len(group) - train_count
+        val_count = int(len(group) * val_ratio)
+        if val_ratio > 0 and remaining >= 2:
+            val_count = max(1, min(remaining - 1, val_count))
+        else:
+            val_count = 0
         train_indices.extend(group[:train_count])
-        eval_indices.extend(group[train_count:])
-    return sorted(train_indices), sorted(eval_indices or train_indices)
+        val_indices.extend(group[train_count:train_count + val_count])
+        test_indices.extend(group[train_count + val_count:])
+    if not test_indices:
+        test_indices = val_indices or train_indices
+    return sorted(train_indices), sorted(val_indices), sorted(test_indices)
 
 
 def _normalised_path(raw_path, project_root=None):
@@ -347,6 +363,7 @@ def prepare_mmu_sft_dataset(
     grid_size=16,
     max_selected_cells=16,
     train_ratio=0.75,
+    val_ratio=0.0,
     seed=0,
     eval_mode="holdout",
     limit=None,
@@ -364,17 +381,26 @@ def prepare_mmu_sft_dataset(
         rows = rows[: int(limit)]
     if not rows:
         raise ValueError(f"No rows found in dataset: {dataset}")
-    train_indices, eval_indices = _split_indices(rows, eval_mode=eval_mode, train_ratio=train_ratio, seed=seed)
+    train_indices, val_indices, test_indices = _split_indices(
+        rows,
+        eval_mode=eval_mode,
+        train_ratio=train_ratio,
+        val_ratio=val_ratio,
+        seed=seed,
+    )
     train_set = set(train_indices)
-    eval_set = set(eval_indices)
+    val_set = set(val_indices)
+    test_set = set(test_indices)
     examples = []
     for index, row in enumerate(rows):
-        if index in train_set and index in eval_set:
+        if eval_mode == "resubstitution":
             split = "train_eval"
         elif index in train_set:
             split = "train"
-        elif index in eval_set:
-            split = "eval"
+        elif index in val_set:
+            split = "val"
+        elif index in test_set:
+            split = "test"
         else:
             split = "unused"
         for mode in input_modes:
@@ -391,31 +417,43 @@ def prepare_mmu_sft_dataset(
                 )
             )
     train_ids = {str(rows[index].get("sample_id")) for index in train_indices}
-    eval_ids = {str(rows[index].get("sample_id")) for index in eval_indices}
+    val_ids = {str(rows[index].get("sample_id")) for index in val_indices}
+    test_ids = {str(rows[index].get("sample_id")) for index in test_indices}
     train_examples = [
         example
         for example in examples
         if str(example.get("sample_id")) in train_ids and example.get("split") in {"train", "train_eval"}
     ]
-    eval_examples = [
+    val_examples = [
         example
         for example in examples
-        if str(example.get("sample_id")) in eval_ids and example.get("split") in {"eval", "train_eval"}
+        if str(example.get("sample_id")) in val_ids and example.get("split") in {"val", "train_eval"}
+    ]
+    test_examples = [
+        example
+        for example in examples
+        if str(example.get("sample_id")) in test_ids and example.get("split") in {"test", "train_eval"}
     ]
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     sft_path = output_dir / "sft_examples.jsonl"
     train_path = output_dir / "train_sft_examples.jsonl"
+    val_path = output_dir / "val_sft_examples.jsonl"
+    test_path = output_dir / "test_sft_examples.jsonl"
     eval_path = output_dir / "eval_sft_examples.jsonl"
     split_path = output_dir / "split_manifest.json"
     write_jsonl(sft_path, examples)
     write_jsonl(train_path, train_examples)
-    write_jsonl(eval_path, eval_examples)
+    write_jsonl(val_path, val_examples)
+    write_jsonl(test_path, test_examples)
+    write_jsonl(eval_path, test_examples)
     split_manifest = {
         "schema_version": "ascr.stage4.mmu_lora_split.v1",
         "dataset": str(dataset),
         "eval_mode": eval_mode,
         "train_ratio": float(train_ratio),
+        "val_ratio": float(val_ratio or 0.0),
+        "test_ratio": max(0.0, 1.0 - float(train_ratio) - float(val_ratio or 0.0)),
         "seed": int(seed),
         "row_count": len(rows),
         "input_mode": input_mode,
@@ -423,9 +461,13 @@ def prepare_mmu_sft_dataset(
         "target_schema": target_schema,
         "prompt_variant": prompt_variant,
         "train_indices": train_indices,
-        "eval_indices": eval_indices,
+        "val_indices": val_indices,
+        "test_indices": test_indices,
+        "eval_indices": test_indices,
         "train_sample_ids": [rows[index].get("sample_id") for index in train_indices],
-        "eval_sample_ids": [rows[index].get("sample_id") for index in eval_indices],
+        "val_sample_ids": [rows[index].get("sample_id") for index in val_indices],
+        "test_sample_ids": [rows[index].get("sample_id") for index in test_indices],
+        "eval_sample_ids": [rows[index].get("sample_id") for index in test_indices],
     }
     write_json(split_path, split_manifest)
     mode_counts = {
@@ -460,12 +502,16 @@ def prepare_mmu_sft_dataset(
         "row_count": len(examples),
         "example_count": len(examples),
         "train_rows": len(train_examples),
-        "eval_rows": len(eval_examples),
+        "val_rows": len(val_examples),
+        "test_rows": len(test_examples),
+        "eval_rows": len(test_examples),
         "missing_images": sum(1 for example in examples if not example["image_exists"]),
         "missing_vq_ids": sum(1 for example in examples if not example["vq_ids_exists"]),
         "missing_required_inputs": missing_required_inputs,
         "sft_examples": str(sft_path),
         "train_sft_examples": str(train_path),
+        "val_sft_examples": str(val_path),
+        "test_sft_examples": str(test_path),
         "eval_sft_examples": str(eval_path),
         "split_manifest": str(split_path),
         "preferred_training_input": (
@@ -482,7 +528,14 @@ def prepare_mmu_sft_dataset(
 
 def sample_ids_from_split_manifest(path, split="eval"):
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
-    key = "train_sample_ids" if split == "train" else "eval_sample_ids"
+    split = str(split or "eval").strip().lower()
+    key = {
+        "train": "train_sample_ids",
+        "val": "val_sample_ids",
+        "validation": "val_sample_ids",
+        "test": "test_sample_ids",
+        "eval": "eval_sample_ids",
+    }.get(split, "eval_sample_ids")
     return {str(value) for value in payload.get(key, [])}
 
 
