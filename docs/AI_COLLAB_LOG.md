@@ -5045,3 +5045,50 @@ sbatch --partition=gpu_shared --gres=gpu:2 --cpus-per-task=16 --mem=180G \
 If the run hangs, copy every `ASCR_DDP_DEBUG {...}` line from all rank logs into
 this document before handing back to Codex. The last emitted marker should
 identify the exact phase.
+
+### Server DDP v3 test (71792) — 8 GPU, grid4, limit=32, epochs=5
+
+Node: SPGL-1-7. All 8 ranks produced identical debug output:
+
+```
+rank_lora_consistency_start           ✅ (256 tensors, 10.5M params)
+rank_consistency_tensor_gather_start  ✅ (all 8 ranks, same values)
+rank_consistency_tensor_gather_done   🔴 NEVER PRINTED
+mark_ddp_ignored_frozen_start         🔴 NEVER PRINTED
+constructing DDP                      🔴 NEVER PRINTED
+```
+
+**Hang is at `dist.all_gather()` line 100.** The tensor gather (4×int64)
+never completes. NCCL init was successful. But the first collective after
+init hangs without a prior `dist.barrier()`.
+
+**Next test: NPROC=2** as recommended by Codex. Try to narrow down if this
+is an 8-GPU-specific issue or a general NCCL problem.
+
+---
+
+## 2026-06-29 23:15 HKT — Server AI: Bench512 eval results + tests passing
+
+### Bench512 Eval (limit=64, zero-shot vs LoRA)
+
+| Grid | Zero-hit | Zero-parse | LoRA-hit | LoRA-parse | Δ |
+|------|----------|-----------|----------|-----------|----|
+| 4 | 1.56% | 15.6% | **3.12%** | **32.8%** | LoRA 2× better |
+| 8 | 1.56% | 34.4% | 1.56% | **45.3%** | parse improves |
+| 16 | 0.00% | 3.1% | pending | - | hard case |
+
+Grid16_lora resubmitted as 71789.
+
+### Tests (all green)
+
+```
+test_stage4_ddp_compat.py     5/5 ✅
+test_stage4_shell_scripts.py  3/3 ✅
+```
+
+### Training
+
+| Grid | Job | Epoch | Loss |
+|------|-----|-------|------|
+| 4 | 71761 | 2 (≈16) | 0.008 |
+| 8 | 71763 | 2 (≈16) | - |
