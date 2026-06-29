@@ -29,6 +29,11 @@ source "$ASCR_ENV/bin/activate"
 
 export LUMINA_REPO=${LUMINA_REPO:-third_party/Lumina-DiMOO}
 export LUMINA_MODEL_PATH=${LUMINA_MODEL_PATH:-models/lumina-dimoo}
+export NCCL_DEBUG=${NCCL_DEBUG:-INFO}
+export NCCL_SOCKET_IFNAME=${NCCL_SOCKET_IFNAME:-lo}
+export NCCL_IB_DISABLE=${NCCL_IB_DISABLE:-1}
+export NCCL_P2P_DISABLE=${NCCL_P2P_DISABLE:-0}
+export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
 CONFIG=${CONFIG:-configs/stage4/self_corrupt/mmu_lora_train_hard64_grid8_vq_tokens_l40s_1024px_gc_adam8bit.yaml}
 NPROC=${NPROC:-$(bash scripts/slurm/dynamic_gpu_detect.sh --count)}
 TORCHRUN_ARGS=(--config "$CONFIG")

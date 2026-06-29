@@ -4623,6 +4623,168 @@ own independent split.
 
 #### 7. `--checkpoint-every-epochs` default 0 ✅ (fixed locally, needs upstream merge)
 
+---
+
+## 🔴 2026-06-29 21:00 HKT — Server AI: Bench512 DDP migration attempt + NCCL debug
+
+Context:
+- Machine: hpcr4300a (login node), SPGL-1-[5,7,11] (GPU nodes, 8×L40s each)
+- Branch: feat/stage4-gc-fallback-server
+- Commit before: 6ac65d9
+- Commit after: (pending commit)
+
+### Summary
+
+Attempted to migrate Bench512 Stage4 training from single-GPU to 8-GPU DDP.
+Found and fixed peft/transformers version incompatibility. NCCL init now
+succeeds but DDP wrapping hangs after NCCL init. Fell back to single-GPU
+resumed training from epoch 13 checkpoints.
+
+### What was running before
+
+3 single-GPU Bench512 training jobs (grid4/8/16), each 1 GPU × 12h:
+- 71671 (g4): epoch 13, loss 0.006 → best checkpoint epoch_0013
+- 71673 (g8): epoch 13, loss 0.023 → best checkpoint epoch_0013
+- 71675 (g16): epoch 13, loss 0.130 → best checkpoint epoch_0013
+- 71672/71674/71676: pending eval jobs (dependency on above)
+
+### Step 1: Cancelled old jobs
+
+All 6 jobs cancelled. Checkpoints from epoch 13 preserved.
+
+### Step 2: Attempted 8-GPU DDP (4 attempts, all failed)
+
+**Attempt 1** (71745/71746/71747): Submitted to `gpu` partition, 8 GPUs each.
+All 3 PENDING → cancelled (no nodes with 8 free GPUs in `gpu` partition).
+Switched to `gpu_shared`.
+
+**Attempt 2** (71749/71750/71751): Submitted to `gpu_shared`.
+All 3 FAILED with:
+```
+ModuleNotFoundError: No module named 'transformers.integrations.tensor_parallel'
+```
+Root cause: peft 0.19.1 calls `from transformers.integrations.tensor_parallel import ...`
+during `PeftModel.from_pretrained()` (adapter resume path), but transformers 4.46.2
+does not have this module. New training (no resume) wouldn't hit this path.
+
+**Fix**: Created dummy `tensor_parallel.py` module in both `.venv-lumina` and
+`.venv-mmada` venvs at:
+```
+{venv}/lib/python3.11/site-packages/transformers/integrations/tensor_parallel.py
+```
+Provides: `ALL_PARALLEL_STYLES`, `ColwiseParallel`, `RowwiseParallel`,
+`EmbeddingParallel`, `gather_state_dict_for_save`. These are never actually
+called because our model has no TP config — the `_maybe_shard_state_dict_for_tp`
+function returns early when no TP plan is detected on the model.
+
+**Attempt 3** (71753): Single 8-GPU grid4 test with dummy module fix.
+FAILED with same `tensor_parallel` error — discovered that DDP sbatch was
+picking up `.venv-mmada`'s torchrun instead of `.venv-lumina`'s. Created
+dummy module in `.venv-mmada` too. Also added `ASCR_ENV=.venv-lumina` to
+sbatch export.
+
+**Attempt 4** (71755/71756/71757): 3 × 8-GPU with all fixes applied.
+Also changed `find_unused_parameters=True` → `False` in DDP code and added
+NCCL env vars to sbatch script:
+```
+export NCCL_DEBUG=INFO
+export NCCL_SOCKET_IFNAME=lo
+export NCCL_IB_DISABLE=1
+```
+Result: NCCL init COMPLETE for all 8 ranks (confirmed in logs). Model loading
+succeeded. LoRA adapter loading succeeded. But training stalled afterwards —
+zero output for 8+ minutes, no checkpoints created. DDP wrapping hangs after
+NCCL init, before first forward pass. Behaviour is identical to previously
+documented NCCL issue (#3 in P0 section above).
+
+**NCCL debug summary**:
+- NCCL init: ✅ All 8 ranks complete on node SPGL-1-5
+- Model + LoRA load: ✅ 
+- DDP wrapping / first forward pass: 🔴 HANGS
+- DDP code location: `stage4_mmu_lora_ddp.py:139` (`DistributedDataParallel(model, ...)`)
+- NCCL_DEBUG=INFO shows no errors — just hangs silently
+- Likely model-incompatible-with-DDP issue (custom LLaDA architecture)
+
+### Step 3: Fell back to single-GPU resumed training (CURRENT)
+
+Re-submitted 3 single-GPU jobs, each resuming from epoch_0013 checkpoint,
+continuing to epoch 30:
+
+| Grid | Job ID | Node | Config | Epochs |
+|------|--------|------|--------|--------|
+| 4 | 71761 | SPGL-1-11 | hard256_grid4 | 30 (from 13) |
+| 8 | 71763 | SPGL-1-11 | hard256_grid8 | 30 (from 13) |
+| 16 | 71764 | SPGL-1-11 | hard256_grid16 | 30 (from 13) |
+
+Command (grid4 example):
+```bash
+sbatch --partition=gpu_shared --gres=gpu:1 --cpus-per-task=8 --mem=120G --time=12:00:00 \
+  --job-name=ascr-b512-g4r \
+  --output=logs/ascr-b512-g4r-%j.out \
+  --wrap="source .venv-lumina/bin/activate && \
+    export LUMINA_REPO=third_party/Lumina-DiMOO && \
+    export LUMINA_MODEL_PATH=models/lumina-dimoo && \
+    python -m ascr.cli.stage4_train_mmu_lora \
+    --config configs/stage4/self_corrupt/mmu_lora_train_hard256_grid4_vq_tokens_l40s_1024_gc_adam8bit.yaml \
+    --data-jsonl outputs/stage4_self_corrupt/mmu_lora_bench512/grid4/vq_tokens/lumina_sft/train.jsonl \
+    --output-dir outputs/stage4_self_corrupt/mmu_lora_bench512/grid4/vq_tokens/lora \
+    --epochs 30 \
+    --resume-from-adapter outputs/stage4_self_corrupt/mmu_lora_bench512/grid4/vq_tokens/lora/checkpoints/epoch_0013 \
+    --checkpoint-every-epochs 1"
+```
+
+**Training progress (confirmed via checkpoint timestamps):**
+- Grid4 epoch_0014 @ 20:12 (confirmed running)
+- Grid8 epoch_0014 @ 20:13 (confirmed running)
+- Grid16 epoch_0014 @ 20:17 (confirmed running)
+- stdout buffered (known P2 issue) but checkpoints prove training is active
+
+### Files changed in this session
+
+1. `ascr/training/stage4_mmu_lora_ddp.py:143`
+   - Changed `find_unused_parameters=True` → `False`
+   - Reason: attempt DDP NCCL hang fix (didn't solve the hang)
+
+2. `jobs/stage4/train_mmu_lora_ddp.sbatch`
+   - Added NCCL env vars: `NCCL_DEBUG=INFO`, `NCCL_SOCKET_IFNAME=lo`, `NCCL_IB_DISABLE=1`, `PYTORCH_CUDA_ALLOC_CONF`
+   - Reason: debug and fix NCCL communication
+   - NCCL init now succeeds (was failing silently before)
+
+3. `{venvs}/lib/python3.11/site-packages/transformers/integrations/tensor_parallel.py` (venv only, not in git)
+   - Created dummy module in `.venv-lumina` and `.venv-mmada`
+   - Reason: peft 0.19.1 + transformers 4.46.2 incompatibility on adapter resume path
+
+### Cluster GPU inventory
+
+| Partition | Nodes | GPUs/node | Total GPUs | Idle Nodes |
+|-----------|-------|-----------|------------|------------|
+| gpu | 8 (1 drain) | 8×L40s | 64 | 0 fully idle |
+| gpu_shared | 10 | 8×L40s | 80 | 4 idle |
+| QOS limit | | | 28/user | |
+
+### Next actions for Codex
+
+1. **CRITICAL**: Fix DDP for LLaDA model. NCCL init works but DDP wrapping
+   hangs. Likely the custom model architecture (`LLaDAModelLM` from Lumina-DiMOO)
+   is incompatible with PyTorch DDP. Options:
+   - Test DDP with a simpler model first to isolate the issue
+   - Try `torchrun --nproc_per_node=2` to see if smaller DDP works
+   - Check if LLaDA has custom parameters that break DDP `find_unused_parameters`
+   - Consider FSDP or DeepSpeed as alternatives
+
+2. **IMPORTANT**: peft 0.19.1 + transformers 4.46.2 version mismatch.
+   Either upgrade transformers to >=4.48.0 or downgrade peft to avoid the
+   `tensor_parallel` import. The dummy module is a temporary workaround.
+
+3. **Train/val/test split** (P0) — still needed. Current Bench512 training
+   uses the same binary 75/25 split as Hard256.
+
+4. **stdout flush** — training output is buffered, makes monitoring difficult.
+   The `flush=True` fix from smoke script should be ported to DDP code too.
+
+5. After single-GPU training completes (~8h from now), need to submit
+   Stage4 eval jobs for all 3 grids.
+
 #### 8. Training progress log: add step-level progress bar (tqdm) or per-epoch timing
 
 Currently completely silent for hours. Even with flush fix, users want to

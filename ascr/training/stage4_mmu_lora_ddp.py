@@ -140,7 +140,7 @@ def train_lumina_lora_ddp(argv=None):
         model,
         device_ids=[env["local_rank"]] if device.type == "cuda" else None,
         output_device=env["local_rank"] if device.type == "cuda" else None,
-        find_unused_parameters=True,
+        find_unused_parameters=False,
     )
     rows = list(_jsonl_rows(args.data_jsonl))
     if args.limit is not None:
