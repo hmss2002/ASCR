@@ -5320,3 +5320,33 @@ Next server action:
    record whether it reaches the first training step.
 4. Append all `ASCR_DDP_DEBUG` markers and the final pass/fail line to this
    log, then push only safe code/docs/result summaries.
+
+---
+
+## 🎉 2026-06-30 04:30 HKT — Server AI: BREAKTHROUGH — 8-GPU GLOO DDP WORKING
+
+### Codex fix (9331dad) verified
+
+**2-GPU smoke test (71802): GLOO, limit=16, epochs=2**
+```
+✅ rank consistency → gather_done → constructor_done
+✅ epoch 0: ddp_avg_loss=0.000121
+✅ epoch 1: ddp_avg_loss=0.000038
+✅ checkpoints saved, manifest written
+```
+
+**8-GPU bench512 training (resume from single-GPU checkpoints):**
+
+| Grid | Job | Node | Epoch 0 Loss | Status |
+|------|-----|------|-------------|--------|
+| 4 | 71806 | SPGL-1-? | **0.000226** | ✅ Training |
+| 8 | 71807 | SPGL-1-? | pending | 🔄 Resubmitted (GPU fault on prev node) |
+| 16 | 71805 | SPGL-1-8 | **0.102642** | ✅ Training |
+
+Grid8 first attempt (71804) failed on SPGL-1-7: "Failed to get device handle
+for GPU 2" — hardware fault. Resubmitted as 71807.
+
+**NCCL still broken**: Even with pre-collective barrier (ASCR_DDP_PRE_COLLECTIVE_
+BARRIER=1), NCCL all_gather hangs after barrier completes. GLOO is the confirmed
+multi-GPU solution for this L40s cluster.
+
