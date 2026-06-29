@@ -155,16 +155,33 @@ def _as_tensor_batch(torch, values, device):
     return torch.tensor([values], dtype=torch.long, device=device)
 
 
+def _as_token_row(values):
+    if hasattr(values, "detach"):
+        values = values.detach()
+    if hasattr(values, "cpu"):
+        values = values.cpu()
+    if hasattr(values, "tolist"):
+        values = values.tolist()
+    if isinstance(values, tuple):
+        values = list(values)
+    if isinstance(values, list) and values and isinstance(values[0], (list, tuple)):
+        values = values[0]
+    if not isinstance(values, (list, tuple)):
+        values = [values]
+    return [int(value) for value in values]
+
+
 def _call_model_loss(torch, model, input_ids, labels, device=None):
     device = device or _model_input_device(model)
+    input_row = _as_token_row(input_ids)
+    label_row = _as_token_row(labels)
     input_tensor = _as_tensor_batch(torch, input_ids, device)
     label_tensor = _as_tensor_batch(torch, labels, device)
     candidates = [
+        ([input_row], [label_row]),
         ([input_tensor[0]], [label_tensor[0]]),
         (input_tensor, label_tensor),
     ]
-    if not hasattr(input_ids, "to") and not hasattr(labels, "to"):
-        candidates.append(([input_ids], [labels]))
     last_type_error = None
     for candidate_input_ids, candidate_labels in candidates:
         try:

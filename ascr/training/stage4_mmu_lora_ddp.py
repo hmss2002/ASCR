@@ -91,9 +91,37 @@ def _ddp_debug(env, message, payload=None):
     print(f"ASCR_DDP_DEBUG {json.dumps(record, sort_keys=True, default=str)}", flush=True)
 
 
+def _dist_backend_name(dist):
+    try:
+        return str(dist.get_backend()).lower()
+    except Exception:
+        return ""
+
+
+def _dist_barrier(dist, env, device):
+    kwargs = {}
+    if getattr(device, "type", None) == "cuda" and _dist_backend_name(dist) == "nccl":
+        kwargs["device_ids"] = [env["local_rank"]]
+    try:
+        dist.barrier(**kwargs)
+    except TypeError:
+        dist.barrier()
+
+
+def _maybe_pre_collective_barrier(dist, env, device, label):
+    if not _env_bool("ASCR_DDP_PRE_COLLECTIVE_BARRIER", default=False):
+        return False
+    backend = _dist_backend_name(dist)
+    _ddp_debug(env, f"{label}_pre_collective_barrier_start", {"backend": backend})
+    _dist_barrier(dist, env, device)
+    _ddp_debug(env, f"{label}_pre_collective_barrier_done", {"backend": backend})
+    return True
+
+
 def _assert_rank_consistent_lora(torch, dist, env, report, output_dir, device):
     keys = ("trainable_tensor_count", "trainable_parameter_count", "lora_tensor_count", "lora_trainable_tensor_count")
     local_values = [int(report.get(key) or 0) for key in keys]
+    _maybe_pre_collective_barrier(dist, env, device, "rank_consistency")
     _ddp_debug(env, "rank_consistency_tensor_gather_start", {"values": dict(zip(keys, local_values))})
     value_tensor = torch.tensor(local_values, dtype=torch.long, device=device)
     gathered_tensors = [torch.zeros_like(value_tensor) for _ in range(env["world_size"])]

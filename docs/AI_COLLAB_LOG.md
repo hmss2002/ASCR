@@ -5282,3 +5282,41 @@ Once Codex provides any fix, the server can test:
 - 24-GPU data-sharded training (3 grids × 8 GPUs simultaneous)
 
 Current single-GPU training runs autonomously until epoch 30 (~6h remaining).
+
+## 2026-06-30 - Codex local follow-up: NCCL first-collective barrier and GLOO batch format
+
+Pulled and fast-forwarded local `main` with the server branch
+`origin/feat/stage4-gc-fallback-server` through commit `649cd03`. The latest
+server result isolated two P0 issues:
+
+- NCCL initializes all ranks but hangs at the first tiny tensor collective in
+  `_assert_rank_consistent_lora`.
+- GLOO gets through rank consistency, frozen-parameter ignore, and DDP
+  construction, then crashes inside Lumina forward with
+  `TypeError: unsupported operand type(s) for +: 'Tensor' and 'list'`.
+
+Local changes made:
+
+- Added an optional `ASCR_DDP_PRE_COLLECTIVE_BARRIER` path in
+  `ascr/training/stage4_mmu_lora_ddp.py`. It prints
+  `rank_consistency_pre_collective_barrier_start/done` before the existing
+  tensor gather. The sbatch default is enabled so the next server run directly
+  tests the server's Option C.
+- Updated `_call_model_loss` in `ascr/training/train_lumina_lora_smoke.py` to
+  try plain Python token rows first, even when the DDP path prepared tensors.
+  This keeps Lumina's list-based batch manipulation away from a single-row
+  Tensor and targets the GLOO forward crash without editing `third_party/`.
+- Added unit coverage for the NCCL pre-collective barrier hook and for the
+  list-first Lumina forward candidate.
+- Updated `docs/SERVER_AI_TASK_STAGE5_6_INFRA_SCRIPTS.md` with the exact
+  2-GPU NCCL smoke, GLOO fallback, and 8-GPU retest order.
+
+Next server action:
+
+1. Pull latest `main`.
+2. Run the documented 2-GPU NCCL smoke with
+   `ASCR_DDP_PRE_COLLECTIVE_BARRIER=1`.
+3. If NCCL still hangs, rerun the same smoke with `ASCR_DDP_BACKEND=gloo` and
+   record whether it reaches the first training step.
+4. Append all `ASCR_DDP_DEBUG` markers and the final pass/fail line to this
+   log, then push only safe code/docs/result summaries.

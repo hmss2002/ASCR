@@ -122,10 +122,12 @@ It also exports DDP options for large frozen-base LoRA training:
 `ASCR_DDP_IGNORE_FROZEN=1`, `ASCR_DDP_INIT_SYNC=0`,
 `ASCR_DDP_BROADCAST_BUFFERS=0`, `ASCR_DDP_FIND_UNUSED_PARAMETERS=0`, and
 `ASCR_DDP_GRADIENT_AS_BUCKET_VIEW=1`. It also exports `ASCR_DDP_DEBUG=1` and
-`ASCR_DDP_IGNORE_FROZEN_METHOD=attribute`. Every rank prints `ASCR_DDP_DEBUG`
-JSON markers before and after the rank-consistency gather, frozen-parameter
-ignore pass, DDP option generation, and DDP constructor. If a run hangs,
-preserve all of those lines in `docs/AI_COLLAB_LOG.md`.
+`ASCR_DDP_IGNORE_FROZEN_METHOD=attribute`. The sbatch now also defaults
+`ASCR_DDP_PRE_COLLECTIVE_BARRIER=1`, inserting a debugged barrier before the
+rank-consistency tensor gather. Every rank prints `ASCR_DDP_DEBUG` JSON markers
+before and after the pre-collective barrier, rank-consistency gather,
+frozen-parameter ignore pass, DDP option generation, and DDP constructor. If a
+run hangs, preserve all of those lines in `docs/AI_COLLAB_LOG.md`.
 
 Minimal DDP constructor smoke:
 
@@ -133,11 +135,28 @@ Minimal DDP constructor smoke:
 CONFIG=configs/stage4/self_corrupt/mmu_lora_train_hard256_grid4_vq_tokens_l40s_1024_gc_adam8bit.yaml \
 DATA_JSONL=outputs/stage4_self_corrupt/mmu_lora_hard256_curriculum/grid4/vq_tokens/lumina_sft/train.jsonl \
 VAL_JSONL=outputs/stage4_self_corrupt/mmu_lora_hard256_curriculum/grid4/vq_tokens/lumina_sft/val.jsonl \
-NPROC=2 LIMIT=8 EPOCHS=1 ASCR_DDP_DEBUG=1 \
+NPROC=2 LIMIT=8 EPOCHS=1 ASCR_DDP_DEBUG=1 ASCR_DDP_PRE_COLLECTIVE_BARRIER=1 \
 sbatch --partition=gpu_shared --gres=gpu:2 --cpus-per-task=16 --mem=180G \
-  --time=01:00:00 --export=ALL,CONFIG,DATA_JSONL,VAL_JSONL,NPROC,LIMIT,EPOCHS,ASCR_DDP_DEBUG \
+  --time=01:00:00 --export=ALL,CONFIG,DATA_JSONL,VAL_JSONL,NPROC,LIMIT,EPOCHS,ASCR_DDP_DEBUG,ASCR_DDP_PRE_COLLECTIVE_BARRIER \
   jobs/stage4/train_mmu_lora_ddp.sbatch
 ```
+
+Retest order after the 2026-06-30 local fix:
+
+1. Run the 2-GPU NCCL smoke above. Success means logs show
+   `rank_consistency_pre_collective_barrier_start`,
+   `rank_consistency_pre_collective_barrier_done`,
+   `rank_consistency_tensor_gather_done`, and then at least the first training
+   step or epoch summary.
+2. If NCCL still hangs at the pre-collective barrier or the following gather,
+   rerun the same command with `ASCR_DDP_BACKEND=gloo` added to the environment.
+   The local fix makes `_call_model_loss` try Python token rows before
+   tensor-backed rows, which targets the previous GLOO crash:
+   `TypeError: unsupported operand type(s) for +: 'Tensor' and 'list'`.
+3. If 2-GPU GLOO reaches training, scale to `NPROC=8 --gres=gpu:8` with GLOO.
+   This is expected to be slower than NCCL but should be acceptable for the
+   LoRA parameter count. If both NCCL and GLOO fail, use the existing
+   single-GPU/resume path while logging the exact final failure line.
 
 Stage-4 multi-GPU eval shards:
 
