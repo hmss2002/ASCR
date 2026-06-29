@@ -4998,3 +4998,50 @@ from loaded adapter weights. New checkpoints overwrite old epoch_0001+.
 2. Once eval frees GPU slots, grid16 training + Stage5 tests can start
 3. DDP hang needs Codex to add debug prints between all_gather and DDP wrap
 4. After eval completes, push results to GitHub
+
+---
+
+## 2026-06-29 - Codex local follow-up: DDP pre-constructor instrumentation
+
+Pulled server branch `origin/feat/stage4-gc-fallback-server` through commit
+`041ec0b`. The latest server test reported that rank 0 never reached the
+`constructing DDP with options=...` print, so the hang is before the DDP
+constructor rather than inside it.
+
+Local fixes implemented:
+
+- Replaced the LoRA rank consistency check from `dist.all_gather_object()` to a
+  pure tensor `dist.all_gather()` over four integer counts:
+  `trainable_tensor_count`, `trainable_parameter_count`, `lora_tensor_count`,
+  and `lora_trainable_tensor_count`.
+- This avoids the NCCL object-collective path visible in server logs as
+  `_object_to_tensor`; the rank report samples are still recorded locally on
+  mismatch.
+- Added `ASCR_DDP_DEBUG` rank-level JSON prints before and after:
+  - rank consistency tensor gather
+  - frozen-parameter collection
+  - frozen-parameter ignore marking
+  - DDP constructor option generation
+  - DDP constructor start/done
+- Changed frozen-parameter ignore default method to `attribute`; use
+  `ASCR_DDP_IGNORE_FROZEN_METHOD=setter` only if the server wants to test
+  PyTorch's private setter path explicitly.
+- `jobs/stage4/train_mmu_lora_ddp.sbatch` now exports:
+  - `ASCR_DDP_DEBUG=1`
+  - `ASCR_DDP_IGNORE_FROZEN_METHOD=attribute`
+
+Server validation requested:
+
+```bash
+CONFIG=configs/stage4/self_corrupt/mmu_lora_train_hard256_grid4_vq_tokens_l40s_1024_gc_adam8bit.yaml \
+DATA_JSONL=outputs/stage4_self_corrupt/mmu_lora_hard256_curriculum/grid4/vq_tokens/lumina_sft/train.jsonl \
+VAL_JSONL=outputs/stage4_self_corrupt/mmu_lora_hard256_curriculum/grid4/vq_tokens/lumina_sft/val.jsonl \
+NPROC=2 LIMIT=8 EPOCHS=1 ASCR_DDP_DEBUG=1 \
+sbatch --partition=gpu_shared --gres=gpu:2 --cpus-per-task=16 --mem=180G \
+  --time=01:00:00 --export=ALL,CONFIG,DATA_JSONL,VAL_JSONL,NPROC,LIMIT,EPOCHS,ASCR_DDP_DEBUG \
+  jobs/stage4/train_mmu_lora_ddp.sbatch
+```
+
+If the run hangs, copy every `ASCR_DDP_DEBUG {...}` line from all rank logs into
+this document before handing back to Codex. The last emitted marker should
+identify the exact phase.

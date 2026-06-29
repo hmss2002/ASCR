@@ -76,10 +76,39 @@ def _ddp_loss(torch, model, input_ids, labels, device):
     return _call_model_loss(torch, model, input_ids, labels, device=device)
 
 
-def _assert_rank_consistent_lora(dist, env, report, output_dir):
-    reports = [None for _ in range(env["world_size"])]
-    dist.all_gather_object(reports, report)
+def _ddp_debug(env, message, payload=None):
+    if not _env_bool("ASCR_DDP_DEBUG", default=True):
+        return
+    record = {
+        "time": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        "rank": env.get("rank"),
+        "local_rank": env.get("local_rank"),
+        "world_size": env.get("world_size"),
+        "message": message,
+    }
+    if payload:
+        record.update(payload)
+    print(f"ASCR_DDP_DEBUG {json.dumps(record, sort_keys=True, default=str)}", flush=True)
+
+
+def _assert_rank_consistent_lora(torch, dist, env, report, output_dir, device):
     keys = ("trainable_tensor_count", "trainable_parameter_count", "lora_tensor_count", "lora_trainable_tensor_count")
+    local_values = [int(report.get(key) or 0) for key in keys]
+    _ddp_debug(env, "rank_consistency_tensor_gather_start", {"values": dict(zip(keys, local_values))})
+    value_tensor = torch.tensor(local_values, dtype=torch.long, device=device)
+    gathered_tensors = [torch.zeros_like(value_tensor) for _ in range(env["world_size"])]
+    dist.all_gather(gathered_tensors, value_tensor)
+    gathered_values = [tensor.detach().cpu().tolist() for tensor in gathered_tensors]
+    _ddp_debug(env, "rank_consistency_tensor_gather_done", {"values_by_rank": gathered_values})
+    reports = [
+        {key: int(values[index]) for index, key in enumerate(keys)}
+        for values in gathered_values
+    ]
+    reports[env["rank"]]["local_report_sample"] = {
+        "trainable_names_sample": report.get("trainable_names_sample", []),
+        "lora_names_sample": report.get("lora_names_sample", []),
+        "resume_from_adapter": report.get("resume_from_adapter"),
+    }
     expected = {key: reports[0].get(key) for key in keys}
     mismatches = [
         {"rank": index, "report": item}
@@ -110,24 +139,35 @@ def _env_bool(name, default=False):
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _mark_ddp_ignored_frozen_parameters(DistributedDataParallel, model):
+def _mark_ddp_ignored_frozen_parameters(DistributedDataParallel, model, env=None):
     if not _env_bool("ASCR_DDP_IGNORE_FROZEN", default=True):
         return {"enabled": False, "ignored_parameter_count": 0, "ignored_parameter_names_sample": []}
+    env = env or {}
+    method = str(os.environ.get("ASCR_DDP_IGNORE_FROZEN_METHOD", "attribute")).strip().lower()
+    _ddp_debug(env, "ddp_ignore_frozen_collect_start", {"method": method})
+    named_parameters = list(model.named_parameters())
     ignored = [
         name
-        for name, parameter in model.named_parameters()
+        for name, parameter in named_parameters
         if not getattr(parameter, "requires_grad", False)
     ]
+    _ddp_debug(env, "ddp_ignore_frozen_collect_done", {"ignored_parameter_count": len(ignored)})
     setter = getattr(DistributedDataParallel, "_set_params_and_buffers_to_ignore_for_model", None)
-    if callable(setter) and ignored:
+    if method == "setter" and callable(setter) and ignored:
+        _ddp_debug(env, "ddp_ignore_frozen_setter_start", {"ignored_parameter_count": len(ignored)})
         setter(model, ignored)
+        _ddp_debug(env, "ddp_ignore_frozen_setter_done", {"ignored_parameter_count": len(ignored)})
     elif ignored:
-        model._ddp_params_and_buffers_to_ignore = set(ignored)
-        for name, parameter in model.named_parameters():
-            if name in model._ddp_params_and_buffers_to_ignore:
+        _ddp_debug(env, "ddp_ignore_frozen_attribute_start", {"ignored_parameter_count": len(ignored)})
+        ignored_set = set(ignored)
+        model._ddp_params_and_buffers_to_ignore = ignored_set
+        for name, parameter in named_parameters:
+            if name in ignored_set:
                 parameter._ddp_ignored = True
+        _ddp_debug(env, "ddp_ignore_frozen_attribute_done", {"ignored_parameter_count": len(ignored)})
     return {
         "enabled": True,
+        "method": method,
         "ignored_parameter_count": len(ignored),
         "ignored_parameter_names_sample": ignored[:32],
     }
@@ -195,10 +235,21 @@ def train_lumina_lora_ddp(argv=None):
         )
     lora_parameter_report = _lora_parameter_report(model)
     lora_parameter_report["resume_from_adapter"] = str(args.resume_from_adapter) if args.resume_from_adapter else None
-    rank_lora_reports = _assert_rank_consistent_lora(dist, env, lora_parameter_report, args.output_dir)
+    _ddp_debug(env, "rank_lora_consistency_start")
+    rank_lora_reports = _assert_rank_consistent_lora(torch, dist, env, lora_parameter_report, args.output_dir, device)
+    _ddp_debug(env, "rank_lora_consistency_done")
     model.train()
-    ddp_ignore_report = _mark_ddp_ignored_frozen_parameters(DistributedDataParallel, model)
+    ddp_ignore_report = _mark_ddp_ignored_frozen_parameters(DistributedDataParallel, model, env=env)
+    _ddp_debug(env, "ddp_constructor_options_start")
     ddp_options, ddp_ignored_options = _ddp_constructor_options(DistributedDataParallel, env, device)
+    _ddp_debug(
+        env,
+        "ddp_constructor_options_done",
+        {
+            "options": {key: str(value) for key, value in ddp_options.items()},
+            "ignored_options": ddp_ignored_options,
+        },
+    )
     if env["rank"] == 0:
         print(
             "constructing DDP with "
@@ -207,7 +258,9 @@ def train_lumina_lora_ddp(argv=None):
             f"ignored_frozen_parameters={ddp_ignore_report['ignored_parameter_count']}",
             flush=True,
         )
+    _ddp_debug(env, "ddp_constructor_start")
     ddp_model = DistributedDataParallel(model, **ddp_options)
+    _ddp_debug(env, "ddp_constructor_done")
     rows = list(_jsonl_rows(args.data_jsonl))
     if args.limit is not None:
         rows = rows[: int(args.limit)]
