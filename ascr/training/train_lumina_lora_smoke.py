@@ -10,6 +10,8 @@ import random
 import shutil
 import time
 
+from ascr.core.peft_compat import ensure_transformers_tensor_parallel_compat
+
 
 SP = {
     "mask": 126336,
@@ -90,6 +92,7 @@ def _load_training_stack(repo_path):
     if repo not in sys.path:
         sys.path.insert(0, repo)
     import torch
+    ensure_transformers_tensor_parallel_compat()
     from peft import LoraConfig, TaskType, get_peft_model
     from transformers import AutoTokenizer
     from model import LLaDAForMultiModalGeneration
@@ -212,6 +215,7 @@ def _trainable_parameters(model):
 def _apply_lora_adapter(LoraConfig, TaskType, get_peft_model, model, args):
     resume_from_adapter = getattr(args, "resume_from_adapter", None)
     if resume_from_adapter:
+        ensure_transformers_tensor_parallel_compat()
         from peft import PeftModel
 
         model = PeftModel.from_pretrained(model, str(resume_from_adapter), is_trainable=True)

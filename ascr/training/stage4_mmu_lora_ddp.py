@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import inspect
 import json
 import os
 from pathlib import Path
@@ -102,6 +103,60 @@ def _assert_rank_consistent_lora(dist, env, report, output_dir):
     return reports
 
 
+def _env_bool(name, default=False):
+    value = os.environ.get(name)
+    if value is None:
+        return bool(default)
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _mark_ddp_ignored_frozen_parameters(DistributedDataParallel, model):
+    if not _env_bool("ASCR_DDP_IGNORE_FROZEN", default=True):
+        return {"enabled": False, "ignored_parameter_count": 0, "ignored_parameter_names_sample": []}
+    ignored = [
+        name
+        for name, parameter in model.named_parameters()
+        if not getattr(parameter, "requires_grad", False)
+    ]
+    setter = getattr(DistributedDataParallel, "_set_params_and_buffers_to_ignore_for_model", None)
+    if callable(setter) and ignored:
+        setter(model, ignored)
+    elif ignored:
+        model._ddp_params_and_buffers_to_ignore = set(ignored)
+        for name, parameter in model.named_parameters():
+            if name in model._ddp_params_and_buffers_to_ignore:
+                parameter._ddp_ignored = True
+    return {
+        "enabled": True,
+        "ignored_parameter_count": len(ignored),
+        "ignored_parameter_names_sample": ignored[:32],
+    }
+
+
+def _ddp_constructor_options(DistributedDataParallel, env, device):
+    options = {
+        "device_ids": [env["local_rank"]] if device.type == "cuda" else None,
+        "output_device": env["local_rank"] if device.type == "cuda" else None,
+        "find_unused_parameters": _env_bool("ASCR_DDP_FIND_UNUSED_PARAMETERS", default=False),
+        "broadcast_buffers": _env_bool("ASCR_DDP_BROADCAST_BUFFERS", default=False),
+        "gradient_as_bucket_view": _env_bool("ASCR_DDP_GRADIENT_AS_BUCKET_VIEW", default=True),
+    }
+    bucket_cap_mb = os.environ.get("ASCR_DDP_BUCKET_CAP_MB")
+    if bucket_cap_mb:
+        options["bucket_cap_mb"] = int(bucket_cap_mb)
+    if "ASCR_DDP_STATIC_GRAPH" in os.environ:
+        options["static_graph"] = _env_bool("ASCR_DDP_STATIC_GRAPH", default=False)
+    if "ASCR_DDP_INIT_SYNC" in os.environ:
+        options["init_sync"] = _env_bool("ASCR_DDP_INIT_SYNC", default=False)
+    else:
+        options["init_sync"] = False
+
+    supported = set(inspect.signature(DistributedDataParallel).parameters)
+    filtered = {key: value for key, value in options.items() if key in supported}
+    ignored = sorted(set(options) - set(filtered))
+    return filtered, ignored
+
+
 def train_lumina_lora_ddp(argv=None):
     args = _resolve_lora_args(argv)
     torch, LoraConfig, TaskType, get_peft_model, AutoTokenizer, model_cls, add_break_line = _load_training_stack(args.repo_path)
@@ -142,12 +197,17 @@ def train_lumina_lora_ddp(argv=None):
     lora_parameter_report["resume_from_adapter"] = str(args.resume_from_adapter) if args.resume_from_adapter else None
     rank_lora_reports = _assert_rank_consistent_lora(dist, env, lora_parameter_report, args.output_dir)
     model.train()
-    ddp_model = DistributedDataParallel(
-        model,
-        device_ids=[env["local_rank"]] if device.type == "cuda" else None,
-        output_device=env["local_rank"] if device.type == "cuda" else None,
-        find_unused_parameters=True,
-    )
+    ddp_ignore_report = _mark_ddp_ignored_frozen_parameters(DistributedDataParallel, model)
+    ddp_options, ddp_ignored_options = _ddp_constructor_options(DistributedDataParallel, env, device)
+    if env["rank"] == 0:
+        print(
+            "constructing DDP with "
+            f"options={json.dumps(ddp_options, sort_keys=True, default=str)}, "
+            f"ignored_options={ddp_ignored_options}, "
+            f"ignored_frozen_parameters={ddp_ignore_report['ignored_parameter_count']}",
+            flush=True,
+        )
+    ddp_model = DistributedDataParallel(model, **ddp_options)
     rows = list(_jsonl_rows(args.data_jsonl))
     if args.limit is not None:
         rows = rows[: int(args.limit)]
@@ -279,6 +339,9 @@ def train_lumina_lora_ddp(argv=None):
             "gradient_checkpointing_report": gradient_checkpointing_report,
             "lora_parameter_report": lora_parameter_report,
             "rank_lora_reports": rank_lora_reports,
+            "ddp_constructor_options": {key: str(value) for key, value in ddp_options.items()},
+            "ddp_ignored_constructor_options": ddp_ignored_options,
+            "ddp_ignore_report": ddp_ignore_report,
             "resume_from_adapter": str(args.resume_from_adapter) if args.resume_from_adapter else None,
             "checkpoint_every_epochs": int(args.checkpoint_every_epochs or 0),
             "early_stopping_patience": int(args.early_stopping_patience or 0),

@@ -18,6 +18,8 @@ import os
 import sys
 from pathlib import Path
 
+from ascr.core.peft_compat import ensure_transformers_tensor_parallel_compat
+
 
 # Lumina special-token ids (from Lumina-DiMOO/config.py SPECIAL_TOKENS).
 MASK_TOKEN_ID = 126336
@@ -128,6 +130,7 @@ class LuminaNativeEngine:
             self.checkpoint_path, torch_dtype=self._torch.bfloat16, device_map="auto",
         )
         if self.lora_path:
+            ensure_transformers_tensor_parallel_compat()
             from peft import PeftModel
 
             self._model = PeftModel.from_pretrained(self._model, self.lora_path)

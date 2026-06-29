@@ -118,6 +118,25 @@ The DDP sbatch now exports `PYTHONUNBUFFERED=1`, `NCCL_DEBUG=INFO`,
 `TORCH_DISTRIBUTED_DEBUG=DETAIL` by default. Override them only when debugging
 shows a better cluster-specific setting.
 
+It also exports DDP options for large frozen-base LoRA training:
+`ASCR_DDP_IGNORE_FROZEN=1`, `ASCR_DDP_INIT_SYNC=0`,
+`ASCR_DDP_BROADCAST_BUFFERS=0`, `ASCR_DDP_FIND_UNUSED_PARAMETERS=0`, and
+`ASCR_DDP_GRADIENT_AS_BUCKET_VIEW=1`. Rank 0 prints the constructor options
+before wrapping the model; if the run hangs, preserve that line in
+`docs/AI_COLLAB_LOG.md`.
+
+Minimal DDP constructor smoke:
+
+```bash
+CONFIG=configs/stage4/self_corrupt/mmu_lora_train_hard256_grid4_vq_tokens_l40s_1024_gc_adam8bit.yaml \
+DATA_JSONL=outputs/stage4_self_corrupt/mmu_lora_hard256_curriculum/grid4/vq_tokens/lumina_sft/train.jsonl \
+VAL_JSONL=outputs/stage4_self_corrupt/mmu_lora_hard256_curriculum/grid4/vq_tokens/lumina_sft/val.jsonl \
+NPROC=2 LIMIT=8 EPOCHS=1 \
+sbatch --partition=gpu_shared --gres=gpu:2 --cpus-per-task=16 --mem=180G \
+  --time=01:00:00 --export=ALL,CONFIG,DATA_JSONL,VAL_JSONL,NPROC,LIMIT,EPOCHS \
+  jobs/stage4/train_mmu_lora_ddp.sbatch
+```
+
 Stage-4 multi-GPU eval shards:
 
 ```bash

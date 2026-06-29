@@ -8,6 +8,7 @@ import hashlib
 import json
 from pathlib import Path
 
+from ascr.core.peft_compat import ensure_transformers_tensor_parallel_compat
 from ascr.core.config import load_config
 from ascr.corruption.vq_corruptor import corrupt_vq_ids, token_indices_to_cell_labels
 from ascr.evaluators.lumina_native import call_native_answer
@@ -94,6 +95,7 @@ def _maybe_attach_lora(engine, lora_path):
     if getattr(engine, "_model", None) is None:
         engine.lora_path = str(lora_path)
         return engine
+    ensure_transformers_tensor_parallel_compat()
     from peft import PeftModel
 
     engine._model = PeftModel.from_pretrained(engine._model, str(lora_path))
