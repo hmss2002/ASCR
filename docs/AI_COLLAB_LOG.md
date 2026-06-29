@@ -5350,3 +5350,112 @@ for GPU 2" — hardware fault. Resubmitted as 71807.
 BARRIER=1), NCCL all_gather hangs after barrier completes. GLOO is the confirmed
 multi-GPU solution for this L40s cluster.
 
+---
+
+## 🔴 2026-06-30 06:00 HKT — Server AI + Human: Data architecture review + labeling strategy concerns
+
+### Task architecture clarified
+
+```
+1024×1024 px → VAE(1/16) → 64×64 latent → VQ → 4096 tokens (0-8191)
+
+Corruption: 4×4 token block randomly replaced or shuffled
+                ↓
+Same corrupted tokens, three cell grids overlaid:
+  Grid4:  4×4 cells  (16),  each cell = 16×16 tokens
+  Grid8:  8×8 cells  (64),  each cell = 8×8  tokens
+  Grid16: 16×16 cells(256), each cell = 4×4  tokens
+                ↓
+Training prompt asks for specific granularity:
+  Grid4:  Schema {"corrupted_cells_4x4": string[]}
+  Grid8:  Schema {"corrupted_cells_4x4": string[], "corrupted_cells_8x8": string[]}
+  Grid16: Schema {all three granularities}
+```
+
+### Key finding: Grid8/16 training data includes ALL granularity labels
+
+```python
+# Grid4 answer  — only one granularity
+{"corrupted_cells_4x4": ["B4"], "has_error": true}
+
+# Grid8 answer  — two granularities
+{"corrupted_cells_4x4": ["D3"], "corrupted_cells_8x8": ["H6"], "has_error": true}
+
+# Grid16 answer — all three granularities
+{"corrupted_cells_16x16": ["G11","G12","H11","H12"],
+ "corrupted_cells_4x4": ["B3"],
+ "corrupted_cells_8x8": ["D6"],
+ "has_error": true}
+```
+
+Multi-cell rate per grid:
+- Grid4: 12% samples have multi-cell answer (4×4 block usually fits in 1 cell)
+- Grid8: 48% multi-cell (frequently crosses cell boundary)  
+- Grid16: 141% multi-cell (4×4 token block almost always spans 2×2=4 cells)
+
+### Concern: Is multi-granularity labeling causing Grid16 0% hit?
+
+Grid16 training data gives the model ALL granularity labels for each sample.
+The model sees:
+```
+Input:  corrupted VQ tokens (4096 values)
+Output: {"corrupted_cells_16x16": [...], "corrupted_cells_4x4": [...], ...}
+```
+
+**Hypothesis**: The model might learn a shortcut — it sees the coarse 4×4 label
+("B3"), does a mathematical mapping (B3 → which 16×16 cells that maps to), and
+outputs the 16×16 answer without truly learning fine-grained visual localization.
+During eval, if the mapping is slightly off or the alignment is imperfect, all
+16×16 cells are marked wrong → hit=0%.
+
+The coarse-to-fine mapping is deterministic (B3 → row 1 col 2 → at 16×16 resolution
+that's rows 4-7 cols 8-11 → cells D9,D10,D11,D12,E9,E10,E11,E12 etc.) but the
+model may learn the wrong mapping or be sensitive to boundary alignment.
+
+**Alternative**: Train Grid16 with ONLY 16×16 labels, forcing the model to
+visually localize at the finest granularity without coarse-label shortcuts.
+
+### Data volume discussion
+
+| Source | Prompts | SFT samples/grid |
+|--------|---------|-----------------|
+| hard64 | 64 | ~96 |
+| hard256 | 256 | 336 |
+| bench512 | 512 | 672 |
+| **Total** | **832** | **~1,104** |
+
+Merging all three datasets gives ~1,104 samples per grid. With 60/20/20 split:
+~660 train / ~220 val / ~220 test. This is adequate for ~14.7M LoRA params.
+
+Proposed: use merged hard64+hard256 for training, bench512 held out as independent test.
+
+### Early stopping infrastructure ready
+
+Codex added (commit 55bff82):
+- `--val-jsonl` + `--early-stopping-patience` + `--early-stopping-min-delta`
+- Training monitors val_loss, saves best checkpoint, stops if no improvement
+- We created proper 85/15 train/val splits for bench512 (572/100 per grid)
+
+### Questions for Codex
+
+1. **Labeling strategy**: Should we remove coarse labels from Grid16 training
+   data to prevent shortcut learning? Or is the multi-granularity training
+   intentional (multi-task learning)?
+
+2. **Data merge**: Should we merge hard64+hard256+bench512 into unified training
+   sets? bench512 should be held-out eval set?
+
+3. **Grid16 fundamental limit**: With 256 cells and only ~660 training samples
+   (~2.6 per cell), is Grid16 fundamentally data-starved? Would data augmentation
+   (more corruption positions per image) help?
+
+4. **Corruption diversity**: Currently only `block_4x4_random_replace` and
+   `local_shuffle_4x4`. Would adding `block_2x2`, `block_8x8`, or per-cell
+   corruptions improve generalization?
+
+### Current job status
+
+Grid4/8/16 8-GPU GLOO DDP with early stopping (71809/71811/71813) were submitted
+but should be CANCELLED pending the labeling strategy decision. Training uses
+bench512-only data with 85/15 split (572 train, 100 val).
+
