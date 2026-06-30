@@ -5593,3 +5593,26 @@ Result:
 - Clean token job 71819: 3/4 running for 32 min
 - 3 node dirs × 8 GPU dirs, each GPU producing output
 - Generation speed: ~60s/prompt at 1024px Lumina, 128 prompts/GPU → ~2.1h per task
+
+---
+
+## 2026-06-30 12:00 HKT — QOS bottleneck + workaround
+
+### Issue
+Job 71823 array 0-9 stuck with only 3/10 tasks running.
+Reason: QOSMaxGRESPerUser=28 for gpu_shared QOS.
+3 tasks × 8 GPUs = 24 GPUs → remaining tasks can't exceed 28 GPU limit.
+
+### Workaround
+Submitted extra array 71830 (tasks 3-9) to gpu partition with normal QOS (48 GPU limit).
+Result: 4/10 running now (3 gpu_shared + 1 gpu).
+gpu partition has idle nodes (SPGL-1-12 through 18) but scheduling is slow.
+
+### Clean token progress
+- 71823: 48 min, ~350 files/node, 0 manifests yet
+- Estimated: ~2h/node for full 1024 prompts
+- 10K prompts total across 10 tasks → serialized in batches
+
+### Cluster GPU usage
+Our jobs: 4 × 8 = 32 GPUs across both partitions
+Free nodes: SPGL-1-3/4/5/9/10/11 (gpu_shared), SPGL-1-13/15/18 (gpu)
