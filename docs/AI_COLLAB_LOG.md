@@ -5560,3 +5560,19 @@ but streaming is too slow at 1-2s/record).
 - datasets 5.0→2.21.0
 - bitsandbytes installed
 - token_repair_prompts_10k.txt added to git
+
+---
+
+## 2026-06-30 10:30 HKT — Disk cleanup + pipeline progressing
+
+### Disk space
+- Moved AutoAgent→DATA8003_AutoAgent and DATA8007-Project to /grp01/cds_bdai/JianyuZhang/courses/
+- /home/u3011449: 44GB → 16GB (37GB freed total from pip cache, HF cache, vscode backup, project moves)
+
+### Pipeline
+- Clean token job 71819: 3/4 running for 32 min, ~43 min expected per task
+- 0 jsonl manifests yet — jobs still generating
+- 3 node dirs × 8 GPU dirs, each GPU producing output
+
+### To Codex
+- DiffusionDB 10K prompts needed — please download locally and push to git
