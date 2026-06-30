@@ -30,6 +30,7 @@ INPUT_MODE_DECODED_IMAGE = "decoded_image"
 INPUT_MODE_BOTH = "both"
 TARGET_SCHEMA_SEMANTIC_EVALUATION = "semantic_evaluation"
 TARGET_SCHEMA_LOCALIZATION_CELLS = "localization_cells"
+TARGET_SCHEMA_REPAIR_CELLS = "repair_cells"
 PROMPT_VARIANT_LEGACY_DEFAULT = "default"
 PROMPT_VARIANT_MINIMAL_JSON = "minimal_json"
 PROMPT_VARIANT_SCHEMA_FIRST = "schema_first"
@@ -76,9 +77,13 @@ def normalise_target_schema(value):
         "localization_cells": TARGET_SCHEMA_LOCALIZATION_CELLS,
         "cell_labels": TARGET_SCHEMA_LOCALIZATION_CELLS,
         "corrupted_cells": TARGET_SCHEMA_LOCALIZATION_CELLS,
+        "repair": TARGET_SCHEMA_REPAIR_CELLS,
+        "repair_cells": TARGET_SCHEMA_REPAIR_CELLS,
+        "error_cells": TARGET_SCHEMA_REPAIR_CELLS,
+        "token_repair": TARGET_SCHEMA_REPAIR_CELLS,
     }
     schema = aliases.get(schema, schema)
-    if schema not in {TARGET_SCHEMA_SEMANTIC_EVALUATION, TARGET_SCHEMA_LOCALIZATION_CELLS}:
+    if schema not in {TARGET_SCHEMA_SEMANTIC_EVALUATION, TARGET_SCHEMA_LOCALIZATION_CELLS, TARGET_SCHEMA_REPAIR_CELLS}:
         raise ValueError(f"Unsupported Stage-4 target_schema: {value!r}")
     return schema
 
@@ -134,6 +139,23 @@ def mmu_localization_prompt(
     target_schema = normalise_target_schema(target_schema)
     prompt_variant = normalise_prompt_variant(prompt_variant)
     cells = ", ".join(_cell_labels(grid_size))
+    if target_schema == TARGET_SCHEMA_REPAIR_CELLS:
+        labels = _cell_labels(grid_size)
+        example_cells = ["D4", "D5"] if int(grid_size) >= 5 else labels[:1]
+        positive = json.dumps({"error": True, "cells": example_cells}, sort_keys=False, separators=(",", ":"))
+        negative = json.dumps({"error": False, "cells": []}, sort_keys=False, separators=(",", ":"))
+        return (
+            "You are the ASCR token-state repair localizer.\n"
+            "The input is a generated image represented by Lumina VQ tokens, plus the original text prompt.\n"
+            f"Decide whether the current token state contains a local corruption on the fixed {int(grid_size)}x{int(grid_size)} repair grid.\n"
+            "Return exactly one compact JSON object and nothing else.\n"
+            "Schema: {\"error\": boolean, \"cells\": string[]}\n"
+            f"Positive example: {positive}\n"
+            f"No-error example: {negative}\n"
+            f"Allowed cells: {cells}.\n"
+            f"Use at most {int(max_selected_cells)} selected cells.\n"
+            f"Original prompt: {prompt}"
+        )
     if target_schema == TARGET_SCHEMA_LOCALIZATION_CELLS:
         schema_keys = [
             f'"corrupted_cells_{size}x{size}": string[]'
@@ -220,6 +242,21 @@ def localization_target_payload(row, grid_size=16, max_selected_cells=16):
     return payload
 
 
+def repair_cells_target_payload(row, grid_size=8, max_selected_cells=16):
+    labels = target_cells(row, grid_size)[: int(max_selected_cells)]
+    return {"error": bool(labels), "cells": labels}
+
+
+def target_payload_text(target, target_schema=TARGET_SCHEMA_LOCALIZATION_CELLS):
+    target_schema = normalise_target_schema(target_schema)
+    return json.dumps(
+        target,
+        ensure_ascii=False,
+        sort_keys=target_schema != TARGET_SCHEMA_REPAIR_CELLS,
+        separators=(",", ":"),
+    )
+
+
 def repair_target_payload(
     row,
     grid_size=16,
@@ -227,6 +264,12 @@ def repair_target_payload(
     target_schema=TARGET_SCHEMA_SEMANTIC_EVALUATION,
 ):
     target_schema = normalise_target_schema(target_schema)
+    if target_schema == TARGET_SCHEMA_REPAIR_CELLS:
+        return repair_cells_target_payload(
+            row,
+            grid_size=grid_size,
+            max_selected_cells=max_selected_cells,
+        )
     if target_schema == TARGET_SCHEMA_LOCALIZATION_CELLS:
         return localization_target_payload(
             row,
@@ -260,6 +303,31 @@ def _split_indices(rows, eval_mode="holdout", train_ratio=0.75, val_ratio=0.0, s
         raise ValueError(f"Unsupported eval_mode: {eval_mode}")
     if len(indices) <= 1:
         return indices, [], indices
+    if any(row.get("split_group_id") or row.get("source_clean_sample_id") for row in rows):
+        groups = {}
+        for index, row in enumerate(rows):
+            group_id = str(row.get("split_group_id") or row.get("source_clean_sample_id") or row.get("sample_id") or index)
+            groups.setdefault(group_id, []).append(index)
+        group_ids = sorted(groups)
+        rng = random.Random(int(seed))
+        rng.shuffle(group_ids)
+        train_count = int(len(group_ids) * float(train_ratio))
+        train_count = max(1, min(len(group_ids) - 1, train_count))
+        remaining = len(group_ids) - train_count
+        val_count = int(len(group_ids) * max(0.0, float(val_ratio or 0.0)))
+        if val_ratio > 0 and remaining >= 2:
+            val_count = max(1, min(remaining - 1, val_count))
+        else:
+            val_count = 0
+        train_groups = set(group_ids[:train_count])
+        val_groups = set(group_ids[train_count:train_count + val_count])
+        test_groups = set(group_ids[train_count + val_count:])
+        train_indices = sorted(index for group in train_groups for index in groups[group])
+        val_indices = sorted(index for group in val_groups for index in groups[group])
+        test_indices = sorted(index for group in test_groups for index in groups[group])
+        if not test_indices:
+            test_indices = val_indices or train_indices
+        return train_indices, val_indices, test_indices
     train_ratio = float(train_ratio)
     val_ratio = max(0.0, float(val_ratio or 0.0))
     if train_ratio <= 0.0 or train_ratio >= 1.0:
@@ -346,7 +414,7 @@ def sft_example_from_row(
             prompt_variant=prompt_variant,
         ),
         "target_json": target,
-        "target_text": json.dumps(target, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+        "target_text": target_payload_text(target, target_schema=target_schema),
         "grid_size": int(grid_size),
         "max_selected_cells": int(max_selected_cells),
         "target_cells": full_targets,
@@ -707,7 +775,10 @@ def localization_payload_to_semantic_payload(payload, grid_size=16, max_selected
         grid_size,
         max_selected_cells=max_selected_cells,
     )
-    has_error = _bool_from_any(payload.get("has_error"), default=bool(labels))
+    has_error_raw = payload.get("has_error")
+    if has_error_raw is None and "error" in payload:
+        has_error_raw = payload.get("error")
+    has_error = _bool_from_any(has_error_raw, default=bool(labels))
     if not has_error:
         labels = []
     return {

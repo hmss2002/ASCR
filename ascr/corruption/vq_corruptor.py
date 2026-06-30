@@ -26,9 +26,13 @@ class CorruptionResult:
     token_grid_size: int
     token_id_space: str
     changed_count: int
+    mask_size: Optional[int] = None
+    operator: Optional[str] = None
+    source_indices: Optional[List[Tuple[int, int]]] = None
+    source_mode: Optional[str] = None
 
     def to_metadata(self):
-        return {
+        payload = {
             "corruption_type": self.corruption_type,
             "token_grid_size": self.token_grid_size,
             "token_id_space": self.token_id_space,
@@ -36,6 +40,15 @@ class CorruptionResult:
             "selected_count": len(self.selected_indices),
             "changed_count": self.changed_count,
         }
+        if self.mask_size is not None:
+            payload["mask_size"] = int(self.mask_size)
+        if self.operator:
+            payload["operator"] = self.operator
+        if self.source_indices is not None:
+            payload["source_indices"] = list(self.source_indices)
+        if self.source_mode:
+            payload["source_mode"] = self.source_mode
+        return payload
 
 
 def validate_vq_ids(vq_ids: Sequence[int], token_grid_size: int):
@@ -81,6 +94,15 @@ def _block_indices(token_grid_size: int, block_size: int, rng: random.Random):
     return [(row, col) for row in range(start_row, start_row + size) for col in range(start_col, start_col + size)]
 
 
+def block_indices_from_origin(row: int, col: int, block_size: int):
+    size = int(block_size)
+    return [(r, c) for r in range(int(row), int(row) + size) for c in range(int(col), int(col) + size)]
+
+
+def choose_token_mask(token_grid_size: int, mask_size: int, rng: random.Random):
+    return _block_indices(token_grid_size, mask_size, rng)
+
+
 def choose_corruption_indices(corruption_type: str, token_grid_size: int, rng: random.Random):
     kind = str(corruption_type)
     if kind == "single_random_replace":
@@ -115,6 +137,151 @@ def _normalise_indices(indices: Iterable[Tuple[int, int]], token_grid_size: int)
 
 def _flat_index(row: int, col: int, token_grid_size: int):
     return int(row) * int(token_grid_size) + int(col)
+
+
+def _block_origin(indices: Iterable[Tuple[int, int]]):
+    values = list(indices)
+    if not values:
+        raise ValueError("Cannot infer block origin from empty indices")
+    return min(row for row, _col in values), min(col for _row, col in values)
+
+
+def _blocks_overlap(origin_a, origin_b, block_size: int):
+    arow, acol = origin_a
+    brow, bcol = origin_b
+    size = int(block_size)
+    return not (
+        arow + size <= brow
+        or brow + size <= arow
+        or acol + size <= bcol
+        or bcol + size <= acol
+    )
+
+
+def _source_block_indices(token_grid_size: int, mask_size: int, selected, rng: random.Random, mode: str):
+    grid_size = int(token_grid_size)
+    size = int(mask_size)
+    selected_origin = _block_origin(selected)
+    max_origin = grid_size - size
+    candidates = []
+    if mode == "neighbor":
+        row0, col0 = selected_origin
+        offsets = [
+            (-size, 0),
+            (size, 0),
+            (0, -size),
+            (0, size),
+            (-size, -size),
+            (-size, size),
+            (size, -size),
+            (size, size),
+        ]
+        for drow, dcol in offsets:
+            origin = row0 + drow, col0 + dcol
+            if 0 <= origin[0] <= max_origin and 0 <= origin[1] <= max_origin:
+                candidates.append(origin)
+    else:
+        for row in range(0, max_origin + 1):
+            for col in range(0, max_origin + 1):
+                origin = (row, col)
+                if _blocks_overlap(selected_origin, origin, size):
+                    continue
+                if mode == "far" and max(abs(row - selected_origin[0]), abs(col - selected_origin[1])) < size:
+                    continue
+                candidates.append(origin)
+    if not candidates:
+        for row in range(0, max_origin + 1):
+            for col in range(0, max_origin + 1):
+                origin = (row, col)
+                if not _blocks_overlap(selected_origin, origin, size):
+                    candidates.append(origin)
+    if not candidates:
+        raise ValueError(f"Could not choose non-overlapping source block for mask_size={mask_size}")
+    origin = rng.choice(candidates)
+    return block_indices_from_origin(origin[0], origin[1], size)
+
+
+def _normalise_operator(value):
+    operator = str(value or "random_replace").strip().lower().replace("-", "_")
+    aliases = {
+        "replace": "random_replace",
+        "random": "random_replace",
+        "shuffle": "local_shuffle",
+        "copy_neighbor": "neighbor_copy",
+        "patch_copy": "neighbor_copy",
+        "copy_patch": "neighbor_copy",
+        "same_image_transplant": "transplant",
+        "patch_transplant": "transplant",
+    }
+    operator = aliases.get(operator, operator)
+    if operator not in {"random_replace", "local_shuffle", "neighbor_copy", "transplant"}:
+        raise ValueError(f"Unsupported corruption operator: {value}")
+    return operator
+
+
+def corrupt_vq_ids_with_operator(
+    vq_ids: Sequence[int],
+    token_grid_size: int,
+    mask_size: int,
+    operator: str,
+    seed: Optional[int] = None,
+    selected_indices: Optional[Iterable[Tuple[int, int]]] = None,
+    token_id_space: Optional[str] = None,
+):
+    """Corrupt a token block using the canonical Stage-3 repair operator API."""
+    clean = validate_vq_ids(vq_ids, token_grid_size)
+    rng = random.Random(seed)
+    size = int(mask_size)
+    op = _normalise_operator(operator)
+    if op == "local_shuffle" and size <= 1:
+        raise ValueError("local_shuffle requires mask_size >= 2")
+    selected = (
+        _normalise_indices(selected_indices, token_grid_size)
+        if selected_indices is not None
+        else choose_token_mask(token_grid_size, size, rng)
+    )
+    id_space = token_id_space or infer_token_id_space(clean)
+    corrupted = list(clean)
+    source_indices = None
+    source_mode = None
+    if op == "local_shuffle":
+        positions = [_flat_index(row, col, token_grid_size) for row, col in selected]
+        values = [corrupted[position] for position in positions]
+        shuffled = list(values)
+        rng.shuffle(shuffled)
+        if shuffled == values and len(shuffled) > 1:
+            shuffled = shuffled[1:] + shuffled[:1]
+        for position, value in zip(positions, shuffled):
+            corrupted[position] = value
+    elif op == "random_replace":
+        for row, col in selected:
+            position = _flat_index(row, col, token_grid_size)
+            corrupted[position] = _random_codebook_token(corrupted[position], rng, id_space)
+    else:
+        source_mode = "same_image_neighbor" if op == "neighbor_copy" else "same_image_far"
+        source_indices = _source_block_indices(
+            token_grid_size,
+            size,
+            selected,
+            rng,
+            mode="neighbor" if op == "neighbor_copy" else "far",
+        )
+        for (dst_row, dst_col), (src_row, src_col) in zip(selected, source_indices):
+            corrupted[_flat_index(dst_row, dst_col, token_grid_size)] = clean[_flat_index(src_row, src_col, token_grid_size)]
+    changed_count = sum(1 for before, after in zip(clean, corrupted) if before != after)
+    return CorruptionResult(
+        clean_vq_ids=clean,
+        corrupted_vq_ids=corrupted,
+        selected_indices=selected,
+        corruption_type=f"{op}_{size}x{size}",
+        token_grid_size=int(token_grid_size),
+        token_id_space=id_space,
+        changed_count=changed_count,
+        mask_size=size,
+        operator=op,
+        source_indices=source_indices,
+        source_mode=source_mode,
+    )
 
 
 def corrupt_vq_ids(

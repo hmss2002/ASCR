@@ -5459,3 +5459,11 @@ Grid4/8/16 8-GPU GLOO DDP with early stopping (71809/71811/71813) were submitted
 but should be CANCELLED pending the labeling strategy decision. Training uses
 bench512-only data with 85/15 split (572 train, 100 val).
 
+## 2026-06-30 - Windows Codex token-only 8x8 repair mainline
+
+- User decision: Stage3 should use one fixed 8x8 action grid and one target schema: `{"error": boolean, "cells": string[]}`.
+- Positive labels come from the known 64x64 token corruption mask projected to 8x8 cells. Decoded images are optional audit artifacts only.
+- Added token-only dataset generation around four mask sizes (`1,2,4,8`) and four operators (`random_replace`, `local_shuffle`, `neighbor_copy`, `transplant`).
+- Added prompt download/sampling, clean-token generation, dataset build, optional audit decode, Stage4 SFT, and single-node 8-GPU LoRA orchestration scripts.
+- Parallel policy: clean-token data generation can use multi-node or job-array sharding; LoRA training should remain one authoritative DDP adapter job because independent adapters cannot be safely concatenated.
+- Server AI should read `docs/SERVER_AI_TASK_STAGE3_TOKEN_REPAIR_DATASET_AND_LORA.md`, run the server commands, append job ids/metrics/errors here, and push any server-side fixes to GitHub.

@@ -66,6 +66,18 @@ def resolve_path(path, project_root=None):
 
 def target_cells(row, grid_size):
     grid_size = int(grid_size)
+    explicit_keys = (
+        f"target_cells_{grid_size}x{grid_size}",
+        f"cells_{grid_size}x{grid_size}",
+        "target_cells",
+        "cells",
+    )
+    for key in explicit_keys:
+        if key in row:
+            raw = row.get(key, [])
+            if isinstance(raw, (str, dict)):
+                raw = [raw]
+            return sorted({GridCell.from_any(label, grid_size).to_label() for label in raw})
     key = f"coarse_labels_{grid_size}x{grid_size}"
     if row.get(key):
         return sorted({GridCell.from_any(label, grid_size).to_label() for label in row[key]})

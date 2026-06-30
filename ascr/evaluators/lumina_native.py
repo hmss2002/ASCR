@@ -29,7 +29,21 @@ def native_eval_prompt(original_prompt, grid_size=4, max_selected_cells=6, targe
     for row in range(int(grid_size)):
         for col in range(int(grid_size)):
             cells.append(f"{chr(ord('A') + row)}{col + 1}")
-    if str(target_schema).strip().lower().replace("-", "_") in {"localization", "localization_cells", "corrupted_cells"}:
+    normalised_schema = str(target_schema).strip().lower().replace("-", "_")
+    if normalised_schema in {"repair", "repair_cells", "error_cells", "token_repair"}:
+        return (
+            "You are the ASCR token-state repair localizer.\n"
+            "The input is a generated image represented by Lumina VQ tokens, plus the original text prompt.\n"
+            f"Decide whether the current token state contains a local corruption on the fixed {int(grid_size)}x{int(grid_size)} repair grid.\n"
+            "Return exactly one compact JSON object and nothing else.\n"
+            "Schema: {\"error\": boolean, \"cells\": string[]}\n"
+            "Positive example: {\"error\":true,\"cells\":[\"D4\",\"D5\"]}\n"
+            "No-error example: {\"error\":false,\"cells\":[]}\n"
+            f"Allowed cells: {', '.join(cells)}.\n"
+            f"Use at most {int(max_selected_cells)} selected cells.\n"
+            f"Original prompt: {original_prompt}"
+        )
+    if normalised_schema in {"localization", "localization_cells", "corrupted_cells"}:
         return (
             "You are the ASCR semantic evaluator for a generated image.\n"
             "Compare the current image against the original prompt and localize any visible error.\n"

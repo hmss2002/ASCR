@@ -22,6 +22,39 @@ Do not claim that the model becomes generally smarter without external signal.
 The clean image is only a relative positive compared with its corrupted pair; it
 is not guaranteed to be a perfect prompt match.
 
+## Current Mainline: Token-Only 8x8 Repair Cells
+
+As of 2026-06-30, the active Stage3 mainline is a token-only repair task:
+
+```text
+clean 64x64 VQ tokens
+-> choose token mask with size 1x1, 2x2, 4x4, or 8x8
+-> apply one value operator: random_replace, local_shuffle, neighbor_copy, transplant
+-> corrupted 64x64 VQ tokens
+-> project the true token mask to an 8x8 action grid
+-> target JSON
+```
+
+Canonical output is now:
+
+```json
+{"error": true, "cells": ["D4", "D5"]}
+```
+
+and the clean no-error case is:
+
+```json
+{"error": false, "cells": []}
+```
+
+Decoded images are audit artifacts only. They are not used to create the
+ground truth because the ground truth is the known token corruption mask. The
+in-context prompt only teaches this output format when asking the MMU whether
+and where the token state is corrupted.
+
+Server handoff for this mainline is in
+`docs/SERVER_AI_TASK_STAGE3_TOKEN_REPAIR_DATASET_AND_LORA.md`.
+
 ## Shared TODO: Resolve 1024px LoRA Training Memory On 45 GB L40S
 
 **Status**: Windows Codex + Server AI joint investigation. Not yet resolved.

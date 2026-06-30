@@ -23,7 +23,7 @@ def build_parser():
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--project-root", default=".")
     parser.add_argument("--input-mode", choices=["vq_tokens", "decoded_image", "both"], default="vq_tokens")
-    parser.add_argument("--target-schema", choices=["localization_cells", "semantic_evaluation"], default="localization_cells")
+    parser.add_argument("--target-schema", choices=["repair_cells", "localization_cells", "semantic_evaluation"], default="localization_cells")
     parser.add_argument("--prompt-variant", choices=PROMPT_VARIANT_CHOICES, default=PROMPT_VARIANT_DEFAULT)
     return parser
 

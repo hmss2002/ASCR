@@ -3,6 +3,7 @@ import unittest
 from ascr.corruption.vq_corruptor import (
     OFFSET_TOKEN_SPACE,
     corrupt_vq_ids,
+    corrupt_vq_ids_with_operator,
     infer_token_id_space,
     token_indices_to_cell_labels,
 )
@@ -34,6 +35,39 @@ class VQCorruptorTests(unittest.TestCase):
         self.assertEqual(labels, ["C3"])
         direct_labels = token_indices_to_cell_labels([(27, 2)], token_grid_size=64, grid_size=64)
         self.assertEqual(direct_labels, ["R27C2"])
+
+    def test_operator_api_supports_neighbor_copy_and_transplant(self):
+        clean = [IMAGE_TOKEN_OFFSET + value for value in range(64)]
+        selected = [(2, 2), (2, 3), (3, 2), (3, 3)]
+        neighbor = corrupt_vq_ids_with_operator(
+            clean,
+            token_grid_size=8,
+            mask_size=2,
+            operator="neighbor_copy",
+            seed=0,
+            selected_indices=selected,
+        )
+        transplant = corrupt_vq_ids_with_operator(
+            clean,
+            token_grid_size=8,
+            mask_size=2,
+            operator="transplant",
+            seed=1,
+            selected_indices=selected,
+        )
+        self.assertEqual(neighbor.operator, "neighbor_copy")
+        self.assertEqual(neighbor.mask_size, 2)
+        self.assertEqual(neighbor.source_mode, "same_image_neighbor")
+        self.assertEqual(neighbor.selected_indices, selected)
+        self.assertGreater(neighbor.changed_count, 0)
+        self.assertEqual(transplant.operator, "transplant")
+        self.assertEqual(transplant.source_mode, "same_image_far")
+        self.assertGreater(transplant.changed_count, 0)
+
+    def test_local_shuffle_rejects_single_token_mask(self):
+        clean = list(range(16))
+        with self.assertRaises(ValueError):
+            corrupt_vq_ids_with_operator(clean, 4, 1, "local_shuffle", seed=0)
 
 
 if __name__ == "__main__":

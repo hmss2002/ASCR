@@ -32,7 +32,7 @@ def build_parser():
     parser.add_argument("--split", choices=["train", "eval"], default="eval")
     parser.add_argument("--input-mode", choices=["vq_tokens", "decoded_image"], default=None)
     parser.add_argument("--use-vq-tokens", action=argparse.BooleanOptionalAction, default=True)
-    parser.add_argument("--target-schema", choices=["localization_cells", "semantic_evaluation"], default="localization_cells")
+    parser.add_argument("--target-schema", choices=["repair_cells", "localization_cells", "semantic_evaluation"], default="localization_cells")
     parser.add_argument("--prompt-variant", choices=PROMPT_VARIANT_CHOICES, default=PROMPT_VARIANT_DEFAULT)
     parser.add_argument("--lora-path", default=None)
     parser.add_argument("--repo-path", default=os.environ.get("LUMINA_REPO", "third_party/Lumina-DiMOO"))

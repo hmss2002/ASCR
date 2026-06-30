@@ -1,0 +1,20 @@
+prompt_source: configs/benchmarks/prompts/stage3_token_repair_prompts_10k.txt
+clean_manifest: outputs/stage3_token_repair/clean_tokens/clean_manifest.jsonl
+output_dir: outputs/stage3_token_repair/datasets/repair_cells_40k
+positive_rows: 30000
+negative_rows: 10000
+variants_per_clean: 3
+token_grid_size: 64
+action_grid_size: 8
+mask_sizes: [1, 2, 4, 8]
+operators:
+  - random_replace
+  - local_shuffle
+  - neighbor_copy
+  - transplant
+target_schema: repair_cells
+target_format:
+  positive: '{"error":true,"cells":["D4","D5"]}'
+  negative: '{"error":false,"cells":[]}'
+decoded_image_policy: audit_only
+seed: 0

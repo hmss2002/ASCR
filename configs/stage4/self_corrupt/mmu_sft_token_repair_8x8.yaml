@@ -1,0 +1,12 @@
+dataset: outputs/stage3_token_repair/datasets/repair_cells_40k/dataset.jsonl
+output_dir: outputs/stage4_token_repair/repair_cells_8x8/sft
+grid_size: 8
+max_selected_cells: 8
+train_ratio: 0.8
+val_ratio: 0.1
+seed: 0
+eval_mode: holdout
+input_mode: vq_tokens
+target_schema: repair_cells
+prompt_variant: schema_example
+project_root: .

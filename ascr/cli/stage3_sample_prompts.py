@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from collections import defaultdict
+import csv
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -18,13 +19,38 @@ def _normalise(text):
     return " ".join(str(text).strip().lower().split())
 
 
-def read_prompt_file(path):
+def read_prompt_rows(path):
+    path = Path(path)
     prompts = []
-    for line in Path(path).read_text(encoding="utf-8").splitlines():
+    if path.suffix.lower() == ".jsonl":
+        for line in path.read_text(encoding="utf-8-sig").splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            for key in ("prompt", "text", "caption"):
+                text = str(row.get(key) or "").strip()
+                if text:
+                    prompts.append({"prompt": text, "source": str(path)})
+                    break
+        return prompts
+    if path.suffix.lower() == ".csv":
+        with path.open(encoding="utf-8-sig", newline="") as handle:
+            for row in csv.DictReader(handle):
+                for key in ("prompt", "text", "caption"):
+                    text = str(row.get(key) or "").strip()
+                    if text:
+                        prompts.append({"prompt": text, "source": str(path)})
+                        break
+        return prompts
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
         text = line.strip()
         if text and not text.startswith("#"):
-            prompts.append(text)
+            prompts.append({"prompt": text, "source": str(path)})
     return prompts
+
+
+def read_prompt_file(path):
+    return [row["prompt"] for row in read_prompt_rows(path)]
 
 
 def prompt_bucket(prompt):
@@ -47,14 +73,18 @@ def sample_prompts(sources, count, holdout=None, seed=0, stratify="complexity"):
     seen = set()
     candidates = []
     for source in sources:
-        for prompt in read_prompt_file(source):
+        for prompt_row in read_prompt_rows(source):
+            prompt = prompt_row["prompt"]
             norm = _normalise(prompt)
             if not norm or norm in seen or norm in holdout_norm:
                 continue
             seen.add(norm)
-            candidates.append({"prompt": prompt, "source": str(source), "bucket": prompt_bucket(prompt)})
+            candidates.append({"prompt": prompt, "source": prompt_row.get("source", str(source)), "bucket": prompt_bucket(prompt)})
     rng = random.Random(seed)
     if stratify != "complexity":
+        if stratify == "hard_first":
+            candidates.sort(key=lambda row: ({"complex": 0, "medium": 1, "simple": 2}.get(row["bucket"], 3), row["prompt"]))
+            return candidates[: int(count)], candidates
         rng.shuffle(candidates)
         return candidates[: int(count)], candidates
     by_bucket = defaultdict(list)
@@ -75,7 +105,7 @@ def build_parser():
     parser = argparse.ArgumentParser(description="Sample Stage-3 prompts with holdout decontamination.")
     parser.add_argument("--sources", nargs="+", required=True)
     parser.add_argument("--count", type=int, required=True)
-    parser.add_argument("--stratify", choices=["complexity", "none"], default="complexity")
+    parser.add_argument("--stratify", choices=["complexity", "hard_first", "none"], default="complexity")
     parser.add_argument("--holdout", nargs="*", default=None)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--output", required=True)
@@ -117,4 +147,3 @@ def main(argv=None):
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

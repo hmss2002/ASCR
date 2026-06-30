@@ -60,6 +60,18 @@ class Stage4MmuLoraTests(unittest.TestCase):
         self.assertIn('"corrupted_cells_2x2":["A1"]', prompt)
         self.assertIn("A1, A2, B1, B2", prompt)
 
+    def test_prompt_requests_repair_cells_json(self):
+        prompt = mmu_localization_prompt(
+            "a red cube",
+            grid_size=8,
+            max_selected_cells=8,
+            target_schema="repair_cells",
+        )
+        self.assertIn("ASCR token-state repair localizer", prompt)
+        self.assertIn('Schema: {"error": boolean, "cells": string[]}', prompt)
+        self.assertIn('{"error":true,"cells":["D4","D5"]}', prompt)
+        self.assertIn('{"error":false,"cells":[]}', prompt)
+
     def test_prompt_variants_change_format_instruction(self):
         minimal = mmu_localization_prompt("a red cube", grid_size=2, prompt_variant="minimal_json")
         example = mmu_localization_prompt("a red cube", grid_size=2, prompt_variant="schema_example")
@@ -99,6 +111,77 @@ class Stage4MmuLoraTests(unittest.TestCase):
         self.assertEqual(rows[0]["target_schema"], "localization_cells")
         self.assertEqual(set(target), {"has_error", "corrupted_cells_2x2"})
         self.assertEqual(target["corrupted_cells_2x2"], ["A1"])
+
+    def test_prepare_mmu_sft_dataset_writes_repair_cells_targets(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            tokens = root / "corrupt.json"
+            write_tokens(tokens, count=64 * 64)
+            dataset = root / "dataset.jsonl"
+            write_jsonl(dataset, [{
+                "sample_id": "clean_0:pos000",
+                "split_group_id": "clean_0",
+                "prompt": "a red cube",
+                "corrupted_vq_ids_path": str(tokens),
+                "target_cells_8x8": ["A1", "A2"],
+                "token_grid_size": 64,
+                "image_size": 1024,
+            }])
+            manifest = prepare_mmu_sft_dataset(
+                dataset,
+                root / "sft",
+                grid_size=8,
+                max_selected_cells=8,
+                eval_mode="resubstitution",
+                target_schema="repair_cells",
+            )
+            rows = [json.loads(line) for line in Path(manifest["sft_examples"]).read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(rows[0]["target_schema"], "repair_cells")
+        self.assertEqual(rows[0]["target_json"], {"error": True, "cells": ["A1", "A2"]})
+        self.assertEqual(rows[0]["target_text"], '{"error":true,"cells":["A1","A2"]}')
+
+    def test_prepare_mmu_sft_dataset_keeps_clean_group_in_one_split(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            tokens = root / "corrupt.json"
+            write_tokens(tokens, count=64 * 64)
+            dataset = root / "dataset.jsonl"
+            rows = []
+            for group in range(5):
+                rows.append({
+                    "sample_id": f"clean_{group}:neg",
+                    "split_group_id": f"clean_{group}",
+                    "prompt": f"prompt {group}",
+                    "corrupted_vq_ids_path": str(tokens),
+                    "target_cells_8x8": [],
+                    "token_grid_size": 64,
+                })
+                rows.append({
+                    "sample_id": f"clean_{group}:pos000",
+                    "split_group_id": f"clean_{group}",
+                    "prompt": f"prompt {group}",
+                    "corrupted_vq_ids_path": str(tokens),
+                    "target_cells_8x8": ["A1"],
+                    "token_grid_size": 64,
+                })
+            write_jsonl(dataset, rows)
+            manifest = prepare_mmu_sft_dataset(
+                dataset,
+                root / "sft",
+                grid_size=8,
+                train_ratio=0.6,
+                val_ratio=0.2,
+                eval_mode="holdout",
+                target_schema="repair_cells",
+            )
+            split_manifest = json.loads(Path(manifest["split_manifest"]).read_text(encoding="utf-8"))
+        groups_by_split = {}
+        for split in ("train", "val", "test"):
+            indices = split_manifest[f"{split}_indices"]
+            groups_by_split[split] = {rows[index]["split_group_id"] for index in indices}
+        self.assertFalse(groups_by_split["train"] & groups_by_split["val"])
+        self.assertFalse(groups_by_split["train"] & groups_by_split["test"])
+        self.assertFalse(groups_by_split["val"] & groups_by_split["test"])
 
     def test_prepare_mmu_sft_dataset_writes_train_val_test_splits(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -328,6 +411,23 @@ class Stage4MmuLoraTests(unittest.TestCase):
         self.assertFalse(evaluation.should_abstain)
         self.assertEqual([cell.to_label() for cell in evaluation.regions[0].cells], ["A1", "A2"])
         self.assertEqual(normalised["regions"][0]["cells"], [{"label": "A1"}, {"label": "A2"}])
+
+    def test_parser_accepts_repair_cells_payload(self):
+        evaluation, normalised = safe_parse_mmu_localization_payload(
+            {"error": True, "cells": ["D4", "D5"]},
+            grid_size=8,
+            max_selected_cells=8,
+        )
+        self.assertFalse(evaluation.should_abstain)
+        self.assertEqual([cell.to_label() for cell in evaluation.regions[0].cells], ["D4", "D5"])
+        self.assertTrue(normalised["has_error"])
+        negative, normalised_negative = safe_parse_mmu_localization_payload(
+            {"error": False, "cells": ["D4"]},
+            grid_size=8,
+            max_selected_cells=8,
+        )
+        self.assertFalse(negative.should_abstain)
+        self.assertEqual(normalised_negative["regions"], [])
 
     def test_parser_recovers_loose_server_cell_keys(self):
         evaluation, normalised = safe_parse_mmu_localization_payload(
