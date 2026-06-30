@@ -58,6 +58,13 @@ TORCHRUN_ARGS=(--config "$CONFIG")
 [[ -n "${CHECKPOINT_EVERY_EPOCHS:-}" ]] && TORCHRUN_ARGS+=(--checkpoint-every-epochs "$CHECKPOINT_EVERY_EPOCHS")
 [[ -n "${EARLY_STOPPING_PATIENCE:-}" ]] && TORCHRUN_ARGS+=(--early-stopping-patience "$EARLY_STOPPING_PATIENCE")
 [[ -n "${EARLY_STOPPING_MIN_DELTA:-}" ]] && TORCHRUN_ARGS+=(--early-stopping-min-delta "$EARLY_STOPPING_MIN_DELTA")
+[[ -n "${PROGRESS_EVERY_STEPS:-}" ]] && TORCHRUN_ARGS+=(--progress-every-steps "$PROGRESS_EVERY_STEPS")
+if [[ -n "${PROGRESS_BAR:-}" ]]; then
+  case "${PROGRESS_BAR,,}" in
+    0|false|no|off) TORCHRUN_ARGS+=(--no-progress-bar) ;;
+    *) TORCHRUN_ARGS+=(--progress-bar) ;;
+  esac
+fi
 
 # Real DDP: each rank owns one full Lumina+LoRA replica, uses DistributedSampler,
 # and rank 0 is the only writer.

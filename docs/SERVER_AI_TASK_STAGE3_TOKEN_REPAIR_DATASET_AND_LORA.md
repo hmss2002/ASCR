@@ -224,7 +224,12 @@ progress_every_steps: 25
 Rank 0 prints flushed per-N-step progress in DDP runs, so Slurm logs should no
 longer stay silent until epoch end. Existing jobs submitted before this change
 will not gain the new logging retroactively; resubmit if live progress is
-needed.
+needed. To override without editing YAML:
+
+```bash
+PROGRESS_EVERY_STEPS=10 PROGRESS_BAR=1 MODE=submit_train \
+  bash scripts/training/run_stage4_token_repair_lora.sh
+```
 
 Probe trained LoRA:
 

@@ -5788,6 +5788,7 @@ Changes:
   - epoch-level throughput summaries in `training_manifest.json`.
 - `ascr.training.stage4_mmu_lora_ddp` now uses the same progress settings and prints DDP rank0 progress during each epoch, including local throughput and approximate global throughput.
 - `ascr.cli.stage4_train_mmu_lora` forwards progress overrides from CLI/config.
+- `jobs/stage4/train_mmu_lora_ddp.sbatch` forwards `PROGRESS_EVERY_STEPS` and `PROGRESS_BAR`, so the server can tune logging frequency without editing YAML.
 - The token-repair 8x8 train config now explicitly sets `progress_every_steps: 25` and `progress_bar: true`.
 
 Server action:
