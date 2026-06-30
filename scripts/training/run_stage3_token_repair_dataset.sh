@@ -9,12 +9,13 @@ cd "$PROJECT_ROOT"
 PYTHON_BIN=${PYTHON_BIN:-python}
 MODE=${MODE:-plan}
 
-RAW_PROMPTS=${RAW_PROMPTS:-outputs/stage3_token_repair/prompts/diffusiondb_prompts.jsonl}
+RAW_PROMPTS=${RAW_PROMPTS:-configs/benchmarks/prompts/diffusiondb_10k.jsonl}
+RAW_PROMPT_TXT=${RAW_PROMPT_TXT:-configs/benchmarks/prompts/diffusiondb_10k.txt}
 PROMPT_OUTPUT=${PROMPT_OUTPUT:-configs/benchmarks/prompts/stage3_token_repair_prompts_10k.txt}
 PROMPT_COUNT=${PROMPT_COUNT:-10000}
-DIFFUSIONDB_LIMIT=${DIFFUSIONDB_LIMIT:-20000}
-DIFFUSIONDB_SUBSET=${DIFFUSIONDB_SUBSET:-2m_first_10k}
-SOURCES=${SOURCES:-"$RAW_PROMPTS configs/benchmarks/prompts/bench3_combined.txt configs/benchmarks/prompts/dpg_bench_1065.txt configs/benchmarks/prompts/dsg1k_1060.txt configs/benchmarks/prompts/genai_bench_1600.txt"}
+DIFFUSIONDB_LIMIT=${DIFFUSIONDB_LIMIT:-10000}
+DIFFUSIONDB_SUBSET=${DIFFUSIONDB_SUBSET:-2m_text_only}
+SOURCES=${SOURCES:-"$RAW_PROMPTS configs/benchmarks/prompts/bench3_combined.txt configs/benchmarks/prompts/dpg_bench_1065.txt configs/benchmarks/prompts/dsg1k_1060.txt configs/benchmarks/prompts/genai_bench_1600.txt configs/benchmarks/prompts/drawbench_all.txt"}
 HOLDOUT=${HOLDOUT:-configs/benchmarks/prompts/geneval_553.txt}
 
 CLEAN_OUTPUT_ROOT=${CLEAN_OUTPUT_ROOT:-outputs/stage3_token_repair/clean_tokens}
@@ -31,10 +32,21 @@ OPERATORS=${OPERATORS:-"random_replace local_shuffle neighbor_copy transplant"}
 AUDIT_OUTPUT_DIR=${AUDIT_OUTPUT_DIR:-outputs/stage3_token_repair/audit_decode}
 AUDIT_PAIRS=${AUDIT_PAIRS:-16}
 SEED=${SEED:-0}
+FORCE_DOWNLOAD=${FORCE_DOWNLOAD:-0}
+FORCE_RESAMPLE=${FORCE_RESAMPLE:-0}
+
+count_nonempty_lines() {
+  if [[ -f "$1" ]]; then
+    awk 'NF {count++} END {print count+0}' "$1"
+  else
+    echo 0
+  fi
+}
 
 print_plan() {
   cat <<CMDS
-# Prompt preparation
+# Prompt preparation is preseeded in git. These commands only refresh if forced
+# or if the prompt files are missing.
 MODE=download_prompts bash scripts/training/run_stage3_token_repair_dataset.sh
 MODE=sample_prompts bash scripts/training/run_stage3_token_repair_dataset.sh
 
@@ -58,6 +70,11 @@ case "$MODE" in
     print_plan
     ;;
   download_prompts)
+    existing=$(count_nonempty_lines "$RAW_PROMPTS")
+    if [[ "$FORCE_DOWNLOAD" != "1" && "$existing" -ge "$DIFFUSIONDB_LIMIT" ]]; then
+      echo "Using existing $RAW_PROMPTS ($existing rows); set FORCE_DOWNLOAD=1 to refresh."
+      exit 0
+    fi
     mkdir -p "$(dirname "$RAW_PROMPTS")"
     "$PYTHON_BIN" -m ascr.cli.stage3_download_diffusiondb_prompts \
       --output "$RAW_PROMPTS" \
@@ -65,6 +82,11 @@ case "$MODE" in
       --limit "$DIFFUSIONDB_LIMIT"
     ;;
   sample_prompts)
+    existing=$(count_nonempty_lines "$PROMPT_OUTPUT")
+    if [[ "$FORCE_RESAMPLE" != "1" && "$existing" -ge "$PROMPT_COUNT" ]]; then
+      echo "Using existing $PROMPT_OUTPUT ($existing prompts); set FORCE_RESAMPLE=1 to rebuild."
+      exit 0
+    fi
     "$PYTHON_BIN" -m ascr.cli.stage3_sample_prompts \
       --sources $SOURCES \
       --count "$PROMPT_COUNT" \

@@ -127,11 +127,25 @@ MODE=plan bash scripts/training/run_stage3_token_repair_dataset.sh
 MODE=plan bash scripts/training/run_stage4_token_repair_lora.sh
 ```
 
-Prompt preparation:
+Prompt preparation is now preseeded in Git. Pulling `main` gives:
+
+- `configs/benchmarks/prompts/diffusiondb_10k.jsonl`
+- `configs/benchmarks/prompts/diffusiondb_10k.txt`
+- `configs/benchmarks/prompts/stage3_token_repair_prompts_10k.txt`
+
+The server should normally skip DiffusionDB download and just verify/reuse the files:
 
 ```bash
 MODE=download_prompts bash scripts/training/run_stage3_token_repair_dataset.sh
 MODE=sample_prompts bash scripts/training/run_stage3_token_repair_dataset.sh
+```
+
+Those commands are idempotent: if the Git-tracked prompt files already have 10k rows,
+they print a reuse message. To deliberately refresh prompts, run:
+
+```bash
+FORCE_DOWNLOAD=1 MODE=download_prompts bash scripts/training/run_stage3_token_repair_dataset.sh
+FORCE_RESAMPLE=1 MODE=sample_prompts bash scripts/training/run_stage3_token_repair_dataset.sh
 ```
 
 Preferred clean-token generation, one multi-node job:
@@ -188,7 +202,8 @@ MODE=probe_lora bash scripts/training/run_stage4_token_repair_lora.sh
 
 ## Expected Outputs
 
-- Prompts: `configs/benchmarks/prompts/stage3_token_repair_prompts_10k.txt`
+- Raw DiffusionDB prompts: `configs/benchmarks/prompts/diffusiondb_10k.txt`
+- Training prompts: `configs/benchmarks/prompts/stage3_token_repair_prompts_10k.txt`
 - Clean token manifest: `outputs/stage3_token_repair/clean_tokens/clean_manifest.jsonl`
 - Dataset: `outputs/stage3_token_repair/datasets/repair_cells_40k/dataset.jsonl`
 - Dataset manifest: `outputs/stage3_token_repair/datasets/repair_cells_40k/dataset_manifest.json`
@@ -210,7 +225,7 @@ Do not commit outputs, datasets, model weights, adapter checkpoints, prompt down
 
 ## If Something Fails
 
-- If DiffusionDB download fails, use any large local prompt source temporarily, but write the source and count in `docs/AI_COLLAB_LOG.md`.
+- If DiffusionDB download fails, use the Git-tracked `diffusiondb_10k` / `stage3_token_repair_prompts_10k` files. They were downloaded locally specifically to avoid server disk-quota and streaming failures.
 - If multi-node clean generation fails, switch to the job-array fallback.
 - If single-node 8-GPU LoRA training OOMs, inspect the latest DDP log first. Do not start many independent LoRA jobs; that does not produce one mergeable adapter.
 - If parser output reverts to legacy keys, rerun with `target_schema=repair_cells` and inspect the exact prompt in `sft_examples.jsonl`.

@@ -5563,6 +5563,26 @@ but streaming is too slow at 1-2s/record).
 
 ---
 
+## 2026-06-30 - Windows Codex: reviewed server prompt branch and fixed defaults
+
+Context:
+- Pulled `origin/feat/stage4-gc-fallback-server`.
+- Server AI's `trust_remote_code=True` fix was reasonable for newer `datasets`, but older local `datasets` treats it as a BuilderConfig key. The downloader now retries without it and can fall back to cached Arrow rows.
+- Server AI's fallback `stage3_token_repair_prompts_10k.txt` only had 3,981 prompts, so the file name and 40k data plan were misleading.
+
+Changes:
+- Downloaded DiffusionDB `2m_text_only` prompts locally and committed:
+  - `configs/benchmarks/prompts/diffusiondb_10k.jsonl`
+  - `configs/benchmarks/prompts/diffusiondb_10k.txt`
+  - `configs/benchmarks/prompts/diffusiondb_10k.source_manifest.json`
+- Regenerated `configs/benchmarks/prompts/stage3_token_repair_prompts_10k.txt` with exactly 10,000 selected prompts.
+- Updated `scripts/training/run_stage3_token_repair_dataset.sh` so `download_prompts` and `sample_prompts` reuse Git-tracked prompt files by default. Use `FORCE_DOWNLOAD=1` or `FORCE_RESAMPLE=1` only when refreshing.
+
+Result:
+- Server should no longer spend disk quota or wall time downloading DiffusionDB before clean-token generation.
+
+---
+
 ## 2026-06-30 10:30 HKT — Disk cleanup + pipeline progressing
 
 ### Disk space
@@ -5570,9 +5590,6 @@ but streaming is too slow at 1-2s/record).
 - /home/u3011449: 44GB → 16GB (37GB freed total from pip cache, HF cache, vscode backup, project moves)
 
 ### Pipeline
-- Clean token job 71819: 3/4 running for 32 min, ~43 min expected per task
-- 0 jsonl manifests yet — jobs still generating
+- Clean token job 71819: 3/4 running for 32 min
 - 3 node dirs × 8 GPU dirs, each GPU producing output
-
-### To Codex
-- DiffusionDB 10K prompts needed — please download locally and push to git
+- Generation speed: ~60s/prompt at 1024px Lumina, 128 prompts/GPU → ~2.1h per task
