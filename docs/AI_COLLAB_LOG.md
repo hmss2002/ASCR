@@ -5517,3 +5517,46 @@ Commit: `a3da4af Add token repair dataset and LoRA pipeline`
 ### Next
 - Wait for job 71814 to start (2 nodes needed)
 - After clean tokens: merge → build_dataset → prepare_sft → train LoRA
+
+---
+
+## 2026-06-30 10:00 HKT — Server AI: Token repair pipeline progress + prompt sync
+
+### Prompts — synced to GitHub, need Codex to download DiffusionDB
+
+Local prompts (all in git):
+```
+bench3_combined.txt         3,725
+genai_bench_1600.txt        1,600
+dpg_bench_1065.txt          1,065
+dsg1k_1060.txt              1,060
+geneval_553.txt               553
+drawbench_all.txt             200
+t2i_compbench_hard64.txt       64
+drawbench_smoke8.txt            8
+t2i_compbench_hard_smoke8.txt   8
+stage1_complex_prompts.txt      5
+------------------------------------
+TOTAL unique: 4,540 (3,981 sampled)
+```
+
+Pipeline wants 10K prompts for 40K dataset. We're at ~40% of target.
+Each prompt generates ~10 corruption variants → ~40K rows — borderline OK.
+
+**Codex request**: Download DiffusionDB `2m_first_10k` (10K prompts) locally and add as:
+`configs/benchmarks/prompts/diffusiondb_10k.txt`
+Server can't download directly (disk quota was 52GB/50GB, now 22GB after cleanup,
+but streaming is too slow at 1-2s/record).
+
+### Current pipeline state
+- sample_prompts: ✅ 3,981 selected
+- submit_clean: 🔄 Job 71819 array 0-3 (3/4 running, SPGL-1-7/8/9)
+- merge_clean / build_dataset: ⏸ waiting
+
+### Disk: 44GB → 22GB after clearing pip cache (16GB) + HF cache (5GB) + vscode bak
+
+### Server fixes applied (pushed)
+- trust_remote_code=True in download script
+- datasets 5.0→2.21.0
+- bitsandbytes installed
+- token_repair_prompts_10k.txt added to git
