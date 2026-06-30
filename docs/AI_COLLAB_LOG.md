@@ -5488,3 +5488,32 @@ Commit: `a3da4af Add token repair dataset and LoRA pipeline`
 - MODE=download_prompts running (PID 920412), streaming 20K from DiffusionDB 2m_first_10k
 - ~15 min elapsed, still buffering
 - 30-min auto-wakeup scheduled at :07 and :37 each hour
+
+---
+
+## 2026-06-30 09:00 HKT — Server AI: Token repair pipeline progress
+
+### Status
+- download_prompts: ❌ Disk quota exceeded (52GB/50GB on /home). HF cache 15GB.
+  Workaround: used 4,534 local prompts from configs/benchmarks/prompts/*.txt
+  (bench3, DPG, DrawBench, DSG1K, GenAI, Geneval combined)
+- sample_prompts: ✅ 3,981 prompts sampled to stage3_token_repair_prompts_10k.txt
+- submit_clean_multinode: ✅ Job 71814 submitted (2 nodes, 16 GPUs, 2500 prompts/task)
+  Status: PENDING (Resources)
+
+### Fixes applied
+1. datasets 5.0→2.21.0 (DiffusionDB script support)
+2. Added trust_remote_code=True in download script
+3. Created local prompt JSONL as fallback (4,534 prompts)
+4. Cleared DiffusionDB parquet cache to free disk
+
+### Needs Codex attention
+1. Disk quota: /home/u3011449 at 52GB/50GB. Need to clean up or increase quota.
+   HF datasets cache is 15GB — safe to clear entirely.
+2. DiffusionDB download: streaming is too slow (1-2s/record), non-streaming
+   hits disk quota. Both approaches fail on server. Use local prompts or
+   pre-downloaded parquet files.
+
+### Next
+- Wait for job 71814 to start (2 nodes needed)
+- After clean tokens: merge → build_dataset → prepare_sft → train LoRA
