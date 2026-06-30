@@ -34,7 +34,7 @@ def download_diffusiondb_prompts(
                 "Downloading DiffusionDB prompts requires the optional `datasets` package. "
                 "Install it on the server with `python -m pip install datasets` or run with --dry-run."
             ) from exc
-        stream = load_dataset(dataset, subset, split=split, streaming=True)
+        stream = load_dataset(dataset, subset, split=split, streaming=True, trust_remote_code=True)
         for index, row in enumerate(stream):
             if len(rows) >= int(limit):
                 break

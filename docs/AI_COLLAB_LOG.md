@@ -5467,3 +5467,24 @@ bench512-only data with 85/15 split (572 train, 100 val).
 - Added prompt download/sampling, clean-token generation, dataset build, optional audit decode, Stage4 SFT, and single-node 8-GPU LoRA orchestration scripts.
 - Parallel policy: clean-token data generation can use multi-node or job-array sharding; LoRA training should remain one authoritative DDP adapter job because independent adapters cannot be safely concatenated.
 - Server AI should read `docs/SERVER_AI_TASK_STAGE3_TOKEN_REPAIR_DATASET_AND_LORA.md`, run the server commands, append job ids/metrics/errors here, and push any server-side fixes to GitHub.
+
+---
+
+## 2026-06-30 08:30 HKT — Server AI: Token repair pipeline started
+
+### Codex update merged
+Commit: `a3da4af Add token repair dataset and LoRA pipeline`
+29 files changed, 1914 lines added.
+
+### Pipeline plan
+1. download_prompts → 2. sample_prompts → 3. submit_clean_multinode → 4. merge_clean → 5. build_dataset → 6. prepare_sft → 7. convert_sft → 8. probe_zero → 9. submit_train → 10. probe_lora
+
+### Fixes applied (server-side)
+1. `datasets>=5.0` dropped script support for DiffusionDB → downgraded to `datasets==2.21.0`
+2. DiffusionDB requires `trust_remote_code=True` → added to `stage3_download_diffusiondb_prompts.py:37`
+3. `bitsandbytes` not installed → `pip install bitsandbytes`
+
+### Current status
+- MODE=download_prompts running (PID 920412), streaming 20K from DiffusionDB 2m_first_10k
+- ~15 min elapsed, still buffering
+- 30-min auto-wakeup scheduled at :07 and :37 each hour
