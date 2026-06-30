@@ -213,6 +213,19 @@ Train LoRA on one 8-GPU node:
 MODE=submit_train bash scripts/training/run_stage4_token_repair_lora.sh
 ```
 
+Training progress visibility is enabled by default in the token-repair train
+config:
+
+```yaml
+progress_bar: true
+progress_every_steps: 25
+```
+
+Rank 0 prints flushed per-N-step progress in DDP runs, so Slurm logs should no
+longer stay silent until epoch end. Existing jobs submitted before this change
+will not gain the new logging retroactively; resubmit if live progress is
+needed.
+
 Probe trained LoRA:
 
 ```bash

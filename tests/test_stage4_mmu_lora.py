@@ -701,6 +701,8 @@ class Stage4MmuLoraTests(unittest.TestCase):
         self.assertEqual(train["checkpoint_every_epochs"], 1)
         self.assertEqual(train["early_stopping_patience"], 3)
         self.assertEqual(train["early_stopping_min_delta"], 0.0)
+        self.assertEqual(train["progress_every_steps"], 25)
+        self.assertTrue(train["progress_bar"])
         self.assertIn("locality_hard256_v1", probe["dataset"])
         self.assertEqual(probe["grid_size"], 8)
 

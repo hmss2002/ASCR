@@ -112,6 +112,8 @@ def build_config(grid, profile="l40s_1024_gc", prompt_variant="schema_example", 
         "checkpoint_every_epochs": 1,
         "early_stopping_patience": 3,
         "early_stopping_min_delta": 0.0,
+        "progress_every_steps": 25,
+        "progress_bar": True,
         "seed": 0,
     }
 

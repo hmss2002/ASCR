@@ -24,4 +24,6 @@ ignore_pad_labels: true
 checkpoint_every_epochs: 1
 early_stopping_patience: 3
 early_stopping_min_delta: 0.0
+progress_every_steps: 25
+progress_bar: true
 seed: 0

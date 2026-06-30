@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import random
+import time
 
 from ascr.cli.stage4_train_mmu_lora import build_parser as build_stage4_parser
 from ascr.core.config import load_config
@@ -18,11 +19,14 @@ from ascr.training.train_lumina_lora_smoke import (
     _configure_gradient_checkpointing,
     _copy_checkpoint_to_output,
     _dtype_value,
+    _iter_with_progress,
     _lora_parameter_report,
     _jsonl_rows,
     _load_training_stack,
+    _log_training_progress,
     _mean_lora_loss,
     _prepare_lumina_lora_batch,
+    _progress_every_steps,
     _save_epoch_checkpoint,
     _trainable_parameters,
     build_parser as build_lora_parser,
@@ -62,6 +66,8 @@ def _resolve_lora_args(argv=None):
         "checkpoint_every_epochs",
         "early_stopping_patience",
         "early_stopping_min_delta",
+        "progress_bar",
+        "progress_every_steps",
         "gradient_checkpointing",
         "gradient_checkpointing_fallback",
     ):
@@ -306,6 +312,7 @@ def train_lumina_lora_ddp(argv=None):
         weight_decay=args.weight_decay,
     )
     local_losses = []
+    epoch_summaries = []
     checkpoints = []
     best_val_loss = None
     best_checkpoint = None
@@ -315,7 +322,16 @@ def train_lumina_lora_ddp(argv=None):
         sampler.set_epoch(epoch)
         total = 0.0
         count = 0
-        for step, row_index in enumerate(sampler):
+        started_at = time.monotonic()
+        local_total_steps = len(sampler)
+        step_iter, progress_bar = _iter_with_progress(
+            enumerate(sampler),
+            total=local_total_steps,
+            desc=f"rank0 epoch {epoch}",
+            args=args,
+            enabled=env["rank"] == 0,
+        )
+        for step, row_index in step_iter:
             input_ids, labels = _prepare_lumina_lora_batch(
                 torch,
                 tokenizer,
@@ -332,6 +348,27 @@ def train_lumina_lora_ddp(argv=None):
             total += value
             count += 1
             local_losses.append({"rank": env["rank"], "epoch": epoch, "step": step, "row_index": int(row_index), "loss": value})
+            if env["rank"] == 0:
+                if progress_bar is not None:
+                    elapsed_s = time.monotonic() - started_at
+                    progress_bar.set_postfix(
+                        loss=f"{value:.4f}",
+                        avg_loss=f"{(total / max(1, count)):.4f}",
+                        local_samples_s=f"{(count / max(elapsed_s, 1e-9)):.4f}",
+                    )
+                _log_training_progress(
+                    epoch,
+                    step,
+                    local_total_steps,
+                    value,
+                    total,
+                    count,
+                    started_at,
+                    args,
+                    prefix=f"ddp_rank0_train world_size={env['world_size']}",
+                )
+        if progress_bar is not None:
+            progress_bar.close()
         local_avg = total / max(1, count)
         avg_tensor = torch.tensor([local_avg], dtype=torch.float32, device=device)
         dist.all_reduce(avg_tensor, op=dist.ReduceOp.SUM)
@@ -356,7 +393,18 @@ def train_lumina_lora_ddp(argv=None):
         stop_tensor = torch.tensor([0], dtype=torch.int64, device=device)
         if env["rank"] == 0:
             suffix = f", val_loss={val_loss:.6f}" if val_loss is not None else ""
-            print(f"epoch {epoch}: ddp_avg_loss={float(avg_tensor.item()):.6f}{suffix}", flush=True)
+            elapsed_s = time.monotonic() - started_at
+            epoch_summaries.append({
+                "epoch": epoch,
+                "ddp_avg_loss": float(avg_tensor.item()),
+                "val_loss": val_loss,
+                "elapsed_s": elapsed_s,
+                "local_steps": int(count),
+                "world_size": int(env["world_size"]),
+                "local_samples_per_s": count / max(elapsed_s, 1e-9),
+                "approx_global_samples_per_s": (count * env["world_size"]) / max(elapsed_s, 1e-9),
+            })
+            print(f"epoch {epoch}: ddp_avg_loss={float(avg_tensor.item()):.6f}{suffix}, elapsed_s={elapsed_s:.1f}", flush=True)
             should_save_epoch = int(args.checkpoint_every_epochs or 0) > 0 and (epoch + 1) % int(args.checkpoint_every_epochs) == 0
             if val_loss is not None:
                 improved = best_val_loss is None or val_loss < best_val_loss - float(args.early_stopping_min_delta)
@@ -427,10 +475,13 @@ def train_lumina_lora_ddp(argv=None):
             "checkpoint_every_epochs": int(args.checkpoint_every_epochs or 0),
             "early_stopping_patience": int(args.early_stopping_patience or 0),
             "early_stopping_min_delta": float(args.early_stopping_min_delta),
+            "progress_bar": bool(getattr(args, "progress_bar", True)),
+            "progress_every_steps": _progress_every_steps(args),
             "stopped_early": stopped_early,
             "best_val_loss": best_val_loss,
             "best_checkpoint": best_checkpoint,
             "checkpoints": checkpoints,
+            "epoch_summaries": epoch_summaries,
             "losses": losses,
             "final_loss": losses[-1]["loss"] if losses else None,
         }

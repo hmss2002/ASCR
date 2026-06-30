@@ -305,6 +305,54 @@ def _mean_lora_loss(torch, model, tokenizer, add_break_line, rows, args, device=
     return total / max(1, len(rows))
 
 
+def _progress_bar_enabled(args):
+    return bool(getattr(args, "progress_bar", True))
+
+
+def _progress_every_steps(args):
+    value = int(getattr(args, "progress_every_steps", 25) or 0)
+    return max(0, value)
+
+
+def _iter_with_progress(iterable, total, desc, args, enabled=True):
+    if not enabled or not _progress_bar_enabled(args):
+        return iterable, None
+    try:
+        from tqdm.auto import tqdm
+    except Exception:
+        return iterable, None
+    bar = tqdm(
+        iterable,
+        total=int(total),
+        desc=desc,
+        unit="step",
+        dynamic_ncols=True,
+        mininterval=5.0,
+    )
+    return bar, bar
+
+
+def _log_training_progress(epoch, step, total_steps, loss, total_loss, count, started_at, args, prefix="train"):
+    every = _progress_every_steps(args)
+    if every <= 0:
+        return
+    step_number = int(step) + 1
+    total_steps = max(1, int(total_steps))
+    if step_number != total_steps and step_number % every != 0:
+        return
+    elapsed_s = time.monotonic() - started_at
+    samples_per_s = float(count) / max(elapsed_s, 1e-9)
+    remaining_steps = max(0, total_steps - step_number)
+    eta_s = remaining_steps / max(samples_per_s, 1e-9)
+    avg_loss = float(total_loss) / max(1, int(count))
+    print(
+        f"{prefix} epoch={int(epoch)} step={step_number}/{total_steps} "
+        f"loss={float(loss):.6f} avg_loss={avg_loss:.6f} "
+        f"samples_per_s={samples_per_s:.4f} elapsed_s={elapsed_s:.1f} eta_s={eta_s:.1f}",
+        flush=True,
+    )
+
+
 def _prepare_lumina_lora_batch(torch, tokenizer, add_break_line, row, args, device=None):
     with open(row["user_image"], "rb") as handle:
         image_payload = pickle.load(handle)
@@ -488,6 +536,7 @@ def train_lumina_lora_smoke(args):
         weight_decay=args.weight_decay,
     )
     losses = []
+    epoch_summaries = []
     checkpoints = []
     best_val_loss = None
     best_checkpoint = None
@@ -497,7 +546,13 @@ def train_lumina_lora_smoke(args):
         started_at = time.monotonic()
         random.shuffle(rows)
         total = 0.0
-        for step, row in enumerate(rows):
+        step_iter, progress_bar = _iter_with_progress(
+            enumerate(rows),
+            total=len(rows),
+            desc=f"epoch {epoch}",
+            args=args,
+        )
+        for step, row in step_iter:
             input_ids, labels = _prepare_lumina_lora_batch(torch, tokenizer, add_break_line, row, args)
             loss = _call_model_loss(torch, model, input_ids, labels)
             optimizer.zero_grad()
@@ -506,9 +561,36 @@ def train_lumina_lora_smoke(args):
             value = float(loss.item())
             total += value
             losses.append({"epoch": epoch, "step": step, "loss": value})
+            count = step + 1
+            if progress_bar is not None:
+                elapsed_s = time.monotonic() - started_at
+                progress_bar.set_postfix(
+                    loss=f"{value:.4f}",
+                    avg_loss=f"{(total / max(1, count)):.4f}",
+                    samples_s=f"{(count / max(elapsed_s, 1e-9)):.4f}",
+                )
+            _log_training_progress(
+                epoch,
+                step,
+                len(rows),
+                value,
+                total,
+                count,
+                started_at,
+                args,
+            )
+        if progress_bar is not None:
+            progress_bar.close()
         train_loss = total / max(1, len(rows))
         val_loss = _mean_lora_loss(torch, model, tokenizer, add_break_line, val_rows, args) if val_rows else None
         elapsed_s = time.monotonic() - started_at
+        epoch_summaries.append({
+            "epoch": epoch,
+            "train_loss": train_loss,
+            "val_loss": val_loss,
+            "elapsed_s": elapsed_s,
+            "samples_per_s": len(rows) / max(elapsed_s, 1e-9),
+        })
         suffix = f", val_loss={val_loss:.6f}" if val_loss is not None else ""
         print(
             f"epoch {epoch}: avg_loss={train_loss:.6f}{suffix}, elapsed_s={elapsed_s:.1f}",
@@ -571,11 +653,14 @@ def train_lumina_lora_smoke(args):
         "checkpoint_every_epochs": int(args.checkpoint_every_epochs or 0),
         "early_stopping_patience": int(args.early_stopping_patience or 0),
         "early_stopping_min_delta": float(args.early_stopping_min_delta),
+        "progress_bar": bool(getattr(args, "progress_bar", True)),
+        "progress_every_steps": _progress_every_steps(args),
         "stopped_early": stopped_early,
         "best_val_loss": best_val_loss,
         "best_checkpoint": best_checkpoint,
         "checkpoints": checkpoints,
         "device": device,
+        "epoch_summaries": epoch_summaries,
         "losses": losses,
         "final_loss": losses[-1]["loss"] if losses else None,
     }
@@ -608,6 +693,18 @@ def build_parser():
     parser.add_argument("--checkpoint-every-epochs", type=int, default=1)
     parser.add_argument("--early-stopping-patience", type=int, default=3)
     parser.add_argument("--early-stopping-min-delta", type=float, default=0.0)
+    parser.add_argument(
+        "--progress-every-steps",
+        type=int,
+        default=25,
+        help="Print a flushed plain-text training progress line every N steps; use 0 to disable.",
+    )
+    parser.add_argument(
+        "--progress-bar",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Show tqdm progress bars when tqdm is installed.",
+    )
     parser.add_argument("--torch-dtype", default="bfloat16", choices=["auto", "float32", "fp32", "bfloat16", "bf16", "float16", "fp16"])
     parser.add_argument(
         "--device-map",
