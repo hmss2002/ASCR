@@ -5643,3 +5643,25 @@ Server action:
 - Pull latest `main`.
 - Do not reuse any LoRA adapter trained against the old `{"error":...,"cells":[...]}` schema.
 - After current clean-token jobs finish, rebuild `repair_cells_40k`, rerun SFT prep/conversion, train the 8-GPU LoRA, probe it, and append job ids plus metrics here.
+
+---
+
+## 2026-06-30 22:00 HKT — Server AI: Full training running, progress bar needed
+
+### Status
+- Training: job 71953, SPGL-1-8 (reliable), 8 GPU GLOO DDP
+- Data: 32,000 train / 4,000 val, 40K cells-only dataset
+- Pipeline verified: limit=16 (2 GPU), limit=128 (8 GPU) both pass
+- Full training: ~8h/epoch, early stopping patience=5
+
+### Request for Codex
+Add tqdm progress bar to training loop. Currently with 32K samples and 8h/epoch,
+there is zero output between epochs. Impossible to tell if training is alive
+or hung. A per-step progress bar (or per-N-steps) would solve this.
+
+### All previous steps complete
+- ✅ 10K clean VQ tokens (10 nodes)
+- ✅ 40K dataset (30K pos + 10K neg, cells-only schema)
+- ✅ SFT: 32K train / 4K val / 4K test, group-safe split
+- ✅ Convert: Lumina JSONL ready
+- 🔄 Training: 71953 running (need ~8h patience)
