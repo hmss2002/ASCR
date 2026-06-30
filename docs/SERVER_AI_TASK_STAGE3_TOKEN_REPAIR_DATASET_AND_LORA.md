@@ -22,19 +22,19 @@ We assume the 64x64 Lumina discrete VQ token state already contains the informat
 Canonical dataset row:
 
 ```json
-{"error": true, "cells": ["D4", "D5"]}
+{"cells": ["D4", "D5"]}
 ```
 
 Negative row:
 
 ```json
-{"error": false, "cells": []}
+{"cells": []}
 ```
 
 Fixed choices:
 
 - Input to model: original prompt plus corrupted 64x64 VQ tokens.
-- Output schema: `{"error": boolean, "cells": string[]}`.
+- Output schema: `{"cells": string[]}`.
 - Action grid: exactly 8x8.
 - Ground truth: corrupted 64x64 token mask projected to 8x8 cells.
 - Positive data: clean tokens -> choose token mask -> apply corruption operator -> corrupted tokens -> project token mask to 8x8 cells.
@@ -72,19 +72,38 @@ The in-context prompt is only a formatting and behavior constraint for asking th
 Expected prompt style is implemented in `ascr.training.stage4_mmu_lora.mmu_localization_prompt(..., target_schema="repair_cells")`:
 
 ```text
-You are the ASCR token-state repair localizer.
-The input is a generated image represented by Lumina VQ tokens, plus the original text prompt.
-Decide whether the current token state contains a local corruption on the fixed 8x8 repair grid.
+You are the ASCR token-state repair cell selector.
+
+Input: the original text prompt plus the current generated image represented as Lumina VQ tokens.
+
+Task: choose which cells on the fixed 8x8 repair grid should be reopened because they contain corrupted VQ tokens.
+
 Return exactly one compact JSON object and nothing else.
-Schema: {"error": boolean, "cells": string[]}
-Positive example: {"error":true,"cells":["D4","D5"]}
-No-error example: {"error":false,"cells":[]}
-Allowed cells: A1, A2, ...
-Use at most 8 selected cells.
-Original prompt: ...
+
+Schema:
+{"cells": string[]}
+
+Examples:
+{"cells":["D4","D5"]}
+{"cells":["A1"]}
+{"cells":["A8","B8"]}
+{"cells":["C3","C4","D3","D4"]}
+{"cells":[]}
+
+Rules:
+- Use only 8x8 cell labels: A1 through H8.
+- If no repair is needed, return {"cells":[]}.
+- If corrupted tokens touch multiple cells, include every touched cell.
+- Sort cells row-major: A1,A2,...,A8,B1,...,H8.
+- Do not output any key except "cells".
+- Do not output markdown, prose, confidence, coordinates, explanations, or extra fields.
+- Use at most 8 cells.
+
+Original prompt:
+...
 ```
 
-Do not ask the model to output legacy keys like `has_error` or `corrupted_cells_8x8` for this mainline.
+Do not ask the model to output legacy keys like `error`, `has_error`, or `corrupted_cells_8x8` for this mainline. The local parser still accepts old `{"error":...,"cells":[...]}` rows for compatibility, but new datasets and LoRA targets must be cells-only.
 
 ## Resource Strategy
 
@@ -217,7 +236,7 @@ Do not commit outputs, datasets, model weights, adapter checkpoints, prompt down
 ## Success Criteria
 
 - Dataset has 30k positive rows and 10k negative rows.
-- Every target JSON is either `{"error":true,"cells":[...]}` or `{"error":false,"cells":[]}`.
+- Every target JSON has exactly one key, `cells`.
 - Positive rows have nonempty cells.
 - Negative rows have empty cells.
 - SFT split is group-safe by `source_clean_sample_id`, so clean and corrupted variants of the same prompt do not cross train/val/test.
@@ -228,4 +247,4 @@ Do not commit outputs, datasets, model weights, adapter checkpoints, prompt down
 - If DiffusionDB download fails, use the Git-tracked `diffusiondb_10k` / `stage3_token_repair_prompts_10k` files. They were downloaded locally specifically to avoid server disk-quota and streaming failures.
 - If multi-node clean generation fails, switch to the job-array fallback.
 - If single-node 8-GPU LoRA training OOMs, inspect the latest DDP log first. Do not start many independent LoRA jobs; that does not produce one mergeable adapter.
-- If parser output reverts to legacy keys, rerun with `target_schema=repair_cells` and inspect the exact prompt in `sft_examples.jsonl`.
+- If parser output reverts to legacy keys or misses the required `cells` key, rerun with `target_schema=repair_cells` and inspect the exact prompt in `sft_examples.jsonl`.

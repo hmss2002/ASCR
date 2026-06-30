@@ -31,17 +31,36 @@ def native_eval_prompt(original_prompt, grid_size=4, max_selected_cells=6, targe
             cells.append(f"{chr(ord('A') + row)}{col + 1}")
     normalised_schema = str(target_schema).strip().lower().replace("-", "_")
     if normalised_schema in {"repair", "repair_cells", "error_cells", "token_repair"}:
+        examples = "\n".join([
+            '{"cells":["D4","D5"]}',
+            '{"cells":["A1"]}',
+            '{"cells":["A8","B8"]}',
+            '{"cells":["C3","C4","D3","D4"]}',
+            '{"cells":[]}',
+        ])
         return (
-            "You are the ASCR token-state repair localizer.\n"
-            "The input is a generated image represented by Lumina VQ tokens, plus the original text prompt.\n"
-            f"Decide whether the current token state contains a local corruption on the fixed {int(grid_size)}x{int(grid_size)} repair grid.\n"
+            "You are the ASCR token-state repair cell selector.\n\n"
+            "Input: the original text prompt plus the current generated image represented as Lumina VQ tokens.\n\n"
+            f"Task: choose which cells on the fixed {int(grid_size)}x{int(grid_size)} repair grid should be reopened because they contain corrupted VQ tokens.\n\n"
             "Return exactly one compact JSON object and nothing else.\n"
-            "Schema: {\"error\": boolean, \"cells\": string[]}\n"
-            "Positive example: {\"error\":true,\"cells\":[\"D4\",\"D5\"]}\n"
-            "No-error example: {\"error\":false,\"cells\":[]}\n"
-            f"Allowed cells: {', '.join(cells)}.\n"
-            f"Use at most {int(max_selected_cells)} selected cells.\n"
-            f"Original prompt: {original_prompt}"
+            "\n"
+            "Schema:\n"
+            "{\"cells\": string[]}\n"
+            "\n"
+            "Examples:\n"
+            f"{examples}\n"
+            "\n"
+            "Rules:\n"
+            f"- Use only {int(grid_size)}x{int(grid_size)} cell labels: A1 through {cells[-1]}.\n"
+            "- If no repair is needed, return {\"cells\":[]}.\n"
+            "- If corrupted tokens touch multiple cells, include every touched cell.\n"
+            f"- Sort cells row-major: {', '.join(cells)}.\n"
+            "- Do not output any key except \"cells\".\n"
+            "- Do not output markdown, prose, confidence, coordinates, explanations, or extra fields.\n"
+            f"- Use at most {int(max_selected_cells)} cells.\n"
+            "\n"
+            "Original prompt:\n"
+            f"{original_prompt}"
         )
     if normalised_schema in {"localization", "localization_cells", "corrupted_cells"}:
         return (
@@ -212,6 +231,12 @@ class LuminaNativeEvaluator:
         try:
             payload = extract_json_object(raw_text)
             normalised_payload = payload
+            repair_schema = str(self.target_schema).strip().lower().replace("-", "_") in {
+                "repair",
+                "repair_cells",
+                "error_cells",
+                "token_repair",
+            }
             try:
                 from ascr.training.stage4_mmu_lora import safe_parse_mmu_localization_payload
 
@@ -219,8 +244,11 @@ class LuminaNativeEvaluator:
                     payload,
                     grid_size=self.grid_size,
                     max_selected_cells=self.max_selected_cells,
+                    require_cells_key=repair_schema,
                 )
             except Exception:
+                if repair_schema:
+                    raise
                 parsed = safe_parse_semantic_evaluation(
                     payload,
                     grid_size=self.grid_size,

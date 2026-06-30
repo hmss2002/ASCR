@@ -17,7 +17,13 @@ def _safe_name(value):
 
 
 def select_audit_rows(rows, max_pairs=16, seed=0):
-    positives = [row for row in rows if row.get("row_type") == "positive" or row.get("target_json", {}).get("error")]
+    positives = [
+        row
+        for row in rows
+        if row.get("row_type") == "positive"
+        or row.get("target_json", {}).get("error")
+        or bool(row.get("target_json", {}).get("cells"))
+    ]
     rng = random.Random(int(seed))
     by_bucket = {}
     for row in positives:

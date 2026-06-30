@@ -67,10 +67,12 @@ class Stage4MmuLoraTests(unittest.TestCase):
             max_selected_cells=8,
             target_schema="repair_cells",
         )
-        self.assertIn("ASCR token-state repair localizer", prompt)
-        self.assertIn('Schema: {"error": boolean, "cells": string[]}', prompt)
-        self.assertIn('{"error":true,"cells":["D4","D5"]}', prompt)
-        self.assertIn('{"error":false,"cells":[]}', prompt)
+        self.assertIn("ASCR token-state repair cell selector", prompt)
+        self.assertIn('{"cells": string[]}', prompt)
+        self.assertIn('{"cells":["D4","D5"]}', prompt)
+        self.assertIn('{"cells":["C3","C4","D3","D4"]}', prompt)
+        self.assertIn('{"cells":[]}', prompt)
+        self.assertIn('Do not output any key except "cells"', prompt)
 
     def test_prompt_variants_change_format_instruction(self):
         minimal = mmu_localization_prompt("a red cube", grid_size=2, prompt_variant="minimal_json")
@@ -137,8 +139,8 @@ class Stage4MmuLoraTests(unittest.TestCase):
             )
             rows = [json.loads(line) for line in Path(manifest["sft_examples"]).read_text(encoding="utf-8").splitlines()]
         self.assertEqual(rows[0]["target_schema"], "repair_cells")
-        self.assertEqual(rows[0]["target_json"], {"error": True, "cells": ["A1", "A2"]})
-        self.assertEqual(rows[0]["target_text"], '{"error":true,"cells":["A1","A2"]}')
+        self.assertEqual(rows[0]["target_json"], {"cells": ["A1", "A2"]})
+        self.assertEqual(rows[0]["target_text"], '{"cells":["A1","A2"]}')
 
     def test_prepare_mmu_sft_dataset_keeps_clean_group_in_one_split(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -414,9 +416,29 @@ class Stage4MmuLoraTests(unittest.TestCase):
 
     def test_parser_accepts_repair_cells_payload(self):
         evaluation, normalised = safe_parse_mmu_localization_payload(
+            {"cells": ["D4", "D5"]},
+            grid_size=8,
+            max_selected_cells=8,
+            require_cells_key=True,
+        )
+        self.assertFalse(evaluation.should_abstain)
+        self.assertEqual([cell.to_label() for cell in evaluation.regions[0].cells], ["D4", "D5"])
+        self.assertTrue(normalised["has_error"])
+        empty, normalised_empty = safe_parse_mmu_localization_payload(
+            {"cells": []},
+            grid_size=8,
+            max_selected_cells=8,
+            require_cells_key=True,
+        )
+        self.assertFalse(empty.should_abstain)
+        self.assertEqual(normalised_empty["regions"], [])
+
+    def test_parser_keeps_legacy_error_cells_compatibility(self):
+        evaluation, normalised = safe_parse_mmu_localization_payload(
             {"error": True, "cells": ["D4", "D5"]},
             grid_size=8,
             max_selected_cells=8,
+            require_cells_key=True,
         )
         self.assertFalse(evaluation.should_abstain)
         self.assertEqual([cell.to_label() for cell in evaluation.regions[0].cells], ["D4", "D5"])
@@ -425,9 +447,19 @@ class Stage4MmuLoraTests(unittest.TestCase):
             {"error": False, "cells": ["D4"]},
             grid_size=8,
             max_selected_cells=8,
+            require_cells_key=True,
         )
         self.assertFalse(negative.should_abstain)
         self.assertEqual(normalised_negative["regions"], [])
+
+    def test_parser_rejects_missing_cells_key_in_repair_mode(self):
+        with self.assertRaises(ValueError):
+            safe_parse_mmu_localization_payload(
+                {},
+                grid_size=8,
+                max_selected_cells=8,
+                require_cells_key=True,
+            )
 
     def test_parser_recovers_loose_server_cell_keys(self):
         evaluation, normalised = safe_parse_mmu_localization_payload(

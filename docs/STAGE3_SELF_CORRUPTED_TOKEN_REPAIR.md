@@ -38,19 +38,23 @@ clean 64x64 VQ tokens
 Canonical output is now:
 
 ```json
-{"error": true, "cells": ["D4", "D5"]}
+{"cells": ["D4", "D5"]}
 ```
 
 and the clean no-error case is:
 
 ```json
-{"error": false, "cells": []}
+{"cells": []}
 ```
 
 Decoded images are audit artifacts only. They are not used to create the
 ground truth because the ground truth is the known token corruption mask. The
 in-context prompt only teaches this output format when asking the MMU whether
 and where the token state is corrupted.
+
+The reopen decision reads the `cells` array directly: nonempty means reopen
+those 8x8 cells, and empty means no repair action. The old `error` boolean is
+not part of the canonical training target anymore.
 
 Server handoff for this mainline is in
 `docs/SERVER_AI_TASK_STAGE3_TOKEN_REPAIR_DATASET_AND_LORA.md`.

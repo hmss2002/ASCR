@@ -47,6 +47,11 @@ class _LocalizationAnswerEngine:
         return json.dumps({"has_error": True, "corrupted_cells_4x4": ["B2"]})
 
 
+class _MissingCellsRepairEngine:
+    def answer_image(self, question, image_path, max_new_tokens=384):
+        return json.dumps({})
+
+
 class _ProbeEngine:
     def answer_image(self, question, image_path, max_new_tokens=384):
         if "Return JSON only" in question:
@@ -144,6 +149,21 @@ class LuminaNativeStage2Tests(unittest.TestCase):
             self.assertTrue(evaluation.has_error)
             self.assertEqual(evaluation.regions[0].cells[0].to_label(), "B2")
             self.assertEqual(evaluation.raw["target_schema"], "localization_cells")
+
+    def test_native_repair_cells_requires_cells_key(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            image_path = Path(temp_dir) / "grid.ppm"
+            _write_mock_ppm(image_path, [[row + col for col in range(8)] for row in range(8)], image_size=64)
+            evaluator = LuminaNativeEvaluator(
+                engine=_MissingCellsRepairEngine(),
+                grid_size=8,
+                max_selected_cells=8,
+                target_schema="repair_cells",
+            )
+            evaluation = evaluator.evaluate("a red cube left of a blue sphere", str(image_path), 0)
+            self.assertFalse(evaluation.has_error)
+            self.assertTrue(evaluation.should_abstain)
+            self.assertIn('required "cells" key', evaluation.summary)
 
     def test_malformed_native_answer_abstains(self):
         with tempfile.TemporaryDirectory() as temp_dir:

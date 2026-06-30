@@ -14,7 +14,7 @@ operators:
   - transplant
 target_schema: repair_cells
 target_format:
-  positive: '{"error":true,"cells":["D4","D5"]}'
-  negative: '{"error":false,"cells":[]}'
+  positive: '{"cells":["D4","D5"]}'
+  negative: '{"cells":[]}'
 decoded_image_policy: audit_only
 seed: 0

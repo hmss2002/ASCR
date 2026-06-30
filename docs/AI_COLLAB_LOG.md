@@ -5580,3 +5580,66 @@ Changes:
 
 Result:
 - Server should no longer spend disk quota or wall time downloading DiffusionDB before clean-token generation.
+
+---
+
+## 2026-06-30 10:30 HKT — Disk cleanup + pipeline progressing
+
+### Disk space
+- Moved AutoAgent→DATA8003_AutoAgent and DATA8007-Project to /grp01/cds_bdai/JianyuZhang/courses/
+- /home/u3011449: 44GB → 16GB (37GB freed total from pip cache, HF cache, vscode backup, project moves)
+
+### Pipeline
+- Clean token job 71819: 3/4 running for 32 min
+- 3 node dirs × 8 GPU dirs, each GPU producing output
+- Generation speed: ~60s/prompt at 1024px Lumina, 128 prompts/GPU → ~2.1h per task
+
+---
+
+## 2026-06-30 12:00 HKT — QOS bottleneck + workaround
+
+### Issue
+Job 71823 array 0-9 stuck with only 3/10 tasks running.
+Reason: QOSMaxGRESPerUser=28 for gpu_shared QOS.
+3 tasks × 8 GPUs = 24 GPUs → remaining tasks can't exceed 28 GPU limit.
+
+### Workaround
+Submitted extra array 71830 (tasks 3-9) to gpu partition with normal QOS (48 GPU limit).
+Result: 4/10 running now (3 gpu_shared + 1 gpu).
+gpu partition has idle nodes (SPGL-1-12 through 18) but scheduling is slow.
+
+### Clean token progress
+- 71823: 48 min, ~350 files/node, 0 manifests yet
+- Estimated: ~2h/node for full 1024 prompts
+- 10K prompts total across 10 tasks → serialized in batches
+
+### Cluster GPU usage
+Our jobs: 4 × 8 = 32 GPUs across both partitions
+Free nodes: SPGL-1-3/4/5/9/10/11 (gpu_shared), SPGL-1-13/15/18 (gpu)
+
+---
+
+## 2026-06-30 - Windows Codex: cells-only repair schema and server branch merge
+
+Context:
+- Pulled and merged `origin/feat/stage4-gc-fallback-server` into local `main` so the server-side `.gitignore`, QOS notes, and clean-token sbatch fixes are preserved.
+- User decision: Stage3/Stage4 token-repair mainline should use one fixed 8x8 action grid and one cells-only output schema.
+
+Current canonical target:
+
+```json
+{"cells":["D4","D5"]}
+{"cells":[]}
+```
+
+Changes:
+- Stage3 token-repair dataset rows now write cells-only `target_json`.
+- Stage4 `repair_cells` SFT targets now serialize exactly `{"cells":[...]}`.
+- The repair in-context prompt now contains multiple cells-only examples and explicitly forbids all keys except `cells`.
+- Probe/native parsing still accepts legacy `{"error":...,"cells":[...]}` for compatibility, but in `repair_cells` mode a missing `cells` key is malformed instead of being treated as no-error.
+- Server docs now instruct future runs to regenerate dataset, SFT data, and LoRA from the new cells-only schema.
+
+Server action:
+- Pull latest `main`.
+- Do not reuse any LoRA adapter trained against the old `{"error":...,"cells":[...]}` schema.
+- After current clean-token jobs finish, rebuild `repair_cells_40k`, rerun SFT prep/conversion, train the 8-GPU LoRA, probe it, and append job ids plus metrics here.

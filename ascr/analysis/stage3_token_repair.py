@@ -10,8 +10,8 @@ import random
 from ascr.corruption.vq_corruptor import corrupt_vq_ids_with_operator, token_indices_to_cell_labels
 
 
-DATASET_ROW_SCHEMA = "ascr.stage3.token_repair_dataset.row.v1"
-DATASET_MANIFEST_SCHEMA = "ascr.stage3.token_repair_dataset_manifest.v1"
+DATASET_ROW_SCHEMA = "ascr.stage3.token_repair_dataset.row.v2"
+DATASET_MANIFEST_SCHEMA = "ascr.stage3.token_repair_dataset_manifest.v2"
 CLEAN_ROW_SCHEMA = "ascr.stage3.clean_vq_token.row.v1"
 ACTION_GRID_SIZE = 8
 TOKEN_GRID_SIZE = 64
@@ -105,7 +105,7 @@ def _choose_operator_and_size(rng, mask_sizes, operators):
 
 def _target_json(cells):
     labels = sorted({str(cell) for cell in cells})
-    return {"error": bool(labels), "cells": labels}
+    return {"cells": labels}
 
 
 def _negative_row(clean_row, output_clean_path=None):
@@ -122,7 +122,7 @@ def _negative_row(clean_row, output_clean_path=None):
         "clean_vq_ids_path": clean_path,
         "corrupted_vq_ids_path": clean_path,
         "target_schema": "repair_cells",
-        "target_json": {"error": False, "cells": []},
+        "target_json": {"cells": []},
         "target_cells": [],
         "target_cells_8x8": [],
         "corruption_indices": [],

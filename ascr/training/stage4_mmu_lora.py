@@ -141,20 +141,48 @@ def mmu_localization_prompt(
     cells = ", ".join(_cell_labels(grid_size))
     if target_schema == TARGET_SCHEMA_REPAIR_CELLS:
         labels = _cell_labels(grid_size)
-        example_cells = ["D4", "D5"] if int(grid_size) >= 5 else labels[:1]
-        positive = json.dumps({"error": True, "cells": example_cells}, sort_keys=False, separators=(",", ":"))
-        negative = json.dumps({"error": False, "cells": []}, sort_keys=False, separators=(",", ":"))
+        if int(grid_size) >= 8:
+            example_payloads = [
+                {"cells": ["D4", "D5"]},
+                {"cells": ["A1"]},
+                {"cells": ["A8", "B8"]},
+                {"cells": ["C3", "C4", "D3", "D4"]},
+                {"cells": []},
+            ]
+        else:
+            example_payloads = [
+                {"cells": labels[: min(2, len(labels))]},
+                {"cells": labels[:1]},
+                {"cells": []},
+            ]
+        examples = "\n".join(
+            json.dumps(payload, sort_keys=False, separators=(",", ":"))
+            for payload in example_payloads
+        )
+        last_label = labels[-1] if labels else "H8"
         return (
-            "You are the ASCR token-state repair localizer.\n"
-            "The input is a generated image represented by Lumina VQ tokens, plus the original text prompt.\n"
-            f"Decide whether the current token state contains a local corruption on the fixed {int(grid_size)}x{int(grid_size)} repair grid.\n"
+            "You are the ASCR token-state repair cell selector.\n\n"
+            "Input: the original text prompt plus the current generated image represented as Lumina VQ tokens.\n\n"
+            f"Task: choose which cells on the fixed {int(grid_size)}x{int(grid_size)} repair grid should be reopened because they contain corrupted VQ tokens.\n\n"
             "Return exactly one compact JSON object and nothing else.\n"
-            "Schema: {\"error\": boolean, \"cells\": string[]}\n"
-            f"Positive example: {positive}\n"
-            f"No-error example: {negative}\n"
-            f"Allowed cells: {cells}.\n"
-            f"Use at most {int(max_selected_cells)} selected cells.\n"
-            f"Original prompt: {prompt}"
+            "\n"
+            "Schema:\n"
+            "{\"cells\": string[]}\n"
+            "\n"
+            "Examples:\n"
+            f"{examples}\n"
+            "\n"
+            "Rules:\n"
+            f"- Use only {int(grid_size)}x{int(grid_size)} cell labels: A1 through {last_label}.\n"
+            "- If no repair is needed, return {\"cells\":[]}.\n"
+            "- If corrupted tokens touch multiple cells, include every touched cell.\n"
+            f"- Sort cells row-major: {cells}.\n"
+            "- Do not output any key except \"cells\".\n"
+            "- Do not output markdown, prose, confidence, coordinates, explanations, or extra fields.\n"
+            f"- Use at most {int(max_selected_cells)} cells.\n"
+            "\n"
+            "Original prompt:\n"
+            f"{prompt}"
         )
     if target_schema == TARGET_SCHEMA_LOCALIZATION_CELLS:
         schema_keys = [
@@ -244,7 +272,7 @@ def localization_target_payload(row, grid_size=16, max_selected_cells=16):
 
 def repair_cells_target_payload(row, grid_size=8, max_selected_cells=16):
     labels = target_cells(row, grid_size)[: int(max_selected_cells)]
-    return {"error": bool(labels), "cells": labels}
+    return {"cells": labels}
 
 
 def target_payload_text(target, target_schema=TARGET_SCHEMA_LOCALIZATION_CELLS):
@@ -797,7 +825,14 @@ def localization_payload_to_semantic_payload(payload, grid_size=16, max_selected
     }
 
 
-def safe_parse_mmu_localization_payload(payload, grid_size=16, max_selected_cells=16):
+def safe_parse_mmu_localization_payload(
+    payload,
+    grid_size=16,
+    max_selected_cells=16,
+    require_cells_key=False,
+):
+    if require_cells_key and isinstance(payload, dict) and payload.get("regions") is None and "cells" not in payload:
+        raise ValueError('repair_cells output must include required "cells" key')
     normalised = localization_payload_to_semantic_payload(
         payload,
         grid_size=grid_size,
@@ -928,6 +963,7 @@ def run_mmu_localization_probe(
                 payload,
                 grid_size=grid_size,
                 max_selected_cells=max_selected_cells,
+                require_cells_key=target_schema == TARGET_SCHEMA_REPAIR_CELLS,
             )
             probe_row["normalised_payload"] = normalised_payload
             probe_row["parsed"] = evaluation.to_dict()

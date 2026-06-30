@@ -75,9 +75,9 @@ class Stage3TokenRepairDatasetTests(unittest.TestCase):
         self.assertEqual(dataset_manifest["positive_rows"], 6)
         self.assertEqual(dataset_manifest["negative_rows"], 3)
         self.assertEqual(len(rows), 9)
-        self.assertTrue(all(row["target_json"]["error"] for row in positives))
         self.assertTrue(all(row["target_json"]["cells"] for row in positives))
-        self.assertTrue(all(row["target_json"] == {"error": False, "cells": []} for row in negatives))
+        self.assertTrue(all(set(row["target_json"]) == {"cells"} for row in positives))
+        self.assertTrue(all(row["target_json"] == {"cells": []} for row in negatives))
         for row in positives:
             for cell in row["target_json"]["cells"]:
                 self.assertRegex(cell, r"^[A-H][1-8]$")

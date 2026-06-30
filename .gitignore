@@ -115,3 +115,8 @@ data/benchmarks/processed/
 third_party/
 .venv-*/
 .venv-lumina/
+
+# Runtime artifacts (server experiments)
+.runtime/
+debug_*.py
+scripts/training/debug_*.py
