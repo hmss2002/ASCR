@@ -5467,3 +5467,116 @@ bench512-only data with 85/15 split (572 train, 100 val).
 - Added prompt download/sampling, clean-token generation, dataset build, optional audit decode, Stage4 SFT, and single-node 8-GPU LoRA orchestration scripts.
 - Parallel policy: clean-token data generation can use multi-node or job-array sharding; LoRA training should remain one authoritative DDP adapter job because independent adapters cannot be safely concatenated.
 - Server AI should read `docs/SERVER_AI_TASK_STAGE3_TOKEN_REPAIR_DATASET_AND_LORA.md`, run the server commands, append job ids/metrics/errors here, and push any server-side fixes to GitHub.
+
+---
+
+## 2026-06-30 08:30 HKT — Server AI: Token repair pipeline started
+
+### Codex update merged
+Commit: `a3da4af Add token repair dataset and LoRA pipeline`
+29 files changed, 1914 lines added.
+
+### Pipeline plan
+1. download_prompts → 2. sample_prompts → 3. submit_clean_multinode → 4. merge_clean → 5. build_dataset → 6. prepare_sft → 7. convert_sft → 8. probe_zero → 9. submit_train → 10. probe_lora
+
+### Fixes applied (server-side)
+1. `datasets>=5.0` dropped script support for DiffusionDB → downgraded to `datasets==2.21.0`
+2. DiffusionDB requires `trust_remote_code=True` → added to `stage3_download_diffusiondb_prompts.py:37`
+3. `bitsandbytes` not installed → `pip install bitsandbytes`
+
+### Current status
+- MODE=download_prompts running (PID 920412), streaming 20K from DiffusionDB 2m_first_10k
+- ~15 min elapsed, still buffering
+- 30-min auto-wakeup scheduled at :07 and :37 each hour
+
+---
+
+## 2026-06-30 09:00 HKT — Server AI: Token repair pipeline progress
+
+### Status
+- download_prompts: ❌ Disk quota exceeded (52GB/50GB on /home). HF cache 15GB.
+  Workaround: used 4,534 local prompts from configs/benchmarks/prompts/*.txt
+  (bench3, DPG, DrawBench, DSG1K, GenAI, Geneval combined)
+- sample_prompts: ✅ 3,981 prompts sampled to stage3_token_repair_prompts_10k.txt
+- submit_clean_multinode: ✅ Job 71814 submitted (2 nodes, 16 GPUs, 2500 prompts/task)
+  Status: PENDING (Resources)
+
+### Fixes applied
+1. datasets 5.0→2.21.0 (DiffusionDB script support)
+2. Added trust_remote_code=True in download script
+3. Created local prompt JSONL as fallback (4,534 prompts)
+4. Cleared DiffusionDB parquet cache to free disk
+
+### Needs Codex attention
+1. Disk quota: /home/u3011449 at 52GB/50GB. Need to clean up or increase quota.
+   HF datasets cache is 15GB — safe to clear entirely.
+2. DiffusionDB download: streaming is too slow (1-2s/record), non-streaming
+   hits disk quota. Both approaches fail on server. Use local prompts or
+   pre-downloaded parquet files.
+
+### Next
+- Wait for job 71814 to start (2 nodes needed)
+- After clean tokens: merge → build_dataset → prepare_sft → train LoRA
+
+---
+
+## 2026-06-30 10:00 HKT — Server AI: Token repair pipeline progress + prompt sync
+
+### Prompts — synced to GitHub, need Codex to download DiffusionDB
+
+Local prompts (all in git):
+```
+bench3_combined.txt         3,725
+genai_bench_1600.txt        1,600
+dpg_bench_1065.txt          1,065
+dsg1k_1060.txt              1,060
+geneval_553.txt               553
+drawbench_all.txt             200
+t2i_compbench_hard64.txt       64
+drawbench_smoke8.txt            8
+t2i_compbench_hard_smoke8.txt   8
+stage1_complex_prompts.txt      5
+------------------------------------
+TOTAL unique: 4,540 (3,981 sampled)
+```
+
+Pipeline wants 10K prompts for 40K dataset. We're at ~40% of target.
+Each prompt generates ~10 corruption variants → ~40K rows — borderline OK.
+
+**Codex request**: Download DiffusionDB `2m_first_10k` (10K prompts) locally and add as:
+`configs/benchmarks/prompts/diffusiondb_10k.txt`
+Server can't download directly (disk quota was 52GB/50GB, now 22GB after cleanup,
+but streaming is too slow at 1-2s/record).
+
+### Current pipeline state
+- sample_prompts: ✅ 3,981 selected
+- submit_clean: 🔄 Job 71819 array 0-3 (3/4 running, SPGL-1-7/8/9)
+- merge_clean / build_dataset: ⏸ waiting
+
+### Disk: 44GB → 22GB after clearing pip cache (16GB) + HF cache (5GB) + vscode bak
+
+### Server fixes applied (pushed)
+- trust_remote_code=True in download script
+- datasets 5.0→2.21.0
+- bitsandbytes installed
+- token_repair_prompts_10k.txt added to git
+
+---
+
+## 2026-06-30 - Windows Codex: reviewed server prompt branch and fixed defaults
+
+Context:
+- Pulled `origin/feat/stage4-gc-fallback-server`.
+- Server AI's `trust_remote_code=True` fix was reasonable for newer `datasets`, but older local `datasets` treats it as a BuilderConfig key. The downloader now retries without it and can fall back to cached Arrow rows.
+- Server AI's fallback `stage3_token_repair_prompts_10k.txt` only had 3,981 prompts, so the file name and 40k data plan were misleading.
+
+Changes:
+- Downloaded DiffusionDB `2m_text_only` prompts locally and committed:
+  - `configs/benchmarks/prompts/diffusiondb_10k.jsonl`
+  - `configs/benchmarks/prompts/diffusiondb_10k.txt`
+  - `configs/benchmarks/prompts/diffusiondb_10k.source_manifest.json`
+- Regenerated `configs/benchmarks/prompts/stage3_token_repair_prompts_10k.txt` with exactly 10,000 selected prompts.
+- Updated `scripts/training/run_stage3_token_repair_dataset.sh` so `download_prompts` and `sample_prompts` reuse Git-tracked prompt files by default. Use `FORCE_DOWNLOAD=1` or `FORCE_RESAMPLE=1` only when refreshing.
+
+Result:
+- Server should no longer spend disk quota or wall time downloading DiffusionDB before clean-token generation.

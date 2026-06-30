@@ -1,0 +1,12 @@
+{
+  "created_at_utc": "2026-06-30T02:39:19Z",
+  "dataset": "poloclub/diffusiondb",
+  "download_manifest": "configs\\benchmarks\\prompts\\diffusiondb_10k.manifest.json",
+  "include_nsfw": false,
+  "jsonl_file": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl",
+  "prompt_count": 10000,
+  "provenance_note": "Downloaded locally from DiffusionDB text-only metadata so the server does not need to download prompts under disk quota pressure.",
+  "schema_version": "ascr.stage3.diffusiondb_prompt_manifest.v1",
+  "subset": "2m_text_only",
+  "text_file": "configs\\benchmarks\\prompts\\diffusiondb_10k.txt"
+}

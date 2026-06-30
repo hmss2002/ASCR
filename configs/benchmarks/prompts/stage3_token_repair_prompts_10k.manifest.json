@@ -1,0 +1,1030 @@
+{
+  "bucket_counts": {
+    "complex": 7389,
+    "medium": 2611,
+    "simple": 0
+  },
+  "candidate_count": 12550,
+  "count_requested": 10000,
+  "created_at_utc": "2026-06-30T02:43:14Z",
+  "holdout": [
+    "configs/benchmarks/prompts/geneval_553.txt"
+  ],
+  "output": "configs\\benchmarks\\prompts\\stage3_token_repair_prompts_10k.txt",
+  "schema_version": "ascr.stage3.sample_prompts.v1",
+  "seed": 0,
+  "selected_count": 10000,
+  "selected_preview": [
+    {
+      "bucket": "complex",
+      "prompt": "! dream a blue - eyed black siamese cat wearing a monocle, by makoto shinkai, greg rutkowski, artstation, high detailed, cgsociety,",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "! dream jurassic park : : movie still : : blue bmw m 5 wagon : : t - rex : : f 8 aperture, cinematic eastman 5 3 8 4 film",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "! dream portrait of a beautiful winged goddess with horns wearing an ornate black robe by tom bagshaw",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "! dream tattoo design art, neo traditional : 3 eye design, finley detailed, japanese traditional inspired, by jeff gogue by nekro borja, finely detailed, hyperdetailed",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "\"blend in your setting: two 3-seater sofas, three lounge armchairs and 39\"\" coffee table (ostuni white mahogany/ nature grey)\"",
+      "source": "configs\\benchmarks\\prompts\\bench3_combined.txt"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "''warrior catgirl, diffuse lighting, fantasy, intricate, elegant, highly detailed, lifelike, photorealistic, digital painting, artstation, illustration, concept art, smooth, sharp focus, naturalism, trending on byron's - muse, by greg rutkowski and greg staples and alphonse mucha",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "( ( ( ( a cute blue hedgehog with big gold ring and blue lightning in green grassland. ) ) ) ), big gold ring!, blue fur, clear sky, extremely detailed, fantasy painting, by jean - baptiste monge!!!!",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "( ( good morning ) ), field flowers, danish cookies, ancient manuscript, 3 d art, digitial illustration, nordic pastel colors, perfect lightning",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "* has a soft tail * weasel bandit furry red - and - black male fursona, smirking, background is a dark industrial fantasy khajiit den, deviantart contest winner, furry's fursona commission for furry art",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "* soft tail * weasel bandit furry red - and - black male fursona, smirking, posed on a gritty industrial background by peder balke, dark industrial fantasy, deviantart contest winner, furry's fursona commission for furry art",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "* tail * a handsome weasel bandit furry red - and - black male fursona animal character betailed, smirking, posed on a gritty industrial background by peder balke, dark industrial fantasy, furry art, deviantart contest winner, tumblr contest winner, a furry's fursona has a ^ tail * tail *",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": ", long hair special force female wearing futuristic white and black tactical gear, armor, armed, return from the battlefield, intricate, highly detailed, digital painting, artstation, glamor pose, portrait, smooth, sharp focus, illustration, concept art by wlop and greg rutkowski",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": ", realistic scary monster, golden ratio, art canvas, award winning, masterpiece trending on artstation 8 k 1 5 0 mpx",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 1 0 0 0 1 1 0 0 1 0 1 1 0 1 1 1 0 0 0 1 1 1 1 0 1 1 0 0 1 1 1 0 0 0 0 1 0 1 0 0 0 0 1 1 0 0 1 0 0 0 1 1 1 0 0 0 1 1 0 0 0 0 1 0 1 0 0 1 0 0 1 0 0 1 0 1 0 1",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 2 aligned colourful icons of computers, digital art, trending on artstation opensea, studio quality, smooth render, unreal engine 5 rendered, blender,",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 4 0 0 s renaissance close up portrait of ariana grande oil painting by jan van eyck, northern renaissance art, oil on canvas, wet - on - wet technique, realistic, expressive emotions, intricate textures, illusionistic detail",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 4 0 0 s renaissance full body portrait of an angel, painting by jan van eyck, northern renaissance art, oil on canvas, wet - on - wet technique, realistic, expressive emotions, intricate textures, illusionistic detail",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 5 year old alice getting tired of sitting by her sister on the bank, peeping into her sister's book ; natural portrait 3 d octane render by carl bark of'alice in wonderland ', disney pixar style. cinematic, intricate, clean, crisp, highly detailed stunning realistic, award winning, trending on artstation",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 7 th century pirate ship battling the british navy, caravaggio style painting, digital art, artstation concept, stormy afternoon, thunderclap, waterspouts in the background, sunbeams through thick dramatic clouds in the sky, ethereal, surreal, sharp focus on the ships, drizzling all over, waves, tsunami, cannons, smooth, intricate detailed subjects 8 k, octane render,",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 7 th century pirate ship battling the british navy, rembrandt style painting, digital art, artstation concept, stormy afternoon, thunderclap, waterspouts in the background, sunbeams through thick clouds in the sky, ethereal, surreal, sharp focus on the ships, drizzling all over, waves, tsunami, cannons, smooth, intricate detailed subjects 8 k, octane render",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 2 0 s photography of alpine mountain exploding, flying rocks, shakes in the earth, cleared forest, lonely human workers with pickaxes and gas masks, eerie, dark, by william hope",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 2 0 s spirit portrait photography of an old female farmer turning into a krampus ghost with hay cloth and antlers in the dolomites, fog, smoke from mouth, casting a root spell, inviting hand, witchy, wicca, by william hope, dark, eerie, grainy",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 2 0 s spirit portrait photography of dolomite mountains overgrown by trees and roots by william hope",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 4 0 s retro future robot android. muted colors, portrait of a german woman wearing a purple yellow traditional nineteenth century military jacket, metal shoulder pauldrons, intricate, highly detailed, digital painting, artstation, concept art, sharp focus, cinematic lighting, illustration, art by artgerm and greg rutkowski, alphonse mucha, cgsociety, beautiful face, by w",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 5 0 s couple being incinerated by nuclear war, kissing, burning up, atomic mushroom cloud in distance, vintage photo",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 7 0 s movie still close - up of a bloody white japanese female ghost screaming to death going out of mud puddle, no teeth, swamp backround, cinestill 8 0 0 t 3 5 mm eastmancolor, heavy grain, high quality, noir, natural textures, photorealistic, ambient occlusion, hd, ultra wide lens, anamorphic, fade color",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 7 0 s movie still close - up of a bloody white japanese female ghost yelling going out of mud puddle, swamp backround, cinestill 8 0 0 t 3 5 mm eastmancolor, heavy grain, high quality, noir, natural textures, photorealistic, ambient occlusion, hd, ultra wide lens, anamorphic, fade color",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 7 0 s movie still close - up of a white man screaming drowning in a mud puddle, swamp backround, cinestill 8 0 0 t 3 5 mm eastmancolor, heavy grain, high quality, noir, natural textures, photorealistic, ambient occlusion, hd, ultra wide lens, anamorphic, fade color",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 8 0 s synthwave liminal space, dark miami police station interior. cheap minimalist tv film set. nonsensical.",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 8 0 s synthwave liminal space, nighttime miami police station interior. cheap minimalist tv film set. darkwave. nonsensical.",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 9 0 s photograph. a giant robot standing in the high street of a run down seaside town",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, airplain corpse stick in the snow, footsteps tracks near, wide view, ice pole, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, airplain crash, ice pole, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, airplain crashed and fire on the snow, black smoke, wide view, ice pole, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, airplain's frame stick in snow, no men, no ppl, wide view, ice pole, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, airplain's skeleton stick in snow, no men, no ppl, wide view, ice pole, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, apple orchard, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone, colorfull",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, beautiful coffee house interior with vibrant crowd wearing beautiful abayas, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, big airplain's frame stick in snow, stand verticaly, nobody here, wide view, ice pole, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, buddha statue in buddha temple, crowd of monks pray, view, perspective, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, buddha temple interior, mystical view, darkness, perspective, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, burial in the cemetery, black tree, fresh grave, priest, crowd, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, cafe with opened terrace at saint petersburg, seaview big windows, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone, colorfull",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, camels and pyramids, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, carved wall of glace, strange glyphs as egypt symbols, two adventurer with torches, frozen mountain cove, north pole, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, china monastery on top of mountain, view, perspective, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, coffee shop interior at saint peterburg, seaview at tall windows, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone, colorfull",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, corridas de toros, raging bull and fleeing crowd, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, crashed airplain stand vertical in snow, huge mountains background, no ppl, no men, no person, winter, ice pole, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, crashed airplain sticking in snow, huge mountains background, winter, ice pole, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, crashed airplain sticking in snow, huge mountains, ice pole, north expeditions, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, egypt, pyramids, tourists, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, giant aircraft as huge zeppelin fly high, nobody here, wide view, snow peaks mountains, cold, winter, ice pole, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, giant aircraft dirigabl float, wide view, snow peaks mountains, cold, winter, ice pole, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, giant zeppelin float, wide view, ice pole, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, group photo at zoo gates, by jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone, colorfull",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, hong kong port and dock, view from sea, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, huge mountain peaks, small aircraft stand stick in snow, ice pole, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, indian ancient city in heart of jungle, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, mortuary with doctor office, wooden door with glass, papers on the table, clock, reflections, strong wind, wind bend trees, couple with umbrellas, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone, colorfull dresses, at noon",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, mortuary, reflections, corpses, metall, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, mortuary, reflections, doctor tools, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone, green and black colors",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, new - york zoo at summer, by jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone, colorfull",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, polar expedition goes to the mountain on sled dogs, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, polar expedition going deep into frozen cove, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, polar expedition unloads from the ship, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, police office, papers on the table, clock, reflections, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone, colorfull dresses, at noon",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, police office, papers on the table, clock, reflections, strong wind, wind bend trees, couple with umbrellas, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone, colorfull dresses, at noon",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, saint peterburg's port, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone, colorfull",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, sea ironclad travel to china, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, sicilian village with oil garden, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, small shop interior, oil lanterns, small own, snow and winter moscow landscape at round windows, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone, colorfull",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, small shop interior, snow and winter moscow landscape in round windows, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone, colorfull",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, smoky train goes into dark tunnel, spring, wide view, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone, colorfull",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, smoky train goes into dark tunnel, wide view, ice pole, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, spanish carida, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, strange neon glyphs carved on glace wall, ice wall, two traveller with torches, reflections, ice pole, north expeditions, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, strange neon glyphs carved on glace wall, ice wall, two traveller with torches, reflections, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, street, rain, night, storm, waterdrops, puddles, dirt ground, reflections, strong wind, wind bend trees, couple with umbrellas, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone, colorfull dresses, at noon",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, tibet high mountain view snow caps on mountains, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, tokyo port and dock, view from sea, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, toy shop interior, winter moscow in windows, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone, colorfull",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, travel post card, egypt, pyramids, crowd, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 9 century, wedding at beautiful garden, sea view, crowd, jodhpurs greg manchess painting by sargent and leyendecker, studio ghibli, fantasy close shot asymmetrical intricate elegant illustration hearthstone",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 : 6 and god said, let there be a firmament in the midst of the waters, and let it divide the waters from the waters. 1 : 7 and god made the firmament, and divided the waters which were under the firmament from the waters which were above the firmament : and it was so. 1 : 8 and god called the firmament heaven. and the evening",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 detailed landscape painting by anthony copely fielding hangs on the back wall, white room filled with cardboard boxes, parque floor, three - point perspective",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "1 krenz cushart and alfons mucha detailed close portrait digital concept of a beautiful anime young woman as a gothic nurse, epic sunbeam, unreal engine, hyperrealism, cinematic composition, blender render, octane render, hdr, detailed textures, trending on artstation, award winning artwork",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "2 1 st century realistic headshot of adolf hitler reminiscing his leadership in world war 2, nazi battlefields in the background taken with a modern hassleblad medium format camera, studio lighting, vibrant colored photograph, hyper realism, intricate detail, perfect eyes, octane render 8 k, sharp focus",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "2 1 st century realistic headshot of adolf hitler thinking about the world war 2, nazi battlefields in the background taken with a modern hassleblad medium format camera, studio lighting, vibrant colored photograph, hyper realism, intricate detail, perfect eyes and moustache, octane render 8 k, sharp focus",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "2 1 st century realistic headshot of adolf hitler thinking about the world war 2, nazi battlefields in the background taken with a modern hassleblad medium format camera, studio lighting, vibrant colored photograph, hyper realism, octane render 8 k, sharp focus",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "2 1 st century realistic headshot of old adolf hitler in his nazi uniform reminiscing his leadership in world war 2, nazi battlefields in the background taken with a modern hassleblad medium format camera, studio lighting, vibrant colored photograph, hyper realism, intricate detail, perfect eyes, octane render 8 k, sharp focus",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "2 1 st century realistic headshot of old adolf hitler thinking about the world war 2, nazi battlefields in the background taken with a modern hassleblad medium format camera, studio lighting, vibrant colored photograph, hyper realism, intricate detail, perfect eyes, octane render 8 k, sharp focus",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "2 5 year old jack burton btilc surrounded by starlight, moon behind him, chinese fantasy, intricate, elegant, hyper detailed, ultra definition, photoreal, artstation, unreal engine rendered, concept art, smooth, sharp focus, illustration, art by artgerm and pendleton ward and alphonse mucha and garis edelweiss",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "2 d character design, ceo, vector art, digital art, portrait, 4 k, 8 k, sharp focus, smooth, illustration, concept art,",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "2 d character design, female rapper, vector art, digital art, portrait, 4 k, 8 k, sharp focus, smooth, illustration, concept art, music artist",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "2 d character design, male pop singer, vector art, digital art, portrait, 4 k, 8 k, sharp focus, smooth, illustration, concept art, music artist",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "2 d character design, male rapper, vector art, digital art, portrait, 4 k, 8 k, sharp focus, smooth, illustration, concept art, music artist",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "2 d character design, male rock singer, vector art, digital art, portrait, 4 k, 8 k, sharp focus, smooth, illustration, concept art, music artist",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "2 d character design, music executive, vector art, digital art, portrait, 4 k, 8 k, sharp focus, smooth, illustration, concept art",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "2 d character design, music group, vector art, digital art, portrait, 4 k, 8 k, sharp focus, smooth, illustration, concept art, jazz band",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "2 d character design, music group, vector art, digital art, portrait, 4 k, 8 k, sharp focus, smooth, illustration, concept art, pop band",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "2 d character design, music group, vector art, digital art, portrait, 4 k, 8 k, sharp focus, smooth, illustration, concept art, rock band",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "2 d empty music studio, design, vector art, digital art, portrait, 4 k, 8 k, sharp focus, smooth, illustration, room, concept art",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "2 d empty music venue, design, vector art, digital art, portrait, 4 k, 8 k, sharp focus, smooth, illustration, room, concept art",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "2 d vivid logo, design, vector art, digital art, portrait, 4 k, 8 k, sharp focus, smooth, illustration, room, concept art",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 0 year old jack burton btilc surrounded by starlight, moon behind him, chinese fantasy, intricate, elegant, hyper detailed, ultra definition, photoreal, artstation, unreal engine rendered, concept art, smooth, sharp focus, illustration, art by artgerm and pendleton ward and alphonse mucha and garis edelweiss",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 0 year old jack burton in big trouble in little china surrounded by starlight, moon behind him, chinese fantasy, intricate, elegant, hyper detailed, ultra definition, photoreal, artstation, unreal engine rendered, concept art, smooth, sharp focus, illustration, art by artgerm and pendleton ward and alphonse mucha and garis edelweiss",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 5 mm film dslr photo of a elaborate bohemian living room, beautiful furnishings and house plants, dramatic lighting, volumetric lighting, deep colors, reflections, shadows, sunbeams, atmosphere, vibe, raytracing, very detailed, gigapixel",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 5 mm photo of ford gt, like die cast model, with a blur chicago city night as background, golden ratio, dramatic lighting, medium shot, shallow depth of field, 8 k, epic cinematic, epic lighting",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 5 mm photo of metallic 2 0 1 2 morgan 3 wheeler down, like die cast model, with a blur guanajuato city as background, golden ratio, dramatic lighting, medium shot, shallow depth of field, 8 k, epic cinematic, epic lighting",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 5 mm photo of metallic 9 9 rolls - royce boat tail, like die cast 1 / 6 4 model with a montreal city as background, epic cinematic, epic lighting",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 5 mm photo of metallic blue 1 9 9 9 rolls royce boat tail, like die cast 1 / 6 4 model with a blur montreal city as background, golden ratio, dramatic lighting, medium shot, shallow depth of field, 8 k, epic cinematic, epic lighting",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 5 mm photo of metallic blue 9 9 rolls royce boat tail, like die cast 1 / 6 4 model with a montreal city as background, epic cinematic, epic lighting",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 5 mm photo of metallic blue jetta like hot wheels model with mexico city as background, epic cinematic, epic lighting",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 5 mm photo of metallic bronze and wood medieval bus like hot wheels model with a castle as background, epic cinematic, epic lighting",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 5 mm photo of metallic brown tsuru car like hot wheels model with a mexico city as background, epic cinematic, epic lighting",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 5 mm photo of metallic car like victorian age, hot wheels model with an european palace as background, epic cinematic, epic lighting",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 5 mm photo of metallic gold gasser like hot wheels model with a room as background, epic cinematic, epic lighting",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 5 mm photo of metallic green and orange aquaman car like hot wheels model with a atlantis as background, epic cinematic, epic lighting",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 5 mm photo of metallic green the legend of zelda car like hot wheels model with a hyrule kingdom as background, epic cinematic, epic lighting",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 5 mm photo of metallic green zelda car like hot wheels model with a hyrule as background, epic cinematic, epic lighting",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 5 mm photo of metallic pink cadillac like hot wheels model with san francisco as background, epic cinematic, epic lighting",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 5 mm photo of metallic red and blue superman car like hot wheels model with a sky as background, epic cinematic, epic lighting",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 5 mm photo of metallic red and blue wonder woman car like hot wheels model with a greek ancient city as background, epic cinematic, epic lighting",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 5 mm photo of metallic red aztek car like hot wheels model in area 5 1 as background, epic cinematic",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 5 mm photo of metallic white nissan sunny b 1 3 like hot wheels model with a mexico as background, epic cinematic, epic lighting",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 5 mm photo of metallic wine color 9 9 rolls - royce boat tail, like die cast 1 / 6 4 model with a montreal city as background, epic cinematic, epic lighting",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 5 mm photo of metallic yellow car inspired by pacman, like hot wheels model with a arcade store as background, epic cinematic, epic lighting",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 5 mm photo of metallic yellow pacman car like hot wheels model with a arcade store as background, epic cinematic, epic lighting",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 5 mm photo of metallic yellow rounded pac man car like hot wheels model with a arcade store as background, epic cinematic, epic lighting",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 5 mm photo of militar car like hot wheels model in jungle as background, on an very epic cinematic",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 5 mm photo of red 1 9 5 2 ferrari 5 0 0 f 2, hot wheels model with grapes field as background, very high detail, epic cinematic, epic lighting",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 5 mm photo of red 1 9 5 2 ferrari 5 0 0 f 2, hot wheels model with italy field as background, very high detail, epic cinematic, epic lighting",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 5 mm photo of red ferrari 1 6 6 mm zagato panoramica, hot wheels model with an palace as background, epic cinematic, epic lighting",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 5 mm photo of steel terminator truck like hot wheels model with a post apocalyptic city as background, epic cinematic, epic lighting",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d close - up beautiful dark haired business woman, by wlop, tooth wu, greg rutkowski, alena aenami, beeple, octane render, ultra realistic. high contrast. black green gold green white iridescent",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d close - up coherent symmetrical aesthetic satanic goddess water waves human skull, beautiful detailed japanese crow kitsune mask and classical japanese kimono highly detailed. iridescent accents. by wlop, tooth wu, greg rutkowski, alena aenami, beeple, octane render, ultra realistic. high contrast. black white teal gold",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d close - up coherent symmetrical aesthetic satanic goddess water waves human skull, beautiful detailed japanese crow kitsune mask and classical japanese kimono highly detailed. iridescent accents. by wlop, tooth wu, greg rutkowski, alena aenami, beeple, octane render, ultra realistic. high contrast. teal, gold, black, white",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d close - up goddess skull liminal broken in to pieces fractured human skull, jellyfish, beautiful intricately detailed japanese crow kitsune mask and clasical japanese kimono highly detailed. iridescent accents. by wlop, tooth wu, greg rutkowski, alena aenami, beeple, octane render, ray tracing. teal and gold",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d close - up human skull!!, ram skull!! moebius strip physics jellyfish molten glass!!! highly detailed. by wlop, tooth wu, greg rutkowski, alena aenami, beeple swirl",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d close - up human skull!!, ram skull!! moebius strip physics jellyfish pheonix fire glass!!! highly detailed. by wlop, tooth wu, greg rutkowski, alena aenami, beeple",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d close - up human skull!!, ram skull!! moebius!! strip!!! physics jellyfish molten glass!!! highly detailed. by wlop, tooth wu, greg rutkowski, alena aenami, beeple swirl",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d close - up human skull, ram skull moebius strip physics giant ceramic glass!! highly detailed. by wlop, tooth wu, greg rutkowski, alena aenami, beeple",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d close - up swirly cat moebius strip physics giant gladiola ceramic glass!! betta fish!! jellyfish phoenix fire energy flow, highly detailed. by wlop, tooth wu, greg rutkowski, alena aenami, beeple",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d close - up swirly cat moebius strip physics giant gladiola ceramic glass!! jellyfish, highly detailed. by wlop, tooth wu, greg rutkowski, alena aenami, beeple",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d close - up swirly cat!! moebius strip physics giant ceramic glass!! highly detailed. by wlop, tooth wu, greg rutkowski, alena aenami, beeple",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d close - up swirly cat!!!! moebius strip physics giant gladiola ceramic glass!! betta fish!! jellyfish phoenix fire energy flow, highly detailed. by wlop, tooth wu, greg rutkowski, alena aenami, beeple",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d close - up swirly cat!!!! moebius strip physics giant gladiola ceramic glass!! jellyfish, highly detailed. by wlop, tooth wu, greg rutkowski, alena aenami, beeple",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d close - up swirly cat!!!!!!! moebius strip physics giant gladiola ceramic glass!! betta fish! jellyfish phoenix fire energy flow, highly detailed. by wlop, tooth wu, greg rutkowski, alena aenami, beeple",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d close - up swirly chocolate chip cookie moebius strip physics giant gladiola ceramic glass!! jellyfish, highly detailed. by wlop, tooth wu, greg rutkowski, alena aenami, beeple",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d close - up swirly green tree frog moebius strip physics giant ceramic glass!! highly detailed. by wlop, tooth wu, greg rutkowski, alena aenami, beeple",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d close - up swirly green tree frog portrait!!! giant gladiola ceramic wax betta fish!! jellyfish phoenix fire energy flow, highly detailed. by wlop, tooth wu, greg rutkowski, alena aenami, beeple",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d close - up swirly human skull!!! ram skull portrait!!! giant gladiola betta fish!! jellyfish phoenix fire energy flow, highly detailed. by wlop, tooth wu, greg rutkowski, alena aenami, beeple",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d close - up swirly human skull!!! skeleton ram skull portrait!!! giant gladiola betta fish!! jellyfish phoenix fire energy flow, highly detailed. by wlop, tooth wu, greg rutkowski, alena aenami, beeple",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d close - up swirly human skull!!! skeleton ram skull portrait!!! giant gladiola ceramic glass!! betta fish!! jellyfish phoenix fire energy flow, highly detailed. by wlop, tooth wu, greg rutkowski, alena aenami, beeple",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d close - up swirly human skull!!! skeleton ram skull portrait!!! giant gladiola ceramic glass!! betta fish!! jellyfish phoenix fire energy flow, highly detailed. by wlop, tooth wu, greg rutkowski, alena aenami, beeple cosmic horror",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d close - up swirly human skull!!! skeleton ram skull portrait!!! giant gladiola ceramic wax betta fish!! jellyfish phoenix fire energy flow, highly detailed. by wlop, tooth wu, greg rutkowski, alena aenami, beeple",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d close - up swirly human skull!!! skeleton ram skull portrait!!! moebius strip physics giant gladiola ceramic glass!! betta fish!! jellyfish phoenix fire energy flow, highly detailed. by wlop, tooth wu, greg rutkowski, alena aenami, beeple",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d close - up swirly neutron start god moebius strip physics giant gladiola ceramic glass!! betta fish! jellyfish phoenix fire energy flow, highly detailed. by wlop, tooth wu, greg rutkowski, alena aenami, beeple",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d girl and cat sleep on a bed in a cozy room - poster by wlop, kiyohara tama, krenz cushart, masamune shirow, makoto shinkai, yanjun cheng. featured on pixiv, anime aesthetic, pixiv, cold tones, artstation, vanitas, official art, gothic dark noise film photo - up portrait",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d girls sleep on a bed in a cozy room - poster by wlop, kiyohara tama, krenz cushart, masamune shirow, makoto shinkai, yanjun cheng. featured on pixiv, anime aesthetic, pixiv, cold tones, artstation, vanitas, official art, gothic dark noise film photo - up portrait",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d octane render, japanese art, close - up swirly human skull!!! ram skull portrait!!! giant gladiola betta fish!! jellyfish phoenix fire energy flow, highly detailed. by wlop, tooth wu, greg rutkowski, alena aenami, beeple",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d octane render, japanese kimono art close - up swirly human skull!!! skeleton ram skull portrait!!! giant gladiola betta fish!! jellyfish phoenix fire energy flow, highly detailed. by wlop, tooth wu, greg rutkowski, alena aenami, beeple",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d portrait of a biomechanical cyborg by tony diterlizzi, tim burton, hr giger, ilford hp 5, 5 5 mm, machinecore by artgerm, 3 d render, gothcore, beeple, joseph leyendecker, carlo carra",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d rpg map of the medieval empire, age of empire 4, hyper detailed, hyper realism, rendered in octane, 8 k, rpg concept art",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d woman stands in a street - poster by wlop, kiyohara tama, krenz cushart, masamune shirow, makoto shinkai, yanjun cheng. featured on pixiv, anime aesthetic, pixiv, anime, cold tones, artstation, power lines, vanitas, official art, gothic dark noise film photo - up portrait",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d, classical japanese art close, book of the dead, jellyfish phoenix fire energy flow, highly detailed, by wlop, tooth wu, greg rutkowski, alena aenami, beeple, artstation on trend",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d, cthulhu mythos art, necronomicon, jellyfish phoenix fire energy flow, highly detailed, by wlop, tooth wu, greg rutkowski, alena aenami, beeple, artstation on trend",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d, cthulhu mythos art, necronomicon, skeleton ram skull portrait, highly detailed, by wlop, tooth wu, greg rutkowski, alena aenami, beeple, artstation on trend",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 d, white and black smoke, sun rays, young woman cute model, sweat skin, liquid black metal, black roses, poster art, high detail, intricate oil painting, multiple exposure, deep blue mood, hyperrealism, 3 d, by tooth wu and wlop and beeple and greg rutkowski, 8 k, extremely detailed, trending on artstation",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 panel scene, anime cat sleeps in japan subway at dark night - dramatic cozy arts by wlop and okuda genso. wide angle lens. featured on pixiv, anime aesthetic. pixiv, warm aesthetic, rays of light, volumetric light, artstation, vanitas, official art, gothic, noise film photo. octane render, redshift render, ue 4",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 panel scene, anime cat sleeps inside a japan train - dramatic cozy arts by wlop and okuda genso. wide angle lens. featured on pixiv, anime aesthetic. pixiv, warm aesthetic, rays of light, volumetric light, artstation, vanitas, official art, gothic, noise film photo. octane render, redshift render, ue 4",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 panel scene, anime girl sleeps inside a cozy dark room - dramatic cozy arts by wlop and okuda genso. wide angle lens. featured on pixiv, anime aesthetic. pixiv, warm aesthetic, rays of light, volumetric light, artstation, vanitas, official art, gothic, noise film photo. octane render, redshift render, ue 4",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 panel scene, anime girl sleeps inside a japan train - dramatic cozy arts by wlop and okuda genso. wide angle lens. featured on pixiv, anime aesthetic. pixiv, warm aesthetic, rays of light, volumetric light, artstation, vanitas, official art, gothic, noise film photo. octane render, redshift render, ue 4",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 panel scene, anime girl stands under a bridge in japan at night - dramatic cozy art by wlop and okuda genso. wide angle lens. featured on pixiv, anime aesthetic. pixiv, warm aesthetic, rays of light, volumetric light, artstation, vanitas, official art, gothic, noise film photo. octane render, redshift render, ue 4",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 panel scene, anime girl tangled in a cozy maze - dramatic cozy art by wlop and okuda genso. wide angle lens. featured on pixiv, anime aesthetic. pixiv, warm aesthetic, rays of light, volumetric light, artstation, vanitas, official art, gothic, noise film photo. octane render, redshift render, ue 4",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 panel scene, anime girl with a backpack stands under a bridge in japan - dramatic cozy arts by wlop and okuda genso. wide angle lens. featured on pixiv, anime aesthetic. pixiv, warm aesthetic, rays of light, volumetric light, artstation, vanitas, official art, gothic, noise film photo. octane render, redshift render, ue 4",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 panel scene, anime woman stands in a street - dramatic cozy arts by wlop and okuda genso. wide angle lens. featured on pixiv, anime aesthetic. pixiv, warm aesthetic, rays of light, volumetric light, artstation, vanitas, official art, gothic, noise film photo. octane render, redshift render, ue 4",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 panel scene, girl looks out the window inside a cozy room - dramatic cozy arts by wlop and okuda genso. wide angle lens. featured on pixiv, anime aesthetic. pixiv, warm aesthetic, rays of light, volumetric light, artstation, vanitas, official art, gothic, noise film photo. octane render, redshift render, ue 4",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 panel scene, girl sitting in the school cozy bathroom - dramatic cozy arts by wlop and okuda genso. wide angle lens. featured on pixiv, anime aesthetic. pixiv, warm aesthetic, rays of light, volumetric light, artstation, vanitas, official art, gothic, noise film photo. octane render, redshift render, ue 4",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 panel scene, girl sleeps with a cat in a cozy bedroom - dramatic cozy arts by wlop and okuda genso. wide angle lens. featured on pixiv, anime aesthetic. pixiv, warm aesthetic, rays of light, volumetric light, artstation, vanitas, official art, gothic, noise film photo. octane render, redshift render, ue 4",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 panel scene, school girl sits in a cozy school classroom at night - dramatic cozy 3 d poster by wlop and okuda genso. wide angle lens. featured on pixiv, anime aesthetic. pixiv, warm aesthetic, rays of light, volumetric light, artstation, vanitas, official art, gothic, noise film photo. octane render, redshift render, ue 4",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "3 panel scene, schoolgirl sit in a cozy school classroom at dusk - dramatic cozy arts by wlop and okuda genso. wide angle lens. featured on pixiv, anime aesthetic. pixiv, warm aesthetic, rays of light, volumetric light, artstation, vanitas, official art, gothic, noise film photo. octane render, redshift render, ue 4",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "35mm film still from David Lynch's remake of The Wizard of Oz set in the Pacific Northwest :: --ar 16:9",
+      "source": "configs\\benchmarks\\prompts\\bench3_combined.txt"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "4 k dslr photo of a dramatically lit massive brightly painted great temple inspired by mayan and islamic architecture. sunbeams and shadows volumetric lighting. the room is vast and filled with very ornate structures. shadows on the floor, ancient colors",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "4 k dslr photo of a dramatically lit massive brightly painted great temple inspired by mayan and zaha hadid architecture. sunbeams and shadows volumetric lighting. the room is vast and filled with very ornate structures. shadows on the floor, ancient colors",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "5 0 mm jav av idol portrait, caucasian, bedroom, braided white hair, clothing, martin schoeller, oleg bulakh, id magazine, epic scene, soft dynamic lighting, intricate, detailed, makoto shinkai, takashi takeuchi, studio ghibli, akihiko yoshida, sharp focus, photoreal, 8 k",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "5 5 mm macro photo of a woodpecker inside a house in an oak tree, looking through the window. dof. bokeh. by greg rutkowski. highly detailed 8 k. intricate. lifelike. soft light. cinematic processing",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "5 5 mm photo al roker drunk in the street in mexico city. dof. bokeh. by artgerm and greg rutkowski. highly detailed 8 k. intricate. lifelike. realistic sony a 7 r iv. soft light. cinematic processing",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "5 5 mm photo of tall wine glass on a wooden table with the new york city skyline in the background. dof. bokeh. magical atmosphere. highly detailed 8 k. intricate. lifelike. soft light. nikon d 8 5 0.",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "5 5 mm photo of thin wine - glass on a zen minimalist table with bokeh new york city skyline in the background. highly detailed 8 k. intricate. lifelike. soft light. nikon d 8 5 0.",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "5 5 mm photo of wine - glass on a zen minimalist table with white roses and houseplants in the background. highly detailed 8 k. intricate. lifelike. soft light. nikon d 8 5 0.",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "6 0 s style cartoon drawing of a cute younger woman with her hand resting on a giant standing paintbrush",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "8 5 mm color, meth addict, portrait, fashion, weird, random, strange, hyperdetailed, photorealistic, david lachapelle, akihito yoshida, asaf hanuka, cronenberg, weta digital, beksinski, zawadzki, ivan bilibin, id magazine, michal karcz and yoshitaka, octane, cinematic, hyper",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "8 k high definition, 1 9 8 0 marijuana monster snoop dogg kenner style action figure, full body, highly detailed, science fiction, photorealistic",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "8 k made in abyss chubby, bear, wearing military uniform, bloody sharp teeth, devilish grin, red sky, halo reissuance sitting on a throne, bara, in the style of caravaggio, akihito tsukashi n",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "8 k made in abyss chubby, teddy bear, wearing military uniform, bloody sharp teeth, devilish grin, red sky, halo reissuance sitting on a throne, bara, in the style of caravaggio, akihito tsukashi n",
+      "source": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "A 35mm film still capturing a scene from David Lynch's reimagined version of 'The Wizard of Oz', with the setting transposed to the lush, green backdrop of the Pacific Northwest. In the frame, a Dorothy character dons a plaid dress reminiscent of flannel, common in the region, and her ruby slippers contrast with the verdant forest floor. Towering evergreens and a hazy mist encapsulate the background, providing an enigmatic touch true to Lynch's signature style.",
+      "source": "configs\\benchmarks\\prompts\\bench3_combined.txt"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "A Christmas tree with two red socks: the one at the bottom is darker than the one at the top.",
+      "source": "configs\\benchmarks\\prompts\\bench3_combined.txt"
+    },
+    {
+      "bucket": "complex",
+      "prompt": "A Teddy dog and a Persian cat are looking at a burning table, with the Teddy dog at a farther distance.",
+      "source": "configs\\benchmarks\\prompts\\bench3_combined.txt"
+    }
+  ],
+  "selected_preview_count": 200,
+  "selected_truncated": true,
+  "sources": [
+    "configs/benchmarks/prompts/diffusiondb_10k.jsonl",
+    "configs/benchmarks/prompts/bench3_combined.txt",
+    "configs/benchmarks/prompts/dpg_bench_1065.txt",
+    "configs/benchmarks/prompts/dsg1k_1060.txt",
+    "configs/benchmarks/prompts/genai_bench_1600.txt",
+    "configs/benchmarks/prompts/drawbench_all.txt"
+  ],
+  "stratify": "hard_first"
+}

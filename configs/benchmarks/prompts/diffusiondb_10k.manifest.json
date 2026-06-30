@@ -1,0 +1,14 @@
+{
+  "created_at_utc": "2026-06-30T02:39:03Z",
+  "dataset": "poloclub/diffusiondb",
+  "dry_run": false,
+  "include_nsfw": false,
+  "limit": 10000,
+  "output": "configs\\benchmarks\\prompts\\diffusiondb_10k.jsonl",
+  "prompt_field": "prompt",
+  "row_count": 10000,
+  "schema_version": "ascr.stage3.external_prompt.download_manifest.v1",
+  "skipped_nsfw": 69,
+  "split": "train",
+  "subset": "2m_text_only"
+}

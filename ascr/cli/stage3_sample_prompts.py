@@ -110,6 +110,8 @@ def build_parser():
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--output", required=True)
     parser.add_argument("--manifest", default=None)
+    parser.add_argument("--manifest-selected-limit", type=int, default=200)
+    parser.add_argument("--manifest-include-all-selected", action="store_true")
     return parser
 
 
@@ -138,8 +140,12 @@ def main(argv=None):
         "seed": int(args.seed),
         "output": str(output),
         "bucket_counts": {bucket: sum(1 for row in selected if row["bucket"] == bucket) for bucket in ("simple", "medium", "complex")},
-        "selected": selected,
+        "selected_preview": selected[: max(0, int(args.manifest_selected_limit))],
+        "selected_preview_count": min(len(selected), max(0, int(args.manifest_selected_limit))),
+        "selected_truncated": len(selected) > max(0, int(args.manifest_selected_limit)),
     }
+    if args.manifest_include_all_selected:
+        manifest["selected"] = selected
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps({"output": str(output), "manifest": str(manifest_path), "selected_count": len(selected)}, indent=2, sort_keys=True))
     return 0
