@@ -5896,3 +5896,31 @@ Server AI next check:
 - Re-run one real `token_repair_8x8.yaml` Stage5 sample and confirm the trace
   contains `generator_memory_action=release_generation_cache`,
   `target_schema=repair_cells`, and no repeated 70s full model reload before MMU.
+
+## 2026-07-01 HKT - Codex local: Stage5 quality evaluation policy
+
+User asked how to decide whether Stage5 improves generated-image quality and
+whether external APIs should be used. Decision synced into the docs:
+
+- Stage5 should be evaluated as paired A/B comparisons, not single-image
+  scoring.
+- Required arms: `baseline` without Stage5, `ours` with Stage5 predicted-cell
+  reopen, `random_repair` with the same number of random cells, and
+  `oracle_repair` for synthetic corruption using GT cells. `full_regeneration`
+  is optional as a high-variance reference.
+- Synthetic corruption localization has exact GT from the 64x64 token
+  corruption mask projected to the fixed 8x8 action grid, so report hit-any,
+  precision, recall, F1, IoU, over-reopen, false-empty, and clean false-positive
+  rates without using an external API.
+- Final image quality can use an external VLM/API judge, but the prompt must be
+  blinded and paired. Randomize which image is A/B and ask for compact JSON
+  fields: `winner`, `prompt_alignment`, `visual_quality`,
+  `artifact_reduction`, `local_preservation`, and a short `reason`.
+- Aggregate `ours_win_rate`, `tie_rate`, `baseline_win_rate`, and
+  `net_win_rate`, bucketed by corruption size, operator, predicted cell count,
+  and prompt source. Keep a small human-review slice for close calls and API
+  judge disagreements.
+
+Updated files:
+- `docs/STAGE3_SELF_CORRUPTED_TOKEN_REPAIR.md`
+- `docs/SERVER_AI_TASK_STAGE5_6_INFRA_SCRIPTS.md`

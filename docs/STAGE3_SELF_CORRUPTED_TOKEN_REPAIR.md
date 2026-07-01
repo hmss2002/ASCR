@@ -1142,3 +1142,34 @@ Benchmark arms:
 External Qwen/Gemini judges are allowed for evaluation. They must not provide
 Stage-3 training labels unless the experiment is explicitly marked as a hybrid
 ablation.
+
+Stage-5 image-quality evaluation should be paired rather than single-image
+scoring. For each prompt/seed, compare:
+
+- `baseline`: original Lumina generation without Stage-5 repair;
+- `ours`: same prompt/seed/VQ baseline after Stage-5 predicted-cell reopen;
+- `random_repair`: reopen the same number of random 8x8 cells;
+- `oracle_repair`: for synthetic corruption only, reopen the GT projected 8x8
+  cells from the corruption mask;
+- optionally `full_regeneration`: regenerate the whole image as a high-variance
+  reference.
+
+Use two evidence layers:
+
+1. Localization correctness on synthetic corruption. This has exact GT from the
+   64x64 token corruption mask projected to 8x8 cells. Report hit-any,
+   precision, recall, F1, cell IoU, over-reopen rate, false-empty rate, and
+   clean false-positive rate. This layer does not need an external API.
+2. Final image quality. Use blinded paired judges over `(baseline, ours)` and,
+   when possible, `(random_repair, ours)` and `(ours, oracle_repair)`. The judge
+   should output compact JSON with `winner`, `prompt_alignment`,
+   `visual_quality`, `artifact_reduction`, and `local_preservation`, each in
+   `{A, B, tie}` after randomizing which image is A/B. Aggregate win rate, tie
+   rate, baseline-win rate, and net win rate, grouped by corruption size,
+   corruption operator, predicted cell count, and prompt source.
+
+External APIs are appropriate for the second layer, but the question must be
+paired and blinded: "which image better satisfies the prompt while reducing
+artifacts and preserving unchanged regions?" Do not ask only whether one image
+is good in isolation. Keep a small human-review slice for API-judge failures,
+close calls, and cases where repaired images look different but not better.

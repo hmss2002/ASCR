@@ -226,6 +226,49 @@ MODE=summarize OUTPUT_ROOT=outputs/stage5_self_corrupt/multi_prompt \
 The Stage-5 multi-prompt wrapper also honors `GPU_IDS`, `GPU_COUNT`,
 `PROMPT_OFFSET`, and `PROMPTS_PER_GPU`.
 
+## Stage-5 Evaluation Design
+
+Do not judge Stage-5 repaired images in isolation. Use paired A/B evaluation
+with the same prompt, seed, and baseline VQ tokens whenever possible:
+
+- `baseline`: original generation without Stage-5 repair.
+- `ours`: Stage-5 predicted cells reopened and decoded.
+- `random_repair`: reopen the same number of random 8x8 cells.
+- `oracle_repair`: synthetic corruption only; reopen the GT 8x8 cells projected
+  from the 64x64 token corruption mask.
+- Optional `full_regeneration`: regenerate the whole image as a high-variance
+  reference.
+
+Report two separate evidence layers:
+
+1. Synthetic localization metrics, using token-mask GT projected to 8x8 cells:
+   hit-any, precision, recall, F1, IoU, over-reopen rate, false-empty rate, and
+   clean false-positive rate. This layer does not require an external API.
+2. Final image-quality metrics, using blinded paired VLM/API or human judges:
+   `ours_win_rate`, `tie_rate`, `baseline_win_rate`, and
+   `net_win_rate = ours_win_rate - baseline_win_rate`. Bucket results by
+   corruption size, corruption operator, predicted cell count, and prompt
+   source.
+
+For API judges, randomize which image is A/B and require compact JSON only:
+
+```json
+{
+  "winner": "A|B|tie",
+  "prompt_alignment": "A|B|tie",
+  "visual_quality": "A|B|tie",
+  "artifact_reduction": "A|B|tie",
+  "local_preservation": "A|B|tie",
+  "reason": "short text"
+}
+```
+
+External APIs are appropriate for the image-quality layer, but they should
+answer a paired question: which image better satisfies the prompt while reducing
+artifacts and preserving unchanged regions? Do not ask whether one image is
+good in isolation. Keep a small human-review slice for close calls and API
+judge disagreements.
+
 ## Current Boundaries
 
 - `stage4_train_mmu_lora_ddp` now builds one Lumina+LoRA replica per rank,
