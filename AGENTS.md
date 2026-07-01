@@ -10,6 +10,33 @@ This is my ASCR research codebase. The standard workflow is:
 4. Push the completed changes to GitHub automatically.
 5. Tell me exactly how to continue on the university server.
 
+## Agent authority model
+
+The primary Codex agent is trusted as the high-capability engineering and
+research agent for this repository. When working in this project, it has
+authority to modify any tracked project file needed to complete the requested
+task, including source code, tests, configs, Slurm jobs, scripts, documentation,
+and project-level workflow files.
+
+The primary agent should act as the architect/implementer of record:
+
+- read the relevant code and docs before editing;
+- choose conservative implementation details that fit the existing project;
+- update tests, configs, scripts, and docs when the task requires it;
+- run feasible validation before reporting completion;
+- preserve research intent unless the existing behavior is clearly wrong.
+
+This authority does not extend to secrets, model weights, checkpoints, datasets,
+large generated outputs, local caches, virtual environments, or private runtime
+state. Those must remain untracked and out of commits.
+
+Server-side or lower-capability AI helpers should be treated as execution
+assistants, not as project architects. They may run explicit commands, submit
+jobs, collect logs, append run reports, and make narrow mechanical fixes only
+when instructed. They should not redesign the research pipeline, rewrite major
+modules, change synchronization policy, or make broad architectural decisions
+without direction from the primary Codex agent or the human owner.
+
 ## Local Python environment
 
 Prefer a project-local virtual environment over installing dependencies into
@@ -93,7 +120,10 @@ The final report must include:
 
 ## Safety constraints
 
-- Do not modify files outside this repository.
+- The primary Codex agent may modify any file inside this repository when it is
+  relevant to the requested work.
+- Do not modify files outside this repository unless the human explicitly asks
+  for that external change.
 - Do not commit secrets.
 - Do not commit checkpoints, model weights, large outputs, datasets, cache folders, or local environment folders.
 - Do not force-push.
