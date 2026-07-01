@@ -6043,3 +6043,47 @@ Server next check:
 ### Current jobs
 - 72034: zero-shot probe test (limit=16, 1 GPU) — testing if probe works without LoRA
 - 20-min auto-wakeup loop active
+
+---
+
+## 2026-07-01 HKT - Codex local: Stage4 probe launch/hang fixes
+
+Pulled and merged the server branch through `ddeb684` onto `main`. The server
+report showed two blocking problems: multi-GPU eval launched all 8 Lumina loads
+at the same time, and the single-GPU LoRA probe gave no useful progress after
+model loading. I treated this as both a launch-control bug and an observability
+bug.
+
+Local fixes:
+- `stage4_mmu_localization_probe` now lets CLI shard arguments override config
+  defaults for `--output-dir`, `--limit`, and `--sample-offset`. This matters
+  because `multi_gpu_eval` was passing per-shard values, while the YAML config
+  still had global defaults such as `sample_offset: 0`.
+- `run_stage4_multi_gpu_eval.sh` now staggers child launches with
+  `LAUNCH_STAGGER_SECONDS` and exports one absolute `ASCR_MODEL_LOAD_LOCK` under
+  the output root. Probe workers serialize Lumina `_load()` through that lock on
+  Linux, so multiple GPUs can still evaluate in parallel after loading without
+  all hammering checkpoint I/O at once.
+- `stage4_multi_gpu_eval.sbatch` excludes the known bad nodes
+  `SPGL-1-12,SPGL-1-16` by default and enables unbuffered progress logging.
+- `run_mmu_localization_probe` now prints JSON progress markers for row
+  selection, engine instantiation, model preload lock wait/acquire/done/release,
+  row start/done, and summary write. These markers are intentionally simple so
+  the server AI can paste the last visible event into this shared log.
+- `run_stage4_token_repair_lora.sh` now uses the same preload/progress flags for
+  both `probe_zero` and `probe_lora`, making single-GPU hangs diagnosable.
+
+Server retest order:
+1. Pull latest `main` and run the lightweight tests listed in the handoff.
+2. Submit the small single-GPU zero-shot probe first. If it reaches
+   `probe_summary_written`, the base probe path works.
+3. Submit the single-GPU LoRA probe. If it hangs, record the last
+   `model_preload_*` or `probe_row_*` marker and whether the hang is before or
+   after LoRA attachment.
+4. Submit `jobs/stage4/stage4_multi_gpu_eval.sbatch`. Keep defaults initially:
+   `LAUNCH_STAGGER_SECONDS=75`, `ASCR_PROBE_PROGRESS_EVERY=1`,
+   `ASCR_PROBE_PRELOAD_ENGINE=1`. Summarize only after all shard summaries
+   exist.
+5. Treat "all 64 cells" or malformed JSON as model-quality evidence, not an
+   infrastructure crash. The next model-quality step is more epochs or a
+   stronger curriculum after the probe pipeline itself is stable.

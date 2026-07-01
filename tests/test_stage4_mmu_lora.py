@@ -3,8 +3,10 @@ from pathlib import Path
 import pickle
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from ascr.analysis.stage4_run_decision import decide_stage4_next_actions, write_next_actions
+from ascr.cli import stage4_mmu_localization_probe as probe_cli
 from ascr.training.prepare_lumina_sft_data import convert_sft_examples
 from ascr.training.stage4_mmu_lora import (
     mmu_localization_prompt,
@@ -49,6 +51,38 @@ class _ImageAnswerEngine:
             "has_error": True,
             "corrupted_cells_2x2": ["A1"],
         })
+
+
+class Stage4ProbeCliTests(unittest.TestCase):
+    def test_cli_shard_args_override_config_defaults(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config = root / "probe.yaml"
+            config.write_text(
+                "\n".join([
+                    "dataset: config_dataset.jsonl",
+                    "output_dir: config_output",
+                    "limit: null",
+                    "sample_offset: 0",
+                    "grid_size: 8",
+                    "max_selected_cells: 8",
+                ]),
+                encoding="utf-8",
+            )
+            with patch.object(probe_cli, "run_mmu_localization_probe", return_value={"ok": True}) as run_probe:
+                self.assertEqual(
+                    probe_cli.main([
+                        "--config", str(config),
+                        "--output-dir", str(root / "gpu_0"),
+                        "--limit", "5",
+                        "--sample-offset", "7",
+                    ]),
+                    0,
+                )
+        args, kwargs = run_probe.call_args
+        self.assertEqual(args[1], str(root / "gpu_0"))
+        self.assertEqual(kwargs["limit"], 5)
+        self.assertEqual(kwargs["sample_offset"], 7)
 
 
 class Stage4MmuLoraTests(unittest.TestCase):

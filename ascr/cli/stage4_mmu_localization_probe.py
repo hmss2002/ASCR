@@ -17,16 +17,23 @@ def _read_sample_ids(path):
         return [line.strip() for line in handle if line.strip()]
 
 
+def _env_bool(name, default=False):
+    value = os.environ.get(name)
+    if value is None:
+        return bool(default)
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description="Probe Lumina MMU self-corruption localization with optional LoRA adapter.")
     parser.add_argument("--config", default=None)
     parser.add_argument("--dataset", default="outputs/stage3_self_corrupt/datasets/locality_hard64_v1/dataset.jsonl")
-    parser.add_argument("--output-dir", default="outputs/stage4_self_corrupt/mmu_lora_hard64/probe_zero")
+    parser.add_argument("--output-dir", default=None)
     parser.add_argument("--grid-size", type=int, default=16)
     parser.add_argument("--max-selected-cells", type=int, default=16)
     parser.add_argument("--top-k", type=int, default=4)
     parser.add_argument("--limit", type=int, default=None)
-    parser.add_argument("--sample-offset", type=int, default=0)
+    parser.add_argument("--sample-offset", type=int, default=None)
     parser.add_argument("--sample-ids-file", default=None)
     parser.add_argument("--split-manifest", default=None)
     parser.add_argument("--split", choices=["train", "eval"], default="eval")
@@ -44,20 +51,26 @@ def build_parser():
     parser.add_argument("--answer-block-length", type=int, default=128)
     parser.add_argument("--answer-temperature", type=float, default=0.0)
     parser.add_argument("--answer-cfg-scale", type=float, default=0.0)
+    parser.add_argument("--progress-every", type=int, default=int(os.environ.get("ASCR_PROBE_PROGRESS_EVERY", "0")))
+    parser.add_argument("--progress-prefix", default=os.environ.get("ASCR_PROBE_PROGRESS_PREFIX", "stage4_probe"))
+    parser.add_argument("--preload-engine", action=argparse.BooleanOptionalAction, default=_env_bool("ASCR_PROBE_PRELOAD_ENGINE", False))
     return parser
 
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
     config = load_config(args.config) if args.config else {}
+    output_dir = args.output_dir if args.output_dir is not None else config.get("output_dir", "outputs/stage4_self_corrupt/mmu_lora_hard64/probe_zero")
+    limit = args.limit if args.limit is not None else config.get("limit")
+    sample_offset = args.sample_offset if args.sample_offset is not None else config.get("sample_offset", 0)
     summary = run_mmu_localization_probe(
         config.get("dataset", args.dataset),
-        config.get("output_dir", args.output_dir),
+        output_dir,
         grid_size=int(config.get("grid_size", args.grid_size)),
         max_selected_cells=int(config.get("max_selected_cells", args.max_selected_cells)),
         top_k=int(config.get("top_k", args.top_k)),
-        limit=config.get("limit", args.limit),
-        sample_offset=int(config.get("sample_offset", args.sample_offset) or 0),
+        limit=limit,
+        sample_offset=int(sample_offset or 0),
         sample_ids=config.get("sample_ids", _read_sample_ids(args.sample_ids_file)),
         split_manifest=config.get("split_manifest", args.split_manifest),
         split=config.get("split", args.split),
@@ -75,6 +88,9 @@ def main(argv=None):
         answer_block_length=int(config.get("answer_block_length", args.answer_block_length)),
         answer_temperature=float(config.get("answer_temperature", args.answer_temperature)),
         answer_cfg_scale=float(config.get("answer_cfg_scale", args.answer_cfg_scale)),
+        progress_every=int(config.get("progress_every", args.progress_every)),
+        progress_prefix=config.get("progress_prefix", args.progress_prefix),
+        preload_engine=bool(config.get("preload_engine", args.preload_engine)),
     )
     print(json.dumps(summary, indent=2, sort_keys=True))
     return 0

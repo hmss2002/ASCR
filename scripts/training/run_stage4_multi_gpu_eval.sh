@@ -19,9 +19,22 @@ GPU_COUNT=${GPU_COUNT:-1}
 SAMPLES_PER_GPU=${SAMPLES_PER_GPU:-4}
 CHUNKS_PER_GPU=${CHUNKS_PER_GPU:-1}
 SAMPLE_OFFSET=${SAMPLE_OFFSET:-0}
+LAUNCH_STAGGER_SECONDS=${LAUNCH_STAGGER_SECONDS:-75}
+ASCR_PROBE_PROGRESS_EVERY=${ASCR_PROBE_PROGRESS_EVERY:-1}
+ASCR_PROBE_PRELOAD_ENGINE=${ASCR_PROBE_PRELOAD_ENGINE:-1}
 MODE=${MODE:-run}  # run, summarize
 
 mkdir -p "$OUTPUT_ROOT" logs
+if [[ -z "${ASCR_MODEL_LOAD_LOCK:-}" ]]; then
+  if [[ "$OUTPUT_ROOT" == /* ]]; then
+    ASCR_MODEL_LOAD_LOCK="$OUTPUT_ROOT/model_load.lock"
+  else
+    ASCR_MODEL_LOAD_LOCK="$PROJECT_ROOT/$OUTPUT_ROOT/model_load.lock"
+  fi
+elif [[ "$ASCR_MODEL_LOAD_LOCK" != /* ]]; then
+  ASCR_MODEL_LOAD_LOCK="$PROJECT_ROOT/$ASCR_MODEL_LOAD_LOCK"
+fi
+export ASCR_MODEL_LOAD_LOCK ASCR_PROBE_PROGRESS_EVERY ASCR_PROBE_PRELOAD_ENGINE PYTHONUNBUFFERED
 
 if [[ "$MODE" == "summarize" ]]; then
   shopt -s nullglob
@@ -45,6 +58,7 @@ fi
 chunk_size=$(( (SAMPLES_PER_GPU + CHUNKS_PER_GPU - 1) / CHUNKS_PER_GPU ))
 
 pids=()
+launch_index=0
 for gpu_rank in $(seq 0 $((GPU_COUNT - 1))); do
   gpu="${GPU_ID_ARRAY[$gpu_rank]:-$gpu_rank}"
   base_offset=$((SAMPLE_OFFSET + gpu_rank * SAMPLES_PER_GPU))
@@ -66,18 +80,36 @@ for gpu_rank in $(seq 0 $((GPU_COUNT - 1))); do
       log_suffix="${gpu_rank}-chunk-${chunk}"
     fi
     mkdir -p "$out"
+    if [[ "$launch_index" -gt 0 && "$LAUNCH_STAGGER_SECONDS" -gt 0 ]]; then
+      echo "staggering Stage-4 eval launch: sleep ${LAUNCH_STAGGER_SECONDS}s before gpu_rank=${gpu_rank} chunk=${chunk}" >&2
+      sleep "$LAUNCH_STAGGER_SECONDS"
+    fi
+    progress_prefix="stage4_mgpu_eval gpu_rank=${gpu_rank} chunk=${chunk} gpu=${gpu}"
     (
       export CUDA_VISIBLE_DEVICES="$gpu"
+      export ASCR_PROBE_PROGRESS_PREFIX="$progress_prefix"
+      echo "launch_time_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      echo "cuda_visible_devices=$CUDA_VISIBLE_DEVICES"
+      echo "sample_offset=$offset"
+      echo "sample_limit=$limit"
+      echo "model_load_lock=$ASCR_MODEL_LOAD_LOCK"
+      echo "progress_every=$ASCR_PROBE_PROGRESS_EVERY"
+      echo "preload_engine=$ASCR_PROBE_PRELOAD_ENGINE"
       "$PYTHON_BIN" -m ascr.cli.stage4_mmu_localization_probe \
         --config "$CONFIG" \
         --output-dir "$out" \
         --limit "$limit" \
-        --sample-offset "$offset"
+        --sample-offset "$offset" \
+        --progress-every "$ASCR_PROBE_PROGRESS_EVERY" \
+        --progress-prefix "$progress_prefix" \
+        --preload-engine
     ) >"logs/stage4-mgpu-eval-${log_suffix}.out" 2>"logs/stage4-mgpu-eval-${log_suffix}.err" &
     pids+=("$!")
+    launch_index=$((launch_index + 1))
     echo "$offset" >"$out.prompt_offset.txt"
     echo "$limit" >"$out.sample_limit.txt"
     echo "$gpu" >"$out.cuda_visible_devices.txt"
+    echo "$ASCR_MODEL_LOAD_LOCK" >"$out.model_load_lock.txt"
   done
 done
 

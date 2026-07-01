@@ -5,6 +5,7 @@
 #SBATCH --cpus-per-task=24
 #SBATCH --mem=180G
 #SBATCH --time=03:00:00
+#SBATCH --exclude=SPGL-1-12,SPGL-1-16
 #SBATCH --output=logs/%x-%j.out
 #SBATCH --error=logs/%x-%j.err
 
@@ -34,8 +35,12 @@ fi
 
 export LUMINA_REPO=${LUMINA_REPO:-third_party/Lumina-DiMOO}
 export LUMINA_MODEL_PATH=${LUMINA_MODEL_PATH:-models/lumina-dimoo}
+export PYTHONUNBUFFERED=${PYTHONUNBUFFERED:-1}
 export GPU_COUNT=${GPU_COUNT:-$(bash scripts/slurm/dynamic_gpu_detect.sh --count)}
 export SAMPLES_PER_GPU=${SAMPLES_PER_GPU:-4}
 export CHUNKS_PER_GPU=${CHUNKS_PER_GPU:-1}
+export LAUNCH_STAGGER_SECONDS=${LAUNCH_STAGGER_SECONDS:-75}
+export ASCR_PROBE_PROGRESS_EVERY=${ASCR_PROBE_PROGRESS_EVERY:-1}
+export ASCR_PROBE_PRELOAD_ENGINE=${ASCR_PROBE_PRELOAD_ENGINE:-1}
 
 bash scripts/training/run_stage4_multi_gpu_eval.sh

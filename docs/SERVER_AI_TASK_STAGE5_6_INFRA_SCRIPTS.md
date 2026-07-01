@@ -171,6 +171,28 @@ Slurm exposes a non-contiguous or UUID-based allocation. `CHUNKS_PER_GPU=2`
 splits each GPU's eval slice into smaller subprocesses, which is the preferred
 retry path when a larger eval shard OOMs or times out.
 
+After the 2026-07-01 hang report, multi-GPU eval now defaults to conservative
+launch control:
+
+- `jobs/stage4/stage4_multi_gpu_eval.sbatch` excludes
+  `SPGL-1-12,SPGL-1-16`, which were reported as silent-hang/drained nodes.
+- `LAUNCH_STAGGER_SECONDS=75` delays each per-GPU subprocess after the first.
+- `ASCR_MODEL_LOAD_LOCK` defaults to an absolute lock file under `OUTPUT_ROOT`;
+  probe workers use `fcntl.flock` on Linux to serialize Lumina `_load()` while
+  still allowing parallel evaluation after loading.
+- `ASCR_PROBE_PROGRESS_EVERY=1` and `ASCR_PROBE_PRELOAD_ENGINE=1` make logs show
+  `model_preload_*`, `probe_row_*`, and `probe_summary_written` markers.
+
+For a faster retry after the first successful smoke, lower
+`LAUNCH_STAGGER_SECONDS` gradually. If a run hangs, preserve the final JSON
+progress marker from each `logs/stage4-mgpu-eval-*.out` file in
+`docs/AI_COLLAB_LOG.md`.
+
+The probe CLI now treats `--output-dir`, `--limit`, and `--sample-offset` as
+shard-level overrides even when a config file is provided. Do not remove those
+arguments from `run_stage4_multi_gpu_eval.sh`; otherwise every GPU can evaluate
+the same rows or write into the same output directory.
+
 Stage-4 grid batch train/probe in one allocation:
 
 ```bash

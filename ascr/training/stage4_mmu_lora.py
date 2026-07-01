@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
 import random
 import re
@@ -845,6 +846,52 @@ def safe_parse_mmu_localization_payload(
     ), normalised
 
 
+def _probe_progress(enabled, prefix, event, **fields):
+    if not enabled:
+        return
+    payload = {
+        "event": str(event),
+        "prefix": str(prefix or "stage4_probe"),
+        "time_utc": created_at_utc(),
+    }
+    payload.update(fields)
+    print(json.dumps(payload, sort_keys=True), flush=True)
+
+
+def _preload_probe_engine(engine, output_dir, progress_enabled=False, progress_prefix="stage4_probe"):
+    load = getattr(engine, "_load", None)
+    if not callable(load):
+        return False
+    lock_path = os.environ.get("ASCR_MODEL_LOAD_LOCK")
+    if not lock_path:
+        _probe_progress(progress_enabled, progress_prefix, "model_preload_start", lock_path=None)
+        load()
+        _probe_progress(progress_enabled, progress_prefix, "model_preload_done", lock_path=None)
+        return True
+    lock_path = Path(lock_path)
+    if not lock_path.is_absolute():
+        lock_path = Path.cwd() / lock_path
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        import fcntl
+    except Exception:
+        _probe_progress(progress_enabled, progress_prefix, "model_preload_start_no_fcntl", lock_path=str(lock_path))
+        load()
+        _probe_progress(progress_enabled, progress_prefix, "model_preload_done_no_fcntl", lock_path=str(lock_path))
+        return True
+    with lock_path.open("w", encoding="utf-8") as handle:
+        _probe_progress(progress_enabled, progress_prefix, "model_preload_wait_lock", lock_path=str(lock_path))
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            _probe_progress(progress_enabled, progress_prefix, "model_preload_lock_acquired", lock_path=str(lock_path))
+            load()
+            _probe_progress(progress_enabled, progress_prefix, "model_preload_done", lock_path=str(lock_path))
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+            _probe_progress(progress_enabled, progress_prefix, "model_preload_lock_released", lock_path=str(lock_path))
+    return True
+
+
 def run_mmu_localization_probe(
     dataset,
     output_dir,
@@ -871,6 +918,9 @@ def run_mmu_localization_probe(
     answer_block_length=128,
     answer_temperature=0.0,
     answer_cfg_scale=0.0,
+    progress_every=0,
+    progress_prefix="stage4_probe",
+    preload_engine=False,
 ):
     target_schema = normalise_target_schema(target_schema)
     prompt_variant = normalise_prompt_variant(prompt_variant)
@@ -893,6 +943,23 @@ def run_mmu_localization_probe(
         rows = rows[: int(limit)]
     if not rows:
         raise ValueError(f"No probe rows selected from dataset: {dataset}")
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    progress_every = int(progress_every or 0)
+    progress_enabled = progress_every >= 0 and (progress_every > 0 or bool(os.environ.get("ASCR_MODEL_LOAD_LOCK")))
+    _probe_progress(
+        progress_enabled,
+        progress_prefix,
+        "probe_rows_selected",
+        dataset=str(dataset),
+        output_dir=str(output_dir),
+        row_count=len(rows),
+        sample_offset=sample_offset,
+        limit=int(limit) if limit is not None else None,
+        lora_path=str(lora_path) if lora_path else None,
+        input_mode=input_mode,
+        target_schema=target_schema,
+    )
     if engine is None:
         engine = LuminaNativeEngine(
             checkpoint_path=checkpoint_path,
@@ -905,15 +972,30 @@ def run_mmu_localization_probe(
             answer_temperature=answer_temperature,
             answer_cfg_scale=answer_cfg_scale,
         )
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    _probe_progress(progress_enabled, progress_prefix, "probe_engine_instantiated")
+    if preload_engine or os.environ.get("ASCR_MODEL_LOAD_LOCK"):
+        _preload_probe_engine(
+            engine,
+            output_dir,
+            progress_enabled=progress_enabled,
+            progress_prefix=progress_prefix,
+        )
     probe_rows = []
     prediction_map = {}
     parsed_count = 0
     call_error_count = 0
     malformed_count = 0
-    for row in rows:
+    for row_index, row in enumerate(rows, start=1):
         sample_id = row.get("sample_id")
+        if progress_every > 0 and (row_index == 1 or row_index % progress_every == 0 or row_index == len(rows)):
+            _probe_progress(
+                True,
+                progress_prefix,
+                "probe_row_start",
+                row_index=row_index,
+                row_count=len(rows),
+                sample_id=str(sample_id),
+            )
         question = mmu_localization_prompt(
             row.get("prompt", ""),
             grid_size=grid_size,
@@ -989,6 +1071,18 @@ def run_mmu_localization_probe(
         probe_row["predicted_cells"] = predicted
         prediction_map[str(sample_id)] = predicted
         probe_rows.append(probe_row)
+        if progress_every > 0 and (row_index == 1 or row_index % progress_every == 0 or row_index == len(rows)):
+            _probe_progress(
+                True,
+                progress_prefix,
+                "probe_row_done",
+                row_index=row_index,
+                row_count=len(rows),
+                sample_id=str(sample_id),
+                status=probe_row.get("status"),
+                latency_ms=probe_row.get("latency_ms"),
+                predicted_count=len(predicted),
+            )
     examples = [
         {
             "sample_id": str(row.get("sample_id")),
@@ -1038,4 +1132,14 @@ def run_mmu_localization_probe(
     write_jsonl(output_dir / "probe_rows.jsonl", probe_rows)
     write_jsonl(output_dir / "predictions.jsonl", predictions)
     write_json(output_dir / "summary.json", summary)
+    _probe_progress(
+        progress_enabled,
+        progress_prefix,
+        "probe_summary_written",
+        output_dir=str(output_dir),
+        row_count=row_count,
+        parse_rate=summary["parse_rate"],
+        call_error_count=call_error_count,
+        malformed_count=malformed_count,
+    )
     return summary

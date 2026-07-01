@@ -8,6 +8,9 @@ cd "$PROJECT_ROOT"
 
 PYTHON_BIN=${PYTHON_BIN:-python}
 MODE=${MODE:-plan}
+export PYTHONUNBUFFERED=${PYTHONUNBUFFERED:-1}
+export ASCR_PROBE_PROGRESS_EVERY=${ASCR_PROBE_PROGRESS_EVERY:-1}
+export ASCR_PROBE_PRELOAD_ENGINE=${ASCR_PROBE_PRELOAD_ENGINE:-1}
 
 SFT_CONFIG=${SFT_CONFIG:-configs/stage4/self_corrupt/mmu_sft_token_repair_8x8.yaml}
 TRAIN_CONFIG=${TRAIN_CONFIG:-configs/stage4/self_corrupt/mmu_lora_train_token_repair_8x8_l40s_1024_gc_adam8bit.yaml}
@@ -68,10 +71,20 @@ case "$MODE" in
     "$PYTHON_BIN" -m ascr.cli.stage4_train_mmu_lora --config "$TRAIN_CONFIG"
     ;;
   probe_zero)
-    "$PYTHON_BIN" -m ascr.cli.stage4_mmu_localization_probe --config "$ZERO_PROBE_CONFIG"
+    prefix=${ASCR_PROBE_PROGRESS_PREFIX:-stage4_token_repair_probe_zero}
+    ASCR_PROBE_PROGRESS_PREFIX="$prefix" "$PYTHON_BIN" -m ascr.cli.stage4_mmu_localization_probe \
+      --config "$ZERO_PROBE_CONFIG" \
+      --progress-every "$ASCR_PROBE_PROGRESS_EVERY" \
+      --progress-prefix "$prefix" \
+      --preload-engine
     ;;
   probe_lora)
-    "$PYTHON_BIN" -m ascr.cli.stage4_mmu_localization_probe --config "$LORA_PROBE_CONFIG"
+    prefix=${ASCR_PROBE_PROGRESS_PREFIX:-stage4_token_repair_probe_lora}
+    ASCR_PROBE_PROGRESS_PREFIX="$prefix" "$PYTHON_BIN" -m ascr.cli.stage4_mmu_localization_probe \
+      --config "$LORA_PROBE_CONFIG" \
+      --progress-every "$ASCR_PROBE_PROGRESS_EVERY" \
+      --progress-prefix "$prefix" \
+      --preload-engine
     ;;
   *)
     echo "Unsupported MODE=$MODE" >&2
