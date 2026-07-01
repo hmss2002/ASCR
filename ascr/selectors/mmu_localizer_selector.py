@@ -20,10 +20,22 @@ def _read_json_or_jsonl(path):
 
 
 def _maybe_load(value):
-    if isinstance(value, (str, Path)):
-        candidate = Path(value)
-        if candidate.exists() and candidate.is_file():
-            return _read_json_or_jsonl(candidate)
+    if isinstance(value, Path):
+        try:
+            if value.exists() and value.is_file():
+                return _read_json_or_jsonl(value)
+        except OSError:
+            return value
+    if isinstance(value, str):
+        text = value.strip()
+        if not text or len(text) >= 256 or text[0] in "{[" or "\n" in text:
+            return value
+        try:
+            candidate = Path(text)
+            if candidate.exists() and candidate.is_file():
+                return _read_json_or_jsonl(candidate)
+        except OSError:
+            return value
     return value
 
 
@@ -126,7 +138,8 @@ class MMULocalizerSelector:
             max_selected_cells=self.max_selected_cells,
         )
         deduped = {(cell.row, cell.col): cell for cell in cells}
-        return [deduped[key] for key in sorted(deduped)]
+        selected = [deduped[key] for key in sorted(deduped)]
+        return selected[: self.max_selected_cells]
 
     def to_token_mask(self):
         cells = self.cells()
@@ -146,6 +159,7 @@ class MMULocalizerSelector:
             "grid_size": self.grid_size,
             "token_grid_size": self.token_grid_size,
             "dilation": self.dilation,
+            "max_selected_cells": self.max_selected_cells,
             "cell_count": len(cells),
             "cells": [cell.to_label() for cell in cells],
             "selected_token_count": mask.count(),

@@ -5924,3 +5924,83 @@ whether external APIs should be used. Decision synced into the docs:
 Updated files:
 - `docs/STAGE3_SELF_CORRUPTED_TOKEN_REPAIR.md`
 - `docs/SERVER_AI_TASK_STAGE5_6_INFRA_SCRIPTS.md`
+
+---
+
+## 2026-07-01 08:00 HKT — Server AI: Stage5 smoke test results + eval pending
+
+### Stage5 smoke test (8 prompts × 8 GPU parallel)
+All 8 jobs (71964-71971) failed identically.
+
+**Error**: `OSError: [Errno 36] File name too long`
+**Location**: `ascr/selectors/mmu_localizer_selector.py:25` — `_maybe_load()` tries `Path.stat()` on ANY string value, including long JSON outputs.
+
+**Root cause**: Model outputs ALL 64 cell labels instead of selecting only the corrupted ones:
+```json
+{"cells":["A1","A2","A3",..."H7","H8"]}  // 64 cells, ~1000 chars
+```
+This string is too long to be a valid filename, but `_maybe_load` still tries `stat()` on it.
+
+**Secondary issue**: Model output shows the format `{"cells":[...]}` is learned (correct schema), but cell SELECTION is completely wrong (all cells returned). This suggests 1 epoch of training was insufficient for the model to learn FINE-GRAINED localization — it learned the output format but not the task of identifying which specific cells are corrupted.
+
+### Issues for Codex
+
+1. **`_maybe_load` string length check** (P0): Add `len(value) < 256` guard before `Path(value).stat()` in `mmu_localizer_selector.py:25`.
+
+2. **1 epoch training quality** (P1): Eval results (71963) will confirm whether 1 epoch is enough. If parse_rate is high but hit_rate is near zero, the model learned format but not localization — need more epochs or training improvements.
+
+3. **Stage5 prompt/training consistency** (P2): Stage5 prompt and training data both use `repair_cells` schema with `{"cells": string[]}`. Formats appear consistent. The issue is model quality, not prompt mismatch.
+
+### Current status
+- Eval (71963): RUNNING 49min on SPGL-1-12 (8 GPU), ~1h remaining
+- Stage5 smoke: all 8 failed with same error
+- Training: complete (2 epochs, best val=0.461 @ epoch 1)
+
+## 2026-07-01 HKT - Codex local: Stage5 smoke fix + transfer prompt overlap audit
+
+Pulled `origin/feat/stage4-gc-fallback-server` through `2d36c5b` and merged the
+server smoke-test report with the local paired-evaluation policy notes.
+
+Smoke-test analysis:
+- The immediate Stage5 failure is a selector bug, not a CUDA/runtime failure:
+  `_maybe_load()` tried to treat the long raw model answer JSON as a filesystem
+  path and called `Path.exists()` / `stat()` on it.
+- The raw model answer is also diagnostically important: the LoRA learned the
+  cells-only schema, but returned all 64 8x8 cells. That means schema learning
+  succeeded while fine-grained localization is still weak.
+- The Stage5 prompt/training schema remains consistent: both use
+  `repair_cells` / `{"cells": string[]}`. The next quality question is whether
+  the pending probe/eval has high parse rate but low hit/IoU.
+
+Local fixes:
+- `ascr/selectors/mmu_localizer_selector.py` now only attempts file loading for
+  short strings that look like paths. Long JSON strings, JSON-looking strings,
+  and multiline strings are parsed as model output directly.
+- `MMULocalizerSelector` now applies its `max_selected_cells` cap after
+  row-major de-duplication and records the cap in `stats()`.
+- `stage5_self_corrupt_loop` now passes the configured `max_selected_cells` to
+  `MMULocalizerSelector`, so the 8x8 token-repair config caps at 8 cells rather
+  than falling back to the selector default of 16.
+- Added regression coverage for a long `{"cells":[A1..H8]}` answer so this
+  server failure path cannot recur.
+
+Prompt-overlap audit:
+- The 10K Stage-3 token-repair training prompt pool already contains full
+  DPG-Bench and large parts of Bench3/DSG/GenAI/DrawBench.
+- Exact normalized overlaps with `stage3_token_repair_prompts_10k.txt`:
+  `t2i_compbench_hard64=0/64`, `geneval_553=0/553`,
+  `dpg_bench_1065=1065/1065`, `dsg1k_1060=784/1059 unique`,
+  `genai_bench_1600=1325/1600`, `drawbench_all=120/200`,
+  `bench3_combined=3173/3723 unique`.
+- Clean unseen transfer should therefore use T2I-CompBench hard64 and GenEval
+  first. DPG full should be labeled seen-prompt / in-distribution analysis.
+  DSG/GenAI/DrawBench require exact-overlap filtering before being reported as
+  transfer.
+
+Server next check:
+- Pull latest `main`.
+- Re-run `tests/test_stage3_4_5_integration.py`.
+- Re-run the 8-prompt Stage5 smoke. It should no longer crash with
+  `File name too long`; if the model still emits all 64 cells, record it as a
+  localization-quality failure and use eval job 71963 metrics to decide whether
+  more epochs/data/curriculum are needed.

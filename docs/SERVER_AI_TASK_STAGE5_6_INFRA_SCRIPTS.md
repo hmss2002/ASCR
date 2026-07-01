@@ -269,6 +269,35 @@ artifacts and preserving unchanged regions? Do not ask whether one image is
 good in isolation. Keep a small human-review slice for close calls and API
 judge disagreements.
 
+### Stage-5 Transfer Prompt Discipline
+
+Do not treat every public benchmark prompt file as unseen transfer. The current
+Stage-3/4 token-repair training prompt pool already sampled from several
+benchmark sources. Exact normalized-text overlap against
+`configs/benchmarks/prompts/stage3_token_repair_prompts_10k.txt` currently is:
+
+```text
+configs/benchmarks/prompts/t2i_compbench_hard64.txt  0 / 64
+configs/benchmarks/prompts/geneval_553.txt           0 / 553
+configs/benchmarks/prompts/dpg_bench_1065.txt        1065 / 1065
+configs/benchmarks/prompts/dsg1k_1060.txt            784 / 1059 unique
+configs/benchmarks/prompts/genai_bench_1600.txt      1325 / 1600
+configs/benchmarks/prompts/drawbench_all.txt         120 / 200
+configs/benchmarks/prompts/bench3_combined.txt       3173 / 3723 unique
+```
+
+Therefore:
+
+- Clean unseen transfer should start with `t2i_compbench_hard64.txt` and
+  `geneval_553.txt`.
+- Full `dpg_bench_1065.txt` is useful, but it is seen-prompt /
+  in-distribution analysis, not clean transfer evidence.
+- For DSG-1k, GenAI-Bench, and DrawBench, build a filtered-unseen prompt file
+  by removing exact normalized overlaps with the 10K training prompt pool before
+  using them as transfer evidence.
+- Reports must label each result as `clean_unseen`, `filtered_unseen`, or
+  `seen_prompt_analysis`; do not mix those buckets in one headline number.
+
 ## Current Boundaries
 
 - `stage4_train_mmu_lora_ddp` now builds one Lumina+LoRA replica per rank,

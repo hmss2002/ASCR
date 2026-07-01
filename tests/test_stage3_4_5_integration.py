@@ -21,6 +21,7 @@ class _CountingStage5Engine:
         self._model = object()
         self._tokenizer = object()
         self._vqvae = object()
+        self.answer_text = '{"cells":["A1"]}'
         self.generated = 0
         self.answered = 0
         self.reopened = 0
@@ -50,7 +51,7 @@ class _CountingStage5Engine:
     def answer_vq_tokens(self, question, vq_ids, max_new_tokens=384):
         self.answered += 1
         self.last_question = question
-        return '{"cells":["A1"]}'
+        return self.answer_text
 
     def unload(self, clear_lora=False):
         self.unloaded += 1
@@ -78,6 +79,17 @@ class Stage345IntegrationTests(unittest.TestCase):
         self.assertEqual(mask.count(), 16 * 16)
         self.assertIn((48, 32), mask.selected_indices())
         self.assertIn((63, 47), mask.selected_indices())
+
+    def test_mmu_localizer_selector_handles_long_cells_json_and_caps(self):
+        labels = [f"{chr(ord('A') + row)}{col + 1}" for row in range(8) for col in range(8)]
+        raw_text = json.dumps({"cells": labels}, separators=(",", ":"))
+        self.assertGreaterEqual(len(raw_text), 256)
+        selector = MMULocalizerSelector(raw_text, grid_size=8, token_grid_size=64, max_selected_cells=8)
+        stats = selector.stats()
+        self.assertEqual(stats["cells"], labels[:8])
+        self.assertEqual(stats["cell_count"], 8)
+        self.assertEqual(stats["max_selected_cells"], 8)
+        self.assertEqual(stats["selected_token_count"], 8 * 8 * 8)
 
     def test_stage5_mock_loop_and_summary(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -135,6 +147,37 @@ class Stage345IntegrationTests(unittest.TestCase):
         self.assertEqual(trace["generator_memory_action"], "release_generation_cache")
         self.assertEqual(trace["target_schema"], "repair_cells")
         self.assertEqual(trace["answer_method"], "answer_vq_tokens")
+
+    def test_stage5_loop_caps_all_cells_output_to_config_limit(self):
+        labels = [f"{chr(ord('A') + row)}{col + 1}" for row in range(8) for col in range(8)]
+        created = []
+
+        def build_engine(config, lora_path=None, mock=False):
+            engine = _CountingStage5Engine()
+            engine.answer_text = json.dumps({"cells": labels}, separators=(",", ":"))
+            if lora_path:
+                engine.lora_path = str(lora_path)
+            created.append(engine)
+            return engine
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch("ascr.cli.stage5_self_corrupt_loop._engine", side_effect=build_engine):
+                trace = run_stage5_loop(
+                    "a green bench and a blue bowl",
+                    Path(temp_dir) / "loop",
+                    config={
+                        "share_engine": True,
+                        "grid_size": 8,
+                        "token_grid_size": 64,
+                        "max_selected_cells": 8,
+                        "lora_path": "outputs/adapters/grid8",
+                    },
+                )
+        self.assertEqual(len(created), 1)
+        self.assertEqual(trace["mask_stats"]["cells"], labels[:8])
+        self.assertEqual(trace["mask_stats"]["cell_count"], 8)
+        self.assertEqual(trace["mask_stats"]["max_selected_cells"], 8)
+        self.assertEqual(trace["mask_stats"]["selected_token_count"], 8 * 8 * 8)
 
     def test_prompt_sampler_removes_holdout_and_stratifies(self):
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -176,7 +176,12 @@ def run_stage5_loop(
         vq_ids=result.corrupted_vq_ids,
         max_new_tokens=int(config.get("max_new_tokens", 384)),
     )
-    selector = MMULocalizerSelector(raw_text, grid_size=grid_size, token_grid_size=token_grid_size)
+    selector = MMULocalizerSelector(
+        raw_text,
+        grid_size=grid_size,
+        token_grid_size=token_grid_size,
+        max_selected_cells=max_selected_cells,
+    )
     mask = selector.to_token_mask()
     repaired_vq_ids = gen_engine.reopen(result.corrupted_vq_ids, mask.selected_indices(), prompt, seed=seed + 2)
     repaired_path = output_dir / "repaired.ppm"

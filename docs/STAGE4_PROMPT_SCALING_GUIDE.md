@@ -38,6 +38,32 @@ Selection rules:
   final evidence.
 - Preserve source file and line index in generated prompt manifests.
 
+## Current Overlap Audit
+
+The 2026-06-30 Stage-3 token-repair prompt pool intentionally sampled from
+public benchmark files to create a hard 10K training set. Exact normalized-text
+overlap with `configs/benchmarks/prompts/stage3_token_repair_prompts_10k.txt`
+is:
+
+```text
+t2i_compbench_hard64.txt  0 / 64
+geneval_553.txt           0 / 553
+dpg_bench_1065.txt        1065 / 1065
+dsg1k_1060.txt            784 / 1059 unique
+genai_bench_1600.txt      1325 / 1600
+drawbench_all.txt         120 / 200
+bench3_combined.txt       3173 / 3723 unique
+```
+
+Use this split for Stage-5/6 claims:
+
+- `clean_unseen`: T2I-CompBench hard64 and GenEval 553.
+- `filtered_unseen`: DSG-1k, GenAI-Bench, and DrawBench after removing exact
+  normalized overlaps with the 10K training pool.
+- `seen_prompt_analysis`: full DPG-Bench, full Bench3, and any overlapped
+  DSG/GenAI/DrawBench prompts. These can diagnose in-distribution behavior but
+  must not be presented as clean transfer.
+
 ## Suggested Scaling
 
 Start with:
