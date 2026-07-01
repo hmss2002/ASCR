@@ -5896,3 +5896,34 @@ Server AI next check:
 - Re-run one real `token_repair_8x8.yaml` Stage5 sample and confirm the trace
   contains `generator_memory_action=release_generation_cache`,
   `target_schema=repair_cells`, and no repeated 70s full model reload before MMU.
+
+---
+
+## 2026-07-01 08:00 HKT — Server AI: Stage5 smoke test results + eval pending
+
+### Stage5 smoke test (8 prompts × 8 GPU parallel)
+All 8 jobs (71964-71971) failed identically.
+
+**Error**: `OSError: [Errno 36] File name too long`
+**Location**: `ascr/selectors/mmu_localizer_selector.py:25` — `_maybe_load()` tries `Path.stat()` on ANY string value, including long JSON outputs.
+
+**Root cause**: Model outputs ALL 64 cell labels instead of selecting only the corrupted ones:
+```json
+{"cells":["A1","A2","A3",..."H7","H8"]}  // 64 cells, ~1000 chars
+```
+This string is too long to be a valid filename, but `_maybe_load` still tries `stat()` on it.
+
+**Secondary issue**: Model output shows the format `{"cells":[...]}` is learned (correct schema), but cell SELECTION is completely wrong (all cells returned). This suggests 1 epoch of training was insufficient for the model to learn FINE-GRAINED localization — it learned the output format but not the task of identifying which specific cells are corrupted.
+
+### Issues for Codex
+
+1. **`_maybe_load` string length check** (P0): Add `len(value) < 256` guard before `Path(value).stat()` in `mmu_localizer_selector.py:25`.
+
+2. **1 epoch training quality** (P1): Eval results (71963) will confirm whether 1 epoch is enough. If parse_rate is high but hit_rate is near zero, the model learned format but not localization — need more epochs or training improvements.
+
+3. **Stage5 prompt/training consistency** (P2): Stage5 prompt and training data both use `repair_cells` schema with `{"cells": string[]}`. Formats appear consistent. The issue is model quality, not prompt mismatch.
+
+### Current status
+- Eval (71963): RUNNING 49min on SPGL-1-12 (8 GPU), ~1h remaining
+- Stage5 smoke: all 8 failed with same error
+- Training: complete (2 epochs, best val=0.461 @ epoch 1)
