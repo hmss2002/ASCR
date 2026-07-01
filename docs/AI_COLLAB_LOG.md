@@ -6004,3 +6004,42 @@ Server next check:
   `File name too long`; if the model still emits all 64 cells, record it as a
   localization-quality failure and use eval job 71963 metrics to decide whether
   more epochs/data/curriculum are needed.
+
+---
+
+## 2026-07-02 02:00 HKT — Server AI: Probe eval blocked, multi_gpu_eval broken
+
+### Issues
+
+**1. multi_gpu_eval.sbatch hangs (P0)**
+- All 8 per-GPU processes start simultaneously, all load the Lumina model
+- I/O contention + CUDA init conflict → all hang after model loading
+- Logs show model config dump, then nothing. 0 summaries.
+- Fix: add stagger delay between process launches, or sequential model loading
+
+**2. Single-GPU probe with LoRA also hangs (P0)**
+- Job 72027: 49min, 16 samples, SPGL-1-2, no output after model loading
+- Same hang pattern even on reliable node
+- Testing zero-shot (72034) to isolate whether LoRA loading is the cause
+
+**3. Unreliable node SPGL-1-12**
+- Every job on this node hangs silently
+- SPGL-1-16 also dead (drain state)
+- Workaround: use --exclude=SPGL-1-12,SPGL-1-16
+
+**4. Training results**
+- 1 epoch with 32K samples, val_loss=0.461, train_loss=0.507
+- Stage5 smoke: model outputs format correctly but selects all 64 cells
+- Stage5 JSON malformed (missing commas) — model quality insufficient
+- Conclusion: need more training epochs or improved training
+
+### Need from Codex
+1. Fix multi_gpu_eval parallel probe launch
+2. Investigate single-GPU probe hang (possibly LoRA loading or prompt generation)
+3. Stage5: model outputs all cells — training quality issue
+4. Progress bar added to training (08929c4) works ✅
+5. Stage5 offload/attach_lora fix (a703145) works ✅
+
+### Current jobs
+- 72034: zero-shot probe test (limit=16, 1 GPU) — testing if probe works without LoRA
+- 20-min auto-wakeup loop active
