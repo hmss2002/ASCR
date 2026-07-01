@@ -14,7 +14,7 @@ from ascr.corruption.vq_corruptor import corrupt_vq_ids, token_indices_to_cell_l
 from ascr.evaluators.lumina_native import call_native_answer
 from ascr.generators.lumina_native import LuminaNativeEngine
 from ascr.selectors.mmu_localizer_selector import MMULocalizerSelector
-from ascr.training.stage4_mmu_lora import mmu_localization_prompt
+from ascr.training.stage4_mmu_lora import TARGET_SCHEMA_REPAIR_CELLS, mmu_localization_prompt, normalise_target_schema
 
 
 def created_at_utc():
@@ -67,7 +67,7 @@ class MockLuminaEngine:
         return _write_ppm(output_path, (total, (total * 3) % 255, (total * 7) % 255))
 
     def answer_vq_tokens(self, question, vq_ids, max_new_tokens=384):
-        return '{"has_error":true,"corrupted_cells_4x4":["A1"]}'
+        return '{"cells":["A1"]}'
 
 
 def _engine(config, lora_path=None, mock=False):
@@ -90,6 +90,9 @@ def _engine(config, lora_path=None, mock=False):
 def _maybe_attach_lora(engine, lora_path):
     if not lora_path or isinstance(engine, MockLuminaEngine):
         return engine
+    attach_lora = getattr(engine, "attach_lora", None)
+    if callable(attach_lora):
+        return attach_lora(lora_path)
     if getattr(engine, "lora_path", None) == str(lora_path):
         return engine
     if getattr(engine, "_model", None) is None:
@@ -104,12 +107,15 @@ def _maybe_attach_lora(engine, lora_path):
     return engine
 
 
-def _offload_engine_before_mmu(engine, lora_path):
+def _prepare_shared_engine_before_mmu(engine, lora_path, allow_full_unload=False):
     if not lora_path or isinstance(engine, MockLuminaEngine):
-        return False
-    if hasattr(engine, "unload"):
-        return bool(engine.unload(clear_lora=False))
-    return False
+        return False, "skipped"
+    release_generation_cache = getattr(engine, "release_generation_cache", None)
+    if callable(release_generation_cache):
+        return bool(release_generation_cache()), "release_generation_cache"
+    if allow_full_unload and hasattr(engine, "unload"):
+        return bool(engine.unload(clear_lora=False)), "full_unload"
+    return False, "skipped_no_light_release"
 
 
 def run_stage5_loop(
@@ -132,6 +138,7 @@ def run_stage5_loop(
     corruption_type = config.get("corruption_type", corruption_type)
     lora_path = lora_path or config.get("lora_path")
     token_grid_size = int(config.get("token_grid_size", (config.get("generator") or {}).get("token_grid_size", 64)))
+    target_schema = normalise_target_schema(config.get("target_schema", TARGET_SCHEMA_REPAIR_CELLS))
 
     share_engine = bool(config.get("share_engine", True))
     gen_engine = _engine(config, lora_path=None, mock=mock)
@@ -152,11 +159,16 @@ def run_stage5_loop(
         prompt,
         grid_size=grid_size,
         max_selected_cells=max_selected_cells,
-        target_schema="localization_cells",
+        target_schema=target_schema,
     )
     offloaded_generator_before_mmu = False
+    generator_memory_action = "skipped"
     if share_engine and bool(config.get("offload_generator_before_mmu", True)):
-        offloaded_generator_before_mmu = _offload_engine_before_mmu(mmu_engine, lora_path)
+        offloaded_generator_before_mmu, generator_memory_action = _prepare_shared_engine_before_mmu(
+            mmu_engine,
+            lora_path,
+            allow_full_unload=bool(config.get("allow_full_unload_before_mmu", False)),
+        )
     mmu_engine = _maybe_attach_lora(mmu_engine, lora_path)
     raw_text, answer_method = call_native_answer(
         mmu_engine,
@@ -178,6 +190,8 @@ def run_stage5_loop(
         "corruption_type": corruption_type,
         "share_engine": share_engine,
         "offloaded_generator_before_mmu": offloaded_generator_before_mmu,
+        "generator_memory_action": generator_memory_action,
+        "target_schema": target_schema,
         "grid_size": grid_size,
         "token_grid_size": token_grid_size,
         "target_cells": target_cells,

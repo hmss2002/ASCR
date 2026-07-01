@@ -246,9 +246,11 @@ The Stage-5 multi-prompt wrapper also honors `GPU_IDS`, `GPU_COUNT`,
   LoRA copies at the same time. The loop now reuses one
   `LuminaNativeEngine` instance and lazily attaches the LoRA adapter before
   the MMU answer call; it also defaults to
-  `offload_generator_before_mmu: true`, which releases loaded generator
-  model/tokenizer/VQ-VAE state and clears CUDA cache before the LoRA MMU phase.
-  This behavior is covered by
+  `offload_generator_before_mmu: true`, which now calls
+  `release_generation_cache()` to clear transient Python/CUDA cache while
+  keeping the base model/tokenizer/VQ-VAE resident. Full unload/reload is no
+  longer the default and only happens if `allow_full_unload_before_mmu: true`
+  is explicitly set. This behavior is covered by
   `test_stage5_share_engine_reuses_one_lumina_instance_and_attaches_lora_lazily`.
   Set `share_engine: false` only when GPU memory is sufficient and separate
   generation/MMU behavior must be isolated.

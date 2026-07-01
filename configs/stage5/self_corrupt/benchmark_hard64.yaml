@@ -5,6 +5,7 @@ seed: 0
 grid_size: 4
 token_grid_size: 64
 max_selected_cells: 4
+target_schema: localization_cells
 corruption_type: block_4x4_random_replace
 lora_path: outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/grid4/vq_tokens/lora_l40s_1024px_gc_adam8bit
 max_new_tokens: 384

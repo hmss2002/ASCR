@@ -101,6 +101,38 @@ class LuminaNativeEngine:
             torch.cuda.empty_cache()
         return had_loaded_state
 
+    def release_generation_cache(self):
+        """Release transient generation cache while keeping loaded weights resident."""
+        had_loaded_state = any(value is not None for value in (self._model, self._tokenizer, self._vqvae))
+        torch = self._torch
+        import gc
+
+        gc.collect()
+        if torch is not None and hasattr(torch, "cuda") and torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            ipc_collect = getattr(torch.cuda, "ipc_collect", None)
+            if callable(ipc_collect):
+                ipc_collect()
+        return had_loaded_state
+
+    def attach_lora(self, lora_path):
+        """Attach an MMU LoRA adapter to the loaded model, or defer until load."""
+        if not lora_path:
+            return self
+        lora_path = str(lora_path)
+        if self.lora_path == lora_path:
+            return self
+        if self._model is None:
+            self.lora_path = lora_path
+            return self
+        ensure_transformers_tensor_parallel_compat()
+        from peft import PeftModel
+
+        self._model = PeftModel.from_pretrained(self._model, lora_path)
+        self._model.eval()
+        self.lora_path = lora_path
+        return self
+
     # ------------------------------------------------------------------ load
     def _ensure_repo_on_path(self):
         repo = str(Path(self.repo_path).resolve())
