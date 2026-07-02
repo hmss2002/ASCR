@@ -11,6 +11,7 @@ from ascr.cli.stage3_sample_prompts import sample_prompts
 from ascr.cli.stage6_transfer_probe import run_transfer_probe
 from ascr.cli.stage5_self_corrupt_loop import run_stage5_loop
 from ascr.cli.stage5_compare_loop_results import summarize_loop_manifest
+from ascr.generators.lumina_native import _as_lumina_generation_model
 from ascr.selectors.mmu_localizer_selector import MMULocalizerSelector
 
 
@@ -74,7 +75,41 @@ class _CountingStage5Engine:
         return self
 
 
+class _FakeLuminaBaseModel:
+    def __init__(self):
+        self.cached = []
+        self.empty_cache_calls = 0
+
+    def caching(self, enabled):
+        self.cached.append(bool(enabled))
+
+    def empty_cache(self):
+        self.empty_cache_calls += 1
+
+
+class _FakePeftModel:
+    def __init__(self, base):
+        self.base_model = SimpleNamespace(model=base)
+        self.forward_calls = []
+
+    def __call__(self, *args, **kwargs):
+        self.forward_calls.append((args, kwargs))
+        return "forwarded"
+
+    def parameters(self):
+        return iter(())
+
+
 class Stage345IntegrationTests(unittest.TestCase):
+    def test_lumina_generation_proxy_exposes_cache_hooks_without_bypassing_lora(self):
+        base = _FakeLuminaBaseModel()
+        peft = _FakePeftModel(base)
+        wrapped = _as_lumina_generation_model(peft)
+        wrapped.module.caching(True)
+        self.assertEqual(base.cached, [True])
+        self.assertEqual(wrapped("tokens", infer=True), "forwarded")
+        self.assertEqual(peft.forward_calls, [(("tokens",), {"infer": True})])
+
     def test_mmu_localizer_selector_projects_cells_to_token_mask(self):
         selector = MMULocalizerSelector('{"has_error":true,"corrupted_cells_4x4":["D3"]}', grid_size=4, token_grid_size=64)
         mask = selector.to_token_mask()

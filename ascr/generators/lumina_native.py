@@ -33,6 +33,60 @@ CODEBOOK_SIZE = 8192
 VAE_SCALE = 16
 
 
+class _LuminaGenerationModelProxy:
+    """Expose DDP-style ``module`` cache hooks while preserving PEFT forward."""
+
+    def __init__(self, model):
+        self._model = model
+        self.module = _lumina_cache_target(model)
+
+    def __call__(self, *args, **kwargs):
+        return self._model(*args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._model, name)
+
+    def parameters(self, *args, **kwargs):
+        return self._model.parameters(*args, **kwargs)
+
+
+def _lumina_cache_target(model):
+    """Return the underlying Lumina module that owns caching/empty_cache hooks."""
+
+    seen = set()
+    candidates = [model]
+    while candidates:
+        candidate = candidates.pop(0)
+        if candidate is None or id(candidate) in seen:
+            continue
+        seen.add(id(candidate))
+        if hasattr(candidate, "caching"):
+            return candidate
+        for attr in ("module", "base_model", "model"):
+            try:
+                nested = getattr(candidate, attr)
+            except Exception:
+                nested = None
+            if nested is not None and id(nested) not in seen:
+                candidates.append(nested)
+    return model
+
+
+def _as_lumina_generation_model(model):
+    """Wrap LoRA/PEFT models so Lumina generation does not mistake them for DDP."""
+
+    if hasattr(model, "module") or hasattr(model, "caching"):
+        return model
+    target = _lumina_cache_target(model)
+    if target is model:
+        return model
+    return _LuminaGenerationModelProxy(model)
+
+
+def _unwrap_lumina_generation_model(model):
+    return getattr(model, "_model", model)
+
+
 def align_answer_generation_lengths(max_new_tokens, block_length, steps):
     """Return Lumina text-generation lengths that satisfy block constraints."""
     block_len = max(1, int(block_length))
@@ -128,7 +182,8 @@ class LuminaNativeEngine:
         ensure_transformers_tensor_parallel_compat()
         from peft import PeftModel
 
-        self._model = PeftModel.from_pretrained(self._model, lora_path)
+        base_model = _unwrap_lumina_generation_model(self._model)
+        self._model = _as_lumina_generation_model(PeftModel.from_pretrained(base_model, lora_path))
         self._model.eval()
         self.lora_path = lora_path
         return self
@@ -165,7 +220,7 @@ class LuminaNativeEngine:
             ensure_transformers_tensor_parallel_compat()
             from peft import PeftModel
 
-            self._model = PeftModel.from_pretrained(self._model, self.lora_path)
+            self._model = _as_lumina_generation_model(PeftModel.from_pretrained(self._model, self.lora_path))
         self._model.eval()
         self._vqvae = VQModel.from_pretrained(self.checkpoint_path, subfolder="vqvae").to(self.device)
 
