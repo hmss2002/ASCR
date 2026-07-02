@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 
 from ascr.core.schemas import GridCell, TokenReopenMask
 from ascr.distill.teacher import extract_json_object
@@ -65,6 +66,27 @@ def _cells_from_semantic(evaluation):
     return cells
 
 
+def _loose_cells_from_text(text, grid_size, max_selected_cells):
+    """Recover grid-cell labels from malformed MMU text without trusting prose."""
+
+    max_selected_cells = int(max_selected_cells)
+    labels = []
+    upper_bound = chr(ord("A") + int(grid_size) - 1)
+    label_pattern = re.compile(rf"(?<![A-Z0-9])([A-{upper_bound}])([1-9][0-9]*)(?![A-Z0-9])", re.IGNORECASE)
+    for match in label_pattern.finditer(str(text or "")):
+        label = f"{match.group(1).upper()}{int(match.group(2))}"
+        try:
+            cell = GridCell.from_any(label, grid_size)
+        except Exception:
+            continue
+        label = cell.to_label()
+        if label not in labels:
+            labels.append(label)
+        if len(labels) >= max_selected_cells:
+            break
+    return labels
+
+
 def _cells_from_dict(payload, grid_size, max_selected_cells):
     if payload.get("mask") and payload.get("selected_indices") is not None:
         return payload.get("selected_indices") or []
@@ -98,7 +120,13 @@ def extract_cells(value, grid_size=4, max_selected_cells=16):
         try:
             value = json.loads(value)
         except Exception:
-            value = extract_json_object(value)
+            try:
+                value = extract_json_object(value)
+            except Exception:
+                return [
+                    GridCell.from_any(cell, grid_size)
+                    for cell in _loose_cells_from_text(value, grid_size, max_selected_cells)
+                ]
     if isinstance(value, dict):
         return [GridCell.from_any(cell, grid_size) for cell in _flatten(_cells_from_dict(value, grid_size, max_selected_cells))]
     if isinstance(value, list):

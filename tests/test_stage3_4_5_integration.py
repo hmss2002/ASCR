@@ -93,6 +93,18 @@ class Stage345IntegrationTests(unittest.TestCase):
         self.assertEqual(stats["max_selected_cells"], 8)
         self.assertEqual(stats["selected_token_count"], 8 * 8 * 8)
 
+    def test_mmu_localizer_selector_recovers_cells_from_malformed_json(self):
+        selector = MMULocalizerSelector('{"cells":["D4" "D5"]}', grid_size=8, token_grid_size=64, max_selected_cells=8)
+        stats = selector.stats()
+        self.assertEqual(stats["cells"], ["D4", "D5"])
+        self.assertEqual(stats["selected_token_count"], 2 * 8 * 8)
+
+    def test_mmu_localizer_selector_abstains_on_unusable_malformed_text(self):
+        selector = MMULocalizerSelector('{"cells": definitely malformed}', grid_size=8, token_grid_size=64)
+        stats = selector.stats()
+        self.assertEqual(stats["cells"], [])
+        self.assertEqual(stats["selected_token_count"], 0)
+
     def test_stage5_mock_loop_and_summary(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             trace = run_stage5_loop(
