@@ -16,6 +16,7 @@ the base test environment.
 
 import os
 import sys
+import inspect
 from pathlib import Path
 
 from ascr.core.peft_compat import ensure_transformers_tensor_parallel_compat
@@ -60,7 +61,7 @@ def _lumina_cache_target(model):
         if candidate is None or id(candidate) in seen:
             continue
         seen.add(id(candidate))
-        if hasattr(candidate, "caching"):
+        if _has_static_attr(candidate, "caching"):
             return candidate
         for attr in ("module", "base_model", "model"):
             try:
@@ -72,10 +73,18 @@ def _lumina_cache_target(model):
     return model
 
 
+def _has_static_attr(model, attr):
+    try:
+        inspect.getattr_static(model, attr)
+        return True
+    except AttributeError:
+        return False
+
+
 def _as_lumina_generation_model(model):
     """Wrap LoRA/PEFT models so Lumina generation does not mistake them for DDP."""
 
-    if hasattr(model, "module") or hasattr(model, "caching"):
+    if _has_static_attr(model, "module"):
         return model
     target = _lumina_cache_target(model)
     if target is model:

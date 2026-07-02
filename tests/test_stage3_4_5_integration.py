@@ -100,6 +100,13 @@ class _FakePeftModel:
         return iter(())
 
 
+class _FakePeftModelDelegatingCaching(_FakePeftModel):
+    def __getattr__(self, name):
+        if name == "caching":
+            return self.base_model.model.caching
+        raise AttributeError(name)
+
+
 class Stage345IntegrationTests(unittest.TestCase):
     def test_lumina_generation_proxy_exposes_cache_hooks_without_bypassing_lora(self):
         base = _FakeLuminaBaseModel()
@@ -109,6 +116,14 @@ class Stage345IntegrationTests(unittest.TestCase):
         self.assertEqual(base.cached, [True])
         self.assertEqual(wrapped("tokens", infer=True), "forwarded")
         self.assertEqual(peft.forward_calls, [(("tokens",), {"infer": True})])
+
+    def test_lumina_generation_proxy_ignores_peft_dynamic_caching_attr(self):
+        base = _FakeLuminaBaseModel()
+        peft = _FakePeftModelDelegatingCaching(base)
+        wrapped = _as_lumina_generation_model(peft)
+        self.assertIsNot(wrapped, peft)
+        wrapped.module.caching(False)
+        self.assertEqual(base.cached, [False])
 
     def test_mmu_localizer_selector_projects_cells_to_token_mask(self):
         selector = MMULocalizerSelector('{"has_error":true,"corrupted_cells_4x4":["D3"]}', grid_size=4, token_grid_size=64)
