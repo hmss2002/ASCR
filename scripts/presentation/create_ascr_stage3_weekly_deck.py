@@ -218,15 +218,15 @@ def build_deck() -> Presentation:
         ("P2", "Dataset build", GREEN),
         ("P3", "Selector baselines", GREEN),
         ("P4", "MMU/LoRA", AMBER),
-        ("P5", "ASCR loop", SLATE),
+        ("P5", "Loop wired", GREEN),
     ]
     for i, (p, text, color) in enumerate(phases):
         phase_chip(slide, Inches(xs[i]), Inches(1.75), p, text, color)
         if i < len(phases) - 1:
             arrow(slide, Inches(xs[i] + 1.65), Inches(1.99), Inches(xs[i + 1] - 0.08), Inches(1.99), LINE)
     bullet_box(slide, Inches(0.85), Inches(3.0), Inches(3.75), Inches(2.4), "Completed / 已完成", ["P0 research direction reset", "P1 smoke locality gate", "P2 self-corruption dataset tooling", "P3 baseline gate on Hard64"], GREEN)
-    bullet_box(slide, Inches(4.8), Inches(3.0), Inches(3.75), Inches(2.4), "In progress / 进行中", ["P4 repair_cells SFT + LoRA pipeline", "1024px H200/L40S training profiles", "Parse-rate-first evaluation"], AMBER)
-    bullet_box(slide, Inches(8.75), Inches(3.0), Inches(3.75), Inches(2.4), "Next / 下一步", ["P5 loop integration after useful selector", "Synthetic localization + image-quality evaluation", "No claims beyond current evidence"], BLUE)
+    bullet_box(slide, Inches(4.8), Inches(3.0), Inches(3.75), Inches(2.4), "In progress / 进行中", ["P4 repair_cells LoRA is runnable", "Format still unstable", "Localization quality is the blocker"], AMBER)
+    bullet_box(slide, Inches(8.75), Inches(3.0), Inches(3.75), Inches(2.4), "Next / 下一步", ["P5 loop engineering verified", "Run oracle upper bound", "Compare image-space teacher loop"], BLUE)
     add_footer(slide, 3)
 
     # 4
@@ -304,7 +304,7 @@ def build_deck() -> Presentation:
 
     # 10
     slide = add_slide(prs)
-    add_title(slide, "Phase 5: ASCR Loop Integration / 闭环修复", "Only after a useful selector or LoRA localizer")
+    add_title(slide, "Phase 5: ASCR Loop Integration / 闭环修复", "Engineering loop now runs; localizer quality is the bottleneck")
     nodes = [
         ("Lumina\nbaseline image", BLUE),
         ("Predict\nrepair cells", TEAL),
@@ -316,28 +316,36 @@ def build_deck() -> Presentation:
         flow_node(slide, Inches(0.85 + i * 2.4), Inches(1.75), Inches(1.85), Inches(0.72), t, WHITE, c)
         if i < len(nodes) - 1:
             arrow(slide, Inches(2.7 + i * 2.4), Inches(2.11), Inches(3.15 + i * 2.4), Inches(2.11))
-    bullet_box(slide, Inches(0.85), Inches(3.45), Inches(5.6), Inches(2.0), "Initial policy", ["If mask empty: stop", "If mask nonempty: reopen selected cells", "Add scorer only after nontrivial masks"], BLUE)
-    bullet_box(slide, Inches(6.9), Inches(3.45), Inches(5.6), Inches(2.0), "Artifacts to keep", ["Trace and selected indices", "Selected token/cell count", "Decoded before/after images", "Final summary metrics"], TEAL)
+    bullet_box(slide, Inches(0.85), Inches(3.45), Inches(5.6), Inches(2.0), "New evidence", ["Single-sample smoke completed: 161923", "2-sample benchmark completed: 161943", "ok_count=2, error_count=0"], GREEN)
+    bullet_box(slide, Inches(6.9), Inches(3.45), Inches(5.6), Inches(2.0), "But localizer failed", ["target=B5 in both samples", "LoRA predicted D/F/G rows", "hit_any=0/2 despite reopen_changed=1.0"], RED)
     add_footer(slide, 10)
 
     # 11
     slide = add_slide(prs)
-    add_title(slide, "This Week's Deliverables / 本周完成", "Evidence-backed summary")
-    bullet_box(slide, Inches(0.8), Inches(1.55), Inches(3.7), Inches(3.4), "Research design", ["Stage 3 scoped to discrete-token corruption", "Phase 0-5 roadmap clarified", "Training labels defined from token masks"], BLUE)
-    bullet_box(slide, Inches(4.85), Inches(1.55), Inches(3.7), Inches(3.4), "Pipeline", ["Clean-token generation path", "Repair dataset config: 40k rows target", "SFT conversion and LoRA runners"], TEAL)
-    bullet_box(slide, Inches(8.9), Inches(1.55), Inches(3.7), Inches(3.4), "Validation gates", ["Locality smoke passed", "Hard64 selector baseline gate cleared", "Phase 4 not yet fully cleared"], AMBER)
-    label(slide, Inches(1.0), Inches(5.55), Inches(11.0), Inches(0.55), "No formal before/after image-quality result is claimed here unless already recorded in the repository.", 13, MUTED)
+    add_title(slide, "Stage-5 Result: Working Loop, Failed Native Localizer", "The result is useful as a negative baseline, not as the final selector")
+    bullet_box(slide, Inches(0.8), Inches(1.45), Inches(3.7), Inches(3.55), "What succeeded", ["clean/corrupt/reopen/decode path runs", "LoRA answer path no longer crashes", "Artifacts: trace, masks, before/after images"], GREEN)
+    bullet_box(slide, Inches(4.85), Inches(1.45), Inches(3.7), Inches(3.55), "What failed", ["raw MMU text is malformed/repetitive", "parser recovers cells but not meaning", "selected cells miss true target"], RED)
+    bullet_box(slide, Inches(8.9), Inches(1.45), Inches(3.7), Inches(3.55), "How to report it", ["Current LoRA = failed baseline", "Do not claim repair quality yet", "Use as evidence for stronger supervision"], AMBER)
+    label(slide, Inches(0.9), Inches(5.45), Inches(11.6), Inches(0.7), "Interpretation: Stage 5 infrastructure is validated; Stage 4 native localizer is the research bottleneck.", 13, NAVY)
     add_footer(slide, 11)
 
     # 12
     slide = add_slide(prs)
-    add_title(slide, "Next Actions / 下一步", "Concrete server continuation")
-    bullet_box(slide, Inches(0.8), Inches(1.45), Inches(5.6), Inches(2.2), "Short-term", ["Generate/verify clean tokens", "Build repair_cells_40k dataset", "Prepare SFT and convert Lumina JSONL"], BLUE)
-    bullet_box(slide, Inches(6.9), Inches(1.45), Inches(5.6), Inches(2.2), "Training gate", ["Train one authoritative LoRA adapter", "Probe parse_rate first", "Only interpret hit_any / IoU after parse is reliable"], TEAL)
-    bullet_box(slide, Inches(0.8), Inches(4.15), Inches(11.7), Inches(1.45), "Open risk", ["If 8-GPU 1024px LoRA OOMs, inspect DDP log and use H200/L40S fallback profiles; do not train many independent adapters and merge them."], AMBER)
+    add_title(slide, "Decision Point: Add Oracle + Stage-2 Image-Space Teacher", "Do not abandon Stage 3 yet; isolate whether the bottleneck is localizer or reopen")
+    bullet_box(slide, Inches(0.8), Inches(1.45), Inches(5.6), Inches(2.4), "Oracle upper bound", ["Use true target_cells directly", "Same prompt/corruption/reopen path", "If oracle fails: generator/reopen problem", "If oracle works: localizer problem"], BLUE)
+    bullet_box(slide, Inches(6.9), Inches(1.45), Inches(5.6), Inches(2.4), "Stage-2 style branch", ["External API analyzes decoded images", "Image-space evaluator/localizer, not VQ-token input", "Use as teacher/control loop", "Compare to native LoRA selector"], TEAL)
+    bullet_box(slide, Inches(0.8), Inches(4.45), Inches(11.7), Inches(1.15), "Recommendation", ["Keep token-repair Stage 3 as main experimental scaffold, but add image-space external-teacher loop as an upper-bound/control path before more native-localizer training."], AMBER)
     add_footer(slide, 12)
 
     # 13
+    slide = add_slide(prs)
+    add_title(slide, "Next Actions / 下一步", "Concrete server continuation")
+    bullet_box(slide, Inches(0.8), Inches(1.45), Inches(5.6), Inches(2.2), "Short-term", ["Implement oracle selector mode", "Run oracle vs LoRA on same prompts/seeds", "Summarize hit_any, mask size, reopen_changed"], BLUE)
+    bullet_box(slide, Inches(6.9), Inches(1.45), Inches(5.6), Inches(2.2), "Image-space control", ["Prototype external API evaluator on decoded corrupted images", "Keep outputs clearly labeled as teacher/API branch", "Do not mix teacher labels into Stage-3 self-supervision"], TEAL)
+    bullet_box(slide, Inches(0.8), Inches(4.15), Inches(11.7), Inches(1.45), "Training implication", ["Only retrain native localizer after the oracle branch shows the reopen mechanism can produce meaningful improvements."], AMBER)
+    add_footer(slide, 13)
+
+    # 14
     slide = add_slide(prs)
     add_title(slide, "Evidence Sources / 依据文件", "Repository files used to avoid unsupported claims")
     bullet_box(slide, Inches(0.8), Inches(1.45), Inches(11.7), Inches(4.25), "Checked files", [
@@ -348,8 +356,10 @@ def build_deck() -> Presentation:
         "docs/SERVER_AI_TASK_STAGE3_SELF_CORRUPT_SELECTORS.md",
         "configs/stage3/self_corrupt/token_repair_40k.yaml",
         "configs/stage4/self_corrupt/mmu_sft_token_repair_8x8.yaml",
+        "outputs/stage5_self_corrupt/token_repair_8x8_bench2_peftfix_1h/summary.json",
+        "outputs/stage5_self_corrupt/token_repair_8x8_bench2_peftfix_1h/comparison/stage5_loop_comparison.json",
     ], SLATE)
-    add_footer(slide, 13)
+    add_footer(slide, 14)
 
     return prs
 
