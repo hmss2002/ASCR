@@ -20,6 +20,13 @@ from ascr.cli.stage4_batch_train import main as stage4_batch_train_main
 from ascr.cli.stage4_generate_config import build_config
 from ascr.cli.stage4_merge_probe_shards import merge_probe_shards
 from ascr.cli.stage4_server_campaign import build_campaign_plan, write_campaign_outputs
+from ascr.cli.stage4_speed_report import build_speed_report, write_outputs as write_speed_outputs
+from ascr.training.train_lumina_lora_smoke import (
+    _clear_lumina_lora_caches,
+    _lumina_lora_cache_report,
+    _prepare_lumina_lora_batch,
+    _should_validate_epoch,
+)
 from ascr.cli.stage4_compare_input_modes import compare_probe_summaries, write_comparison
 from ascr.cli.stage4_analyze_probe_failures import analyze_probe_failures, write_outputs as write_failure_outputs
 from ascr.cli.stage4_build_run_registry import build_registry, write_outputs as write_registry_outputs
@@ -735,10 +742,82 @@ class Stage4MmuLoraTests(unittest.TestCase):
         self.assertEqual(train["checkpoint_every_epochs"], 1)
         self.assertEqual(train["early_stopping_patience"], 3)
         self.assertEqual(train["early_stopping_min_delta"], 0.0)
-        self.assertEqual(train["progress_every_steps"], 25)
+        self.assertEqual(train["optimizer"], "adamw")
+        self.assertFalse(train["gradient_checkpointing"])
+        self.assertEqual(train["validation_every_epochs"], 3)
+        self.assertEqual(train["progress_every_steps"], 50)
         self.assertTrue(train["progress_bar"])
         self.assertIn("locality_hard256_v1", probe["dataset"])
         self.assertEqual(probe["grid_size"], 8)
+        l40s_train = build_config(4, dataset="hard256", kind="train", profile="l40s_1024_gc")
+        self.assertEqual(l40s_train["optimizer"], "adamw8bit")
+        self.assertTrue(l40s_train["gradient_checkpointing"])
+        self.assertEqual(l40s_train["progress_every_steps"], 25)
+
+    def test_validation_every_epochs_keeps_final_validation(self):
+        class Args:
+            validation_every_epochs = 3
+
+        self.assertFalse(_should_validate_epoch(Args(), 0, 5))
+        self.assertFalse(_should_validate_epoch(Args(), 1, 5))
+        self.assertTrue(_should_validate_epoch(Args(), 2, 5))
+        self.assertTrue(_should_validate_epoch(Args(), 4, 5))
+
+    def test_lumina_lora_prepare_batch_caches_image_and_text(self):
+        class Args:
+            image_size = 32
+            prompt_max_length = 16
+            answer_max_length = 8
+            answer_mask_mode = "all"
+            ignore_pad_labels = True
+            max_seq_len = 64
+
+        class FakeIds:
+            def __init__(self, values):
+                self.values = values
+
+            def __getitem__(self, index):
+                return self
+
+            def tolist(self):
+                return list(self.values)
+
+        class FakeTokenizer:
+            def __init__(self):
+                self.calls = 0
+
+            def __call__(self, text, **_kwargs):
+                self.calls += 1
+                return type("Tokenized", (), {"input_ids": FakeIds([10, 11, 12])})()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            image_path = root / "image.pkl"
+            with image_path.open("wb") as handle:
+                pickle.dump({"input_ids": [1, 2, 3, 4], "height": 32, "width": 32}, handle)
+            row = {
+                "user_image": str(image_path),
+                "system_prompt": "system",
+                "user_prompt": "prompt",
+                "answer_text": "{\"cells\":[]}",
+            }
+            tokenizer = FakeTokenizer()
+            break_calls = {"count": 0}
+
+            def add_break_line(tokens, _height, _width, new_number):
+                break_calls["count"] += 1
+                return list(tokens) + [new_number]
+
+            _clear_lumina_lora_caches()
+            _prepare_lumina_lora_batch(None, tokenizer, add_break_line, row, Args())
+            _prepare_lumina_lora_batch(None, tokenizer, add_break_line, row, Args())
+            report = _lumina_lora_cache_report()
+
+        self.assertEqual(tokenizer.calls, 2)
+        self.assertEqual(break_calls["count"], 1)
+        self.assertEqual(report["image_token_cache_size"], 1)
+        self.assertEqual(report["text_token_cache_size"], 2)
+        _clear_lumina_lora_caches()
 
     def test_merge_probe_shards_recomputes_summary(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -807,11 +886,82 @@ class Stage4MmuLoraTests(unittest.TestCase):
             outputs = write_campaign_outputs(root, plan)
             self.assertEqual(plan["slurm_array"], "0-2")
             self.assertIn("schema_example", plan["prompt_policy"])
-            self.assertIn("PROFILE=l40s_1024_gc sbatch --parsable --array=0-2", plan["primary_submit_command"])
+            self.assertIn("PROFILE=h200_1024 sbatch --parsable --array=0-2", plan["primary_submit_command"])
             self.assertEqual([item["grid"] for item in plan["split_submit_commands"]], [4, 8, 16])
+            self.assertTrue(any("lora_h200_1024px_adamw" in path for path in plan["expected_outputs"]))
             shell_text = Path(outputs["campaign_shell"]).read_text(encoding="utf-8")
             self.assertIn("MODE=${MODE:-plan}", shell_text)
             self.assertTrue(Path(outputs["campaign_manifest"]).exists())
+            fallback = build_campaign_plan(grids=[4], output_dir=root, profile="l40s_1024_gc")
+            self.assertIn("PROFILE=l40s_1024_gc", fallback["primary_submit_command"])
+            self.assertTrue(any("lora_l40s_1024px_gc_adam8bit" in path for path in fallback["expected_outputs"]))
+
+    def test_speed_report_compares_training_manifests(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            l40s = root / "l40s" / "training_manifest.json"
+            h200 = root / "h200" / "training_manifest.json"
+            l40s.parent.mkdir()
+            h200.parent.mkdir()
+            base_payload = {
+                "row_count": 100,
+                "epochs": 2,
+                "completed_epochs": 2,
+                "world_size": 8,
+                "torch_dtype": "bfloat16",
+                "max_seq_len": 6144,
+                "lora_r": 8,
+                "final_loss": 1.0,
+                "gradient_checkpointing_report": {"backend": "disabled"},
+                "cache_report": {"image_token_cache_size": 8, "text_token_cache_size": 16},
+            }
+            l40s.write_text(json.dumps({
+                **base_payload,
+                "output_dir": str(l40s.parent),
+                "optimizer": "adamw8bit",
+                "gradient_checkpointing": True,
+                "epoch_summaries": [
+                    {"elapsed_s": 100.0, "approx_global_samples_per_s": 2.0},
+                    {"elapsed_s": 100.0, "approx_global_samples_per_s": 2.0},
+                ],
+            }), encoding="utf-8")
+            h200.write_text(json.dumps({
+                **base_payload,
+                "output_dir": str(h200.parent),
+                "optimizer": "adamw",
+                "gradient_checkpointing": False,
+                "validation_every_epochs": 3,
+                "epoch_summaries": [
+                    {"elapsed_s": 50.0, "approx_global_samples_per_s": 4.0, "validated": False},
+                    {"elapsed_s": 50.0, "approx_global_samples_per_s": 4.0, "validated": True},
+                ],
+            }), encoding="utf-8")
+            report = build_speed_report([l40s, h200], labels=["l40s", "h200"], baseline_label="l40s")
+            outputs = write_speed_outputs(root / "report", report)
+            self.assertEqual(report["rows"][0]["mean_global_samples_per_s"], 2.0)
+            self.assertEqual(report["rows"][1]["speedup_vs_baseline"], 2.0)
+            self.assertEqual(report["rows"][1]["validation_every_epochs"], 3)
+            self.assertEqual(report["rows"][1]["validated_epoch_count"], 1)
+            self.assertEqual(report["rows"][1]["image_token_cache_size"], 8)
+            self.assertTrue(Path(outputs["speed_report_json"]).exists())
+
+    def test_speed_report_uses_single_process_samples_per_s(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            manifest = root / "single" / "training_manifest.json"
+            manifest.parent.mkdir()
+            manifest.write_text(json.dumps({
+                "row_count": 10,
+                "epochs": 1,
+                "completed_epochs": 1,
+                "optimizer": "adamw",
+                "gradient_checkpointing": False,
+                "epoch_summaries": [
+                    {"elapsed_s": 20.0, "samples_per_s": 0.5},
+                ],
+            }), encoding="utf-8")
+            report = build_speed_report([manifest], labels=["single"])
+        self.assertEqual(report["rows"][0]["mean_global_samples_per_s"], 0.5)
 
 
 if __name__ == "__main__":

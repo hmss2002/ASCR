@@ -6,7 +6,11 @@ set -euo pipefail
 PROJECT_ROOT=${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.."; pwd)}
 cd "$PROJECT_ROOT"
 
-PYTHON_BIN=${PYTHON_BIN:-python}
+if [[ -z "${PYTHON_BIN+x}" && -x "$PROJECT_ROOT/.venv-lumina/bin/python" ]]; then
+  PYTHON_BIN="$PROJECT_ROOT/.venv-lumina/bin/python"
+else
+  PYTHON_BIN=${PYTHON_BIN:-python}
+fi
 PROMPTS=${PROMPTS:-configs/benchmarks/prompts/stage3_token_repair_prompts_10k.txt}
 OUTPUT_ROOT=${OUTPUT_ROOT:-outputs/stage3_token_repair/clean_tokens}
 NODE_INDEX=${NODE_INDEX:-${SLURM_ARRAY_TASK_ID:-${SLURM_PROCID:-0}}}
@@ -17,6 +21,9 @@ PROMPT_LIMIT=${PROMPT_LIMIT:-$PROMPTS_PER_NODE}
 SEED=${SEED:-0}
 IMAGE_SIZE=${IMAGE_SIZE:-1024}
 TOKEN_GRID_SIZE=${TOKEN_GRID_SIZE:-64}
+GENERATION_TIMESTEPS=${GENERATION_TIMESTEPS:-64}
+GUIDANCE_SCALE=${GUIDANCE_SCALE:-4.0}
+GENERATION_TEMPERATURE=${GENERATION_TEMPERATURE:-1.0}
 LUMINA_REPO=${LUMINA_REPO:-third_party/Lumina-DiMOO}
 LUMINA_MODEL_PATH=${LUMINA_MODEL_PATH:-models/lumina-dimoo}
 
@@ -64,6 +71,9 @@ for ((rank=0; rank<GPU_WORKERS; rank++)); do
     --device cuda
     --image-size "$IMAGE_SIZE"
     --token-grid-size "$TOKEN_GRID_SIZE"
+    --generation-timesteps "$GENERATION_TIMESTEPS"
+    --guidance-scale "$GUIDANCE_SCALE"
+    --temperature "$GENERATION_TEMPERATURE"
   )
   if [[ "${MOCK:-0}" == "1" ]]; then
     args+=(--mock)

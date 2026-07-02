@@ -16,9 +16,9 @@ if [[ -z "${PYTHON_BIN:-}" ]]; then
   fi
 fi
 
-CONFIG=${CONFIG:-configs/stage5/self_corrupt/ascr_loop_smoke.yaml}
+CONFIG=${CONFIG:-configs/stage5/self_corrupt/token_repair_8x8.yaml}
 PROMPT_FILE=${PROMPT_FILE:-configs/benchmarks/prompts/t2i_compbench_hard64.txt}
-OUTPUT_ROOT=${OUTPUT_ROOT:-outputs/stage5_self_corrupt/multi_prompt}
+OUTPUT_ROOT=${OUTPUT_ROOT:-outputs/stage5_self_corrupt/token_repair_8x8_epoch3_multi_prompt}
 GPU_IDS=${GPU_IDS:-$(bash scripts/slurm/dynamic_gpu_detect.sh --ids)}
 IFS=',' read -r -a GPU_ID_ARRAY <<< "$GPU_IDS"
 GPU_COUNT=${GPU_COUNT:-${#GPU_ID_ARRAY[@]}}

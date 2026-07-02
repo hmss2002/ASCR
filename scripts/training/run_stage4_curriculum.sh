@@ -10,7 +10,7 @@ PYTHON_BIN=${PYTHON_BIN:-python}
 export LUMINA_REPO=${LUMINA_REPO:-third_party/Lumina-DiMOO}
 export LUMINA_MODEL_PATH=${LUMINA_MODEL_PATH:-models/lumina-dimoo}
 
-PROFILE=${PROFILE:-l40s}
+PROFILE=${PROFILE:-h200_1024}
 GRIDS=${GRIDS:-"4 8 16"}
 BASE_DIR=${BASE_DIR:-outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum}
 
@@ -37,12 +37,18 @@ config_for() {
     train:grid4:l40s_1024_gc) echo configs/stage4/self_corrupt/mmu_lora_train_hard64_grid4_vq_tokens_l40s_1024px_gc_adam8bit.yaml ;;
     train:grid8:l40s_1024_gc) echo configs/stage4/self_corrupt/mmu_lora_train_hard64_grid8_vq_tokens_l40s_1024px_gc_adam8bit.yaml ;;
     train:grid16:l40s_1024_gc) echo configs/stage4/self_corrupt/mmu_lora_train_hard64_grid16_vq_tokens_l40s_1024px_gc_adam8bit.yaml ;;
+    train:grid4:h200_1024|train:grid4:h200|train:grid4:current_server) echo configs/stage4/self_corrupt/mmu_lora_train_hard64_grid4_vq_tokens_h200_1024.yaml ;;
+    train:grid8:h200_1024|train:grid8:h200|train:grid8:current_server) echo configs/stage4/self_corrupt/mmu_lora_train_hard64_grid8_vq_tokens_h200_1024.yaml ;;
+    train:grid16:h200_1024|train:grid16:h200|train:grid16:current_server) echo configs/stage4/self_corrupt/mmu_lora_train_hard64_grid16_vq_tokens_h200_1024.yaml ;;
     probe:grid4:l40s) echo configs/stage4/self_corrupt/mmu_probe_lora_hard64_grid4_vq_tokens_l40s.yaml ;;
     probe:grid8:l40s) echo configs/stage4/self_corrupt/mmu_probe_lora_hard64_grid8_vq_tokens_l40s.yaml ;;
     probe:grid16:l40s) echo configs/stage4/self_corrupt/mmu_probe_lora_hard64_grid16_vq_tokens_l40s.yaml ;;
     probe:grid4:l40s_1024_gc) echo configs/stage4/self_corrupt/mmu_probe_lora_hard64_grid4_vq_tokens_l40s_1024px_gc.yaml ;;
     probe:grid8:l40s_1024_gc) echo configs/stage4/self_corrupt/mmu_probe_lora_hard64_grid8_vq_tokens_l40s_1024px_gc.yaml ;;
     probe:grid16:l40s_1024_gc) echo configs/stage4/self_corrupt/mmu_probe_lora_hard64_grid16_vq_tokens_l40s_1024px_gc.yaml ;;
+    probe:grid4:h200_1024|probe:grid4:h200|probe:grid4:current_server) echo configs/stage4/self_corrupt/mmu_probe_lora_hard64_grid4_vq_tokens_h200_1024.yaml ;;
+    probe:grid8:h200_1024|probe:grid8:h200|probe:grid8:current_server) echo configs/stage4/self_corrupt/mmu_probe_lora_hard64_grid8_vq_tokens_h200_1024.yaml ;;
+    probe:grid16:h200_1024|probe:grid16:h200|probe:grid16:current_server) echo configs/stage4/self_corrupt/mmu_probe_lora_hard64_grid16_vq_tokens_h200_1024.yaml ;;
     *) echo "Unsupported curriculum grid/profile/kind: grid${grid}/${PROFILE}/${kind}" >&2; return 2 ;;
   esac
 }
@@ -50,6 +56,7 @@ config_for() {
 probe_dir_for() {
   local grid=$1
   case "$PROFILE" in
+    h200|h200_1024|current_server) echo "$BASE_DIR/grid${grid}/vq_tokens/probe_lora_h200_1024px_eval" ;;
     l40s_1024_gc) echo "$BASE_DIR/grid${grid}/vq_tokens/probe_lora_l40s_1024px_gc_eval" ;;
     l40s) echo "$BASE_DIR/grid${grid}/vq_tokens/probe_lora_l40s_eval" ;;
     *) echo "Unsupported curriculum summary profile: $PROFILE" >&2; return 2 ;;
@@ -100,5 +107,5 @@ if [[ "$RUN_SUMMARY" == "1" ]]; then
   "$PYTHON_BIN" -m ascr.cli.stage4_summarize_curriculum \
     --summaries "${SUMMARY_ARGS[@]}" \
     --labels "${LABEL_ARGS[@]}" \
-    --output-dir "$BASE_DIR/curriculum_summary_l40s"
+    --output-dir "$BASE_DIR/curriculum_summary_${PROFILE}"
 fi

@@ -9,10 +9,35 @@ from pathlib import Path
 import stat
 
 
-DEFAULT_OUTPUT_DIR = "outputs/stage4_self_corrupt/campaigns/stage4_1024gc_schema_example"
-DEFAULT_PROFILE = "l40s_1024_gc"
+DEFAULT_OUTPUT_DIR = "outputs/stage4_self_corrupt/campaigns/stage4_h200_1024_schema_example"
+DEFAULT_PROFILE = "h200_1024"
 DEFAULT_GRIDS = (4, 8, 16)
 GRID_TO_ARRAY_INDEX = {4: 0, 8: 1, 16: 2}
+
+
+def profile_paths(profile):
+    if profile in {"h200", "h200_1024", "current_server"}:
+        return {
+            "campaign": "stage4_h200_1024_schema_example",
+            "train_dir": "lora_h200_1024px_adamw",
+            "probe_dir": "probe_lora_h200_1024px_eval",
+            "title": "Submit schema_example H200 1024px curriculum array",
+        }
+    if profile == "l40s_1024_gc":
+        return {
+            "campaign": "stage4_1024gc_schema_example",
+            "train_dir": "lora_l40s_1024px_gc_adam8bit",
+            "probe_dir": "probe_lora_l40s_1024px_gc_eval",
+            "title": "Submit schema_example 1024px GC curriculum array",
+        }
+    if profile == "l40s":
+        return {
+            "campaign": "stage4_l40s_schema_example",
+            "train_dir": "lora_l40s",
+            "probe_dir": "probe_lora_l40s_eval",
+            "title": "Submit schema_example L40S fallback curriculum array",
+        }
+    raise ValueError(f"Unsupported campaign profile: {profile}")
 
 
 def created_at_utc():
@@ -65,6 +90,7 @@ def build_campaign_plan(
     include_decoding_diagnostic=True,
 ):
     grids = parse_grids(grids)
+    profile_info = profile_paths(profile)
     grid_text = " ".join(str(grid) for grid in grids)
     array_selector = _array_selector(grids)
     primary_submit = (
@@ -90,8 +116,8 @@ def build_campaign_plan(
             ],
         },
         {
-            "id": "submit_schema_example_1024gc_curriculum",
-            "title": "Submit schema_example 1024px GC curriculum array",
+            "id": "submit_schema_example_curriculum",
+            "title": profile_info["title"],
             "intent": (
                 "Regenerate SFT with the schema_example default, convert to Lumina data, "
                 "train LoRA adapters, and probe each requested grid."
@@ -127,7 +153,7 @@ def build_campaign_plan(
     return {
         "schema_version": "ascr.stage4.server_campaign.v1",
         "created_at_utc": created_at_utc(),
-        "campaign": "stage4_1024gc_schema_example",
+        "campaign": profile_info["campaign"],
         "output_dir": str(output_dir),
         "prompt_policy": "schema_example is the Stage-4 default; legacy variants are reproducibility-only.",
         "profile": profile,
@@ -137,11 +163,11 @@ def build_campaign_plan(
         "split_submit_commands": _split_submit_commands(grids, profile),
         "steps": steps,
         "expected_outputs": [
-            f"outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/grid{grid}/vq_tokens/lora_l40s_1024px_gc_adam8bit/training_manifest.json"
+            f"outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/grid{grid}/vq_tokens/{profile_info['train_dir']}/training_manifest.json"
             for grid in grids
         ]
         + [
-            f"outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/grid{grid}/vq_tokens/probe_lora_l40s_1024px_gc_eval/summary.json"
+            f"outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/grid{grid}/vq_tokens/{profile_info['probe_dir']}/summary.json"
             for grid in grids
         ],
     }

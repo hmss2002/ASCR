@@ -167,11 +167,30 @@ FORCE_DOWNLOAD=1 MODE=download_prompts bash scripts/training/run_stage3_token_re
 FORCE_RESAMPLE=1 MODE=sample_prompts bash scripts/training/run_stage3_token_repair_dataset.sh
 ```
 
-Preferred clean-token generation, one multi-node job:
+Preferred clean-token generation on the current H200 server:
 
 ```bash
-MODE=submit_clean_multinode MULTINODE_NODES=4 PROMPTS_PER_TASK=2500 \
+MODE=submit_clean_h200 bash scripts/training/run_stage3_token_repair_dataset.sh
+```
+
+This submits 32 short array tasks with 4 GPUs each. The current account limit
+allows 16 GPUs concurrently, so this keeps the allocation full while finished
+tasks hand off to pending tasks.
+
+For explicit speed/quality experiments, lower Lumina clean-token sampling steps:
+
+```bash
+GENERATION_TIMESTEPS=32 MODE=submit_clean_h200 \
   bash scripts/training/run_stage3_token_repair_dataset.sh
+```
+
+Default remains `GENERATION_TIMESTEPS=64`; the manifest records timesteps,
+guidance scale, and temperature for each clean-token row.
+
+Full H200 pipeline submit, including dependent merge/build/SFT/train/probe:
+
+```bash
+bash scripts/training/run_h200_token_repair_pipeline.sh
 ```
 
 Fallback clean-token generation, job array where each task uses one 8-GPU node:
@@ -185,8 +204,15 @@ After clean jobs finish:
 
 ```bash
 MODE=merge_clean bash scripts/training/run_stage3_token_repair_dataset.sh
+MODE=report_clean REPORT_MIN_ROWS=10000 bash scripts/training/run_stage3_token_repair_dataset.sh
 MODE=build_dataset bash scripts/training/run_stage3_token_repair_dataset.sh
 ```
+
+`MODE=report_clean` writes a Stage3 clean-token report under the clean-token
+output root and fails on critical issues: too few rows, duplicate sample IDs,
+duplicate prompt indexes, malformed JSONL, or missing referenced token files.
+Unmanifested token files are reported so stale or still-running shard outputs
+are visible before building the dataset.
 
 Optional audit decode:
 
@@ -218,7 +244,8 @@ config:
 
 ```yaml
 progress_bar: true
-progress_every_steps: 25
+progress_every_steps: 50
+validation_every_epochs: 3
 ```
 
 Rank 0 prints flushed per-N-step progress in DDP runs, so Slurm logs should no
@@ -227,7 +254,7 @@ will not gain the new logging retroactively; resubmit if live progress is
 needed. To override without editing YAML:
 
 ```bash
-PROGRESS_EVERY_STEPS=10 PROGRESS_BAR=1 MODE=submit_train \
+PROGRESS_EVERY_STEPS=10 PROGRESS_BAR=1 VALIDATION_EVERY_EPOCHS=1 MODE=submit_train \
   bash scripts/training/run_stage4_token_repair_lora.sh
 ```
 
@@ -237,23 +264,41 @@ Probe trained LoRA:
 MODE=probe_lora bash scripts/training/run_stage4_token_repair_lora.sh
 ```
 
+Summarize measured training speed after `training_manifest.json` exists:
+
+```bash
+MODE=speed_report bash scripts/training/run_stage4_token_repair_lora.sh
+```
+
+If a previous L40S `training_manifest.json` is available, compare directly:
+
+```bash
+SPEED_BASELINE_MANIFESTS=outputs/path/to/l40s/training_manifest.json \
+SPEED_BASELINE_LABELS=l40s_1024_gc \
+SPEED_BASELINE_LABEL=l40s_1024_gc \
+MODE=speed_report bash scripts/training/run_stage4_token_repair_lora.sh
+```
+
 ## Expected Outputs
 
 - Raw DiffusionDB prompts: `configs/benchmarks/prompts/diffusiondb_10k.txt`
 - Training prompts: `configs/benchmarks/prompts/stage3_token_repair_prompts_10k.txt`
-- Clean token manifest: `outputs/stage3_token_repair/clean_tokens/clean_manifest.jsonl`
+- Clean token manifest: `outputs/stage3_token_repair/clean_tokens_h200_32x4/clean_manifest.jsonl`
+- Clean token report: `outputs/stage3_token_repair/clean_tokens_h200_32x4/report/stage3_clean_manifest_report.json`
 - Dataset: `outputs/stage3_token_repair/datasets/repair_cells_40k/dataset.jsonl`
 - Dataset manifest: `outputs/stage3_token_repair/datasets/repair_cells_40k/dataset_manifest.json`
 - SFT examples: `outputs/stage4_token_repair/repair_cells_8x8/sft/`
 - Lumina SFT JSONL: `outputs/stage4_token_repair/repair_cells_8x8/lumina_sft/`
-- LoRA adapter: `outputs/stage4_token_repair/repair_cells_8x8/lora_l40s_1024px_gc_adam8bit`
-- Probe summary: `outputs/stage4_token_repair/repair_cells_8x8/probe_lora_l40s_1024px_gc_eval/summary.json`
+- LoRA adapter: `outputs/stage4_token_repair/repair_cells_8x8/lora_h200_1024px_adamw`
+- Speed report: `outputs/stage4_token_repair/repair_cells_8x8/speed_report/stage4_speed_report.json`
+- Probe summary: `outputs/stage4_token_repair/repair_cells_8x8/probe_lora_h200_1024px_eval/summary.json`
 
 Do not commit outputs, datasets, model weights, adapter checkpoints, prompt downloads, logs, or cache directories.
 
 ## Success Criteria
 
 - Dataset has 30k positive rows and 10k negative rows.
+- Clean-token report passes with at least 10k rows and no missing token files or duplicate clean samples.
 - Every target JSON has exactly one key, `cells`.
 - Positive rows have nonempty cells.
 - Negative rows have empty cells.

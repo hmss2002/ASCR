@@ -16,10 +16,10 @@ if [[ -z "${PYTHON_BIN:-}" ]]; then
   fi
 fi
 MODE=${MODE:-loop}  # loop, benchmark, compare
-CONFIG=${CONFIG:-configs/stage5/self_corrupt/ascr_loop_smoke.yaml}
+CONFIG=${CONFIG:-configs/stage5/self_corrupt/token_repair_8x8.yaml}
 PROMPT=${PROMPT:-"a green bench and a blue bowl"}
 PROMPT_FILE=${PROMPT_FILE:-configs/benchmarks/prompts/t2i_compbench_hard64.txt}
-OUTPUT_DIR=${OUTPUT_DIR:-outputs/stage5_self_corrupt/loop_smoke}
+OUTPUT_DIR=${OUTPUT_DIR:-outputs/stage5_self_corrupt/token_repair_8x8_smoke_epoch3}
 LIMIT=${LIMIT:-16}
 MOCK_FLAG=${MOCK_FLAG:-}
 
@@ -35,7 +35,7 @@ case "$MODE" in
     "$PYTHON_BIN" -m ascr.cli.stage5_self_corrupt_benchmark \
       --prompts "$PROMPT_FILE" \
       --domain hard64_self_corrupt \
-      --config "${BENCHMARK_CONFIG:-configs/stage5/self_corrupt/benchmark_hard64.yaml}" \
+      --config "${BENCHMARK_CONFIG:-$CONFIG}" \
       --limit "$LIMIT" \
       --keep-going \
       --output-dir "$OUTPUT_DIR" \

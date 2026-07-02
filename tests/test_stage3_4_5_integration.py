@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from types import SimpleNamespace
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -7,6 +8,7 @@ from unittest.mock import patch
 from ascr.analysis.stage4_failure_router import route_stage4_failure
 from ascr.analysis.stage6_transfer_metrics import summarize_transfer_gap
 from ascr.cli.stage3_sample_prompts import sample_prompts
+from ascr.cli.stage6_transfer_probe import run_transfer_probe
 from ascr.cli.stage5_self_corrupt_loop import run_stage5_loop
 from ascr.cli.stage5_compare_loop_results import summarize_loop_manifest
 from ascr.selectors.mmu_localizer_selector import MMULocalizerSelector
@@ -200,6 +202,40 @@ class Stage345IntegrationTests(unittest.TestCase):
         )
         self.assertEqual(metrics["synthetic_hit_any_rate"], 1.0)
         self.assertEqual(metrics["transfer_nonempty_rate"], 1.0)
+
+    def test_stage6_transfer_probe_uses_token_repair_schema_from_config(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            prompts = root / "prompts.txt"
+            prompts.write_text("a green bench and a blue bowl\n", encoding="utf-8")
+            config = root / "transfer.yaml"
+            config.write_text(
+                "mock: true\n"
+                "grid_size: 8\n"
+                "token_grid_size: 64\n"
+                "max_selected_cells: 8\n"
+                "target_schema: repair_cells\n",
+                encoding="utf-8",
+            )
+            summary = run_transfer_probe(SimpleNamespace(
+                prompts=str(prompts),
+                limit=1,
+                lora_path=None,
+                config=str(config),
+                output_dir=str(root / "transfer"),
+                grid_size=4,
+                token_grid_size=64,
+                max_selected_cells=4,
+                target_schema=None,
+                max_new_tokens=384,
+                seed=0,
+                mock=True,
+            ))
+            self.assertEqual(summary["grid_size"], 8)
+            self.assertEqual(summary["target_schema"], "repair_cells")
+            row = json.loads((root / "transfer" / "manifest.jsonl").read_text(encoding="utf-8").splitlines()[0])
+            self.assertEqual(row["grid_size"], 8)
+            self.assertEqual(row["target_schema"], "repair_cells")
 
 
 if __name__ == "__main__":

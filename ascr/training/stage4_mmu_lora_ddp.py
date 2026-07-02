@@ -24,9 +24,12 @@ from ascr.training.train_lumina_lora_smoke import (
     _jsonl_rows,
     _load_training_stack,
     _log_training_progress,
+    _lumina_lora_cache_report,
     _mean_lora_loss,
     _prepare_lumina_lora_batch,
     _progress_every_steps,
+    _should_validate_epoch,
+    _validation_every_epochs,
     _save_epoch_checkpoint,
     _trainable_parameters,
     build_parser as build_lora_parser,
@@ -66,6 +69,7 @@ def _resolve_lora_args(argv=None):
         "checkpoint_every_epochs",
         "early_stopping_patience",
         "early_stopping_min_delta",
+        "validation_every_epochs",
         "progress_bar",
         "progress_every_steps",
         "gradient_checkpointing",
@@ -374,7 +378,8 @@ def train_lumina_lora_ddp(argv=None):
         dist.all_reduce(avg_tensor, op=dist.ReduceOp.SUM)
         avg_tensor /= env["world_size"]
         val_loss = None
-        if val_rows:
+        should_validate = bool(val_rows) and _should_validate_epoch(args, epoch, int(args.epochs))
+        if should_validate:
             local_val_rows = val_rows[env["rank"]::env["world_size"]]
             local_val_loss = _mean_lora_loss(
                 torch,
@@ -398,6 +403,7 @@ def train_lumina_lora_ddp(argv=None):
                 "epoch": epoch,
                 "ddp_avg_loss": float(avg_tensor.item()),
                 "val_loss": val_loss,
+                "validated": bool(should_validate),
                 "elapsed_s": elapsed_s,
                 "local_steps": int(count),
                 "world_size": int(env["world_size"]),
@@ -466,6 +472,7 @@ def train_lumina_lora_ddp(argv=None):
             "device_map": "none",
             "gradient_checkpointing": bool(args.gradient_checkpointing),
             "gradient_checkpointing_report": gradient_checkpointing_report,
+            "cache_report": _lumina_lora_cache_report(),
             "lora_parameter_report": lora_parameter_report,
             "rank_lora_reports": rank_lora_reports,
             "ddp_constructor_options": {key: str(value) for key, value in ddp_options.items()},
@@ -475,6 +482,7 @@ def train_lumina_lora_ddp(argv=None):
             "checkpoint_every_epochs": int(args.checkpoint_every_epochs or 0),
             "early_stopping_patience": int(args.early_stopping_patience or 0),
             "early_stopping_min_delta": float(args.early_stopping_min_delta),
+            "validation_every_epochs": _validation_every_epochs(args),
             "progress_bar": bool(getattr(args, "progress_bar", True)),
             "progress_every_steps": _progress_every_steps(args),
             "stopped_early": stopped_early,

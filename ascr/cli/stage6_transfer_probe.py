@@ -11,7 +11,11 @@ from ascr.core.config import load_config
 from ascr.evaluators.lumina_native import call_native_answer
 from ascr.generators.lumina_native import LuminaNativeEngine
 from ascr.selectors.mmu_localizer_selector import MMULocalizerSelector
-from ascr.training.stage4_mmu_lora import mmu_localization_prompt
+from ascr.training.stage4_mmu_lora import (
+    TARGET_SCHEMA_LOCALIZATION_CELLS,
+    mmu_localization_prompt,
+    normalise_target_schema,
+)
 
 
 def read_prompts(path, limit=None):
@@ -57,6 +61,9 @@ def run_transfer_probe(args):
     grid_size = int(config.get("grid_size", args.grid_size))
     token_grid_size = int(config.get("token_grid_size", args.token_grid_size))
     max_selected_cells = int(config.get("max_selected_cells", args.max_selected_cells))
+    target_schema = normalise_target_schema(
+        args.target_schema or config.get("target_schema", TARGET_SCHEMA_LOCALIZATION_CELLS)
+    )
     gen_engine = _engine(config, mock=args.mock)
     mmu_engine = _engine(config, lora_path=args.lora_path or config.get("lora_path"), mock=args.mock)
     rows = []
@@ -70,7 +77,7 @@ def run_transfer_probe(args):
             prompt,
             grid_size=grid_size,
             max_selected_cells=max_selected_cells,
-            target_schema="localization_cells",
+            target_schema=target_schema,
         )
         try:
             raw_text, method = call_native_answer(mmu_engine, question, vq_ids=vq_ids, max_new_tokens=int(args.max_new_tokens))
@@ -93,6 +100,8 @@ def run_transfer_probe(args):
             "vq_ids_path": write_json(sample_dir / "vq_ids.json", vq_ids),
             "raw_mmu_text": raw_text,
             "answer_method": method,
+            "target_schema": target_schema,
+            "grid_size": grid_size,
             "lora_cells": cells,
             "predicted_cells": cells,
             "status": status,
@@ -107,6 +116,8 @@ def run_transfer_probe(args):
         "row_count": len(rows),
         "parsed_count": sum(1 for row in rows if row["status"] == "parsed"),
         "nonempty_count": sum(1 for row in rows if row.get("lora_cells")),
+        "target_schema": target_schema,
+        "grid_size": grid_size,
         "manifest": manifest,
         "output_dir": str(output_dir),
     }
@@ -124,6 +135,7 @@ def build_parser():
     parser.add_argument("--grid-size", type=int, default=4)
     parser.add_argument("--token-grid-size", type=int, default=64)
     parser.add_argument("--max-selected-cells", type=int, default=4)
+    parser.add_argument("--target-schema", default=None)
     parser.add_argument("--max-new-tokens", type=int, default=384)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--mock", action="store_true")
@@ -138,4 +150,3 @@ def main(argv=None):
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

@@ -29,8 +29,8 @@ mkdir -p "$OUTPUT_ROOT"
 
 "$PYTHON_BIN" -m ascr.cli.stage5_self_corrupt_benchmark \
   --prompts "$PROMPTS" \
-  --domain mock_self_corrupt \
-  --config configs/stage5/self_corrupt/benchmark_hard64.yaml \
+  --domain token_repair_8x8_self_corrupt \
+  --config configs/stage5/self_corrupt/token_repair_8x8.yaml \
   --limit 2 \
   --keep-going \
   --mock \

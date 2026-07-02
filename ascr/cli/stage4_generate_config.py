@@ -18,6 +18,12 @@ DATASETS = {
 }
 
 
+def normalise_profile(profile):
+    if profile in {"h200", "h200_1024", "current_server"}:
+        return "h200_1024"
+    return profile
+
+
 def _dump_yaml(path, payload):
     lines = []
     for key, value in payload.items():
@@ -34,8 +40,44 @@ def _dump_yaml(path, payload):
     return str(path)
 
 
-def build_config(grid, profile="l40s_1024_gc", prompt_variant="schema_example", kind="train", dataset="hard64"):
+def _profile_parts(profile):
+    profile = normalise_profile(profile)
+    if profile == "l40s_1024_gc":
+        return {
+            "suffix": "l40s_1024px_gc",
+            "adapter": "lora_l40s_1024px_gc_adam8bit",
+            "optimizer": "adamw8bit",
+            "gradient_checkpointing": True,
+            "gradient_checkpointing_fallback": "force",
+            "validation_every_epochs": 1,
+            "progress_every_steps": 25,
+        }
+    if profile == "h200_1024":
+        return {
+            "suffix": "h200_1024px",
+            "adapter": "lora_h200_1024px_adamw",
+            "optimizer": "adamw",
+            "gradient_checkpointing": False,
+            "gradient_checkpointing_fallback": "off",
+            "validation_every_epochs": 3,
+            "progress_every_steps": 50,
+        }
+    if profile == "l40s":
+        return {
+            "suffix": "l40s",
+            "adapter": "lora_l40s",
+            "optimizer": "adamw",
+            "gradient_checkpointing": True,
+            "gradient_checkpointing_fallback": "auto",
+            "validation_every_epochs": 1,
+            "progress_every_steps": 25,
+        }
+    raise ValueError(f"Unsupported Stage-4 profile: {profile}")
+
+
+def build_config(grid, profile="h200_1024", prompt_variant="schema_example", kind="train", dataset="hard64"):
     grid = int(grid)
+    profile = normalise_profile(profile)
     if dataset not in DATASETS:
         raise ValueError(f"Unsupported dataset: {dataset}")
     dataset_meta = DATASETS[dataset]
@@ -57,8 +99,9 @@ def build_config(grid, profile="l40s_1024_gc", prompt_variant="schema_example", 
             "prompt_variant": prompt_variant,
         }
     if kind == "probe":
-        suffix = "l40s_1024px_gc" if profile == "l40s_1024_gc" else "l40s"
-        adapter = f"lora_{suffix}_adam8bit" if profile == "l40s_1024_gc" else "lora_l40s"
+        profile_parts = _profile_parts(profile)
+        suffix = profile_parts["suffix"]
+        adapter = profile_parts["adapter"]
         return {
             "dataset": dataset_meta["dataset"],
             "output_dir": f"{base_dir}/probe_lora_{suffix}_eval",
@@ -83,19 +126,18 @@ def build_config(grid, profile="l40s_1024_gc", prompt_variant="schema_example", 
             "answer_temperature": 0.0,
             "answer_cfg_scale": 0.0,
         }
-    if profile != "l40s_1024_gc":
-        raise ValueError(f"Unsupported generated train profile: {profile}")
+    profile_parts = _profile_parts(profile)
     return {
         "repo_path": "third_party/Lumina-DiMOO",
         "checkpoint_path": "models/lumina-dimoo",
         "data_jsonl": f"{base_dir}/lumina_sft/train.jsonl",
         "val_jsonl": f"{base_dir}/lumina_sft/val.jsonl",
-        "output_dir": f"{base_dir}/lora_l40s_1024px_gc_adam8bit",
+        "output_dir": f"{base_dir}/{profile_parts['adapter']}",
         "epochs": 15,
         "limit": None,
         "lr": "3.0e-5",
         "weight_decay": 0.01,
-        "optimizer": "adamw8bit",
+        "optimizer": profile_parts["optimizer"],
         "image_size": 1024,
         "max_seq_len": 6144,
         "prompt_max_length": 512,
@@ -105,14 +147,15 @@ def build_config(grid, profile="l40s_1024_gc", prompt_variant="schema_example", 
         "lora_dropout": 0.05,
         "target_modules": "q_proj,v_proj,k_proj,o_proj,gate_proj,up_proj,down_proj",
         "torch_dtype": "bfloat16",
-        "gradient_checkpointing": True,
-        "gradient_checkpointing_fallback": "force",
+        "gradient_checkpointing": profile_parts["gradient_checkpointing"],
+        "gradient_checkpointing_fallback": profile_parts["gradient_checkpointing_fallback"],
         "answer_mask_mode": "all",
         "ignore_pad_labels": True,
         "checkpoint_every_epochs": 1,
         "early_stopping_patience": 3,
         "early_stopping_min_delta": 0.0,
-        "progress_every_steps": 25,
+        "validation_every_epochs": profile_parts["validation_every_epochs"],
+        "progress_every_steps": profile_parts["progress_every_steps"],
         "progress_bar": True,
         "seed": 0,
     }
@@ -124,7 +167,7 @@ def build_parser():
     parser.add_argument("--batch", action="store_true")
     parser.add_argument("--grids", default="4,8,16")
     parser.add_argument("--dataset", choices=sorted(DATASETS), default="hard64")
-    parser.add_argument("--profile", default="l40s_1024_gc")
+    parser.add_argument("--profile", default="h200_1024")
     parser.add_argument("--prompt-variant", default="schema_example")
     parser.add_argument("--kind", choices=["train", "probe", "sft"], default="train")
     parser.add_argument("--kinds", default="sft,train,probe")
@@ -138,10 +181,13 @@ def _parse_csv(value, cast=str):
 
 
 def _batch_output_name(dataset, grid, kind, profile):
+    profile = normalise_profile(profile)
     if kind == "sft":
         return f"mmu_sft_{dataset}_grid{grid}_vq_tokens.yaml"
     if kind == "train":
-        return f"mmu_lora_train_{dataset}_grid{grid}_vq_tokens_{profile}_adam8bit.yaml"
+        if profile == "l40s_1024_gc":
+            return f"mmu_lora_train_{dataset}_grid{grid}_vq_tokens_{profile}_adam8bit.yaml"
+        return f"mmu_lora_train_{dataset}_grid{grid}_vq_tokens_{profile}.yaml"
     if kind == "probe":
         return f"mmu_probe_lora_{dataset}_grid{grid}_vq_tokens_{profile}.yaml"
     raise ValueError(f"Unsupported kind: {kind}")

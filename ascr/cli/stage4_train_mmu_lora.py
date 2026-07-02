@@ -24,6 +24,7 @@ def build_parser():
     parser.add_argument("--checkpoint-every-epochs", type=int, default=None)
     parser.add_argument("--early-stopping-patience", type=int, default=None)
     parser.add_argument("--early-stopping-min-delta", type=float, default=None)
+    parser.add_argument("--validation-every-epochs", type=int, default=None)
     parser.add_argument("--progress-every-steps", type=int, default=None)
     parser.add_argument("--progress-bar", action=argparse.BooleanOptionalAction, default=None)
     parser.add_argument("--gradient-checkpointing", action=argparse.BooleanOptionalAction, default=None)
@@ -56,6 +57,7 @@ def main(argv=None):
         "checkpoint_every_epochs",
         "early_stopping_patience",
         "early_stopping_min_delta",
+        "validation_every_epochs",
         "progress_every_steps",
         "progress_bar",
         "gradient_checkpointing",

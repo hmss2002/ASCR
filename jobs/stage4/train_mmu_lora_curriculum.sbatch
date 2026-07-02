@@ -35,7 +35,7 @@ source "$ASCR_ENV/bin/activate"
 export PYTHON_BIN="$ASCR_ENV/bin/python"
 export LUMINA_REPO=${LUMINA_REPO:-third_party/Lumina-DiMOO}
 export LUMINA_MODEL_PATH=${LUMINA_MODEL_PATH:-models/lumina-dimoo}
-export PROFILE=${PROFILE:-l40s}
+export PROFILE=${PROFILE:-h200_1024}
 
 GRIDS_ARRAY=(4 8 16)
 export GRIDS="${GRIDS_ARRAY[$SLURM_ARRAY_TASK_ID]}"

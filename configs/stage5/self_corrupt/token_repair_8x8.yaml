@@ -7,7 +7,7 @@ token_grid_size: 64
 max_selected_cells: 8
 target_schema: repair_cells
 corruption_type: block_4x4_random_replace
-lora_path: outputs/stage4_token_repair/repair_cells_8x8/lora_l40s_1024px_gc_adam8bit/checkpoints/epoch_0001
+lora_path: outputs/stage4_token_repair/repair_cells_8x8/lora_h200_1024px_adamw
 max_new_tokens: 384
 
 generator:

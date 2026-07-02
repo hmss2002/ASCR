@@ -169,6 +169,11 @@ class LuminaNativeEngine:
         self._model.eval()
         self._vqvae = VQModel.from_pretrained(self.checkpoint_path, subfolder="vqvae").to(self.device)
 
+    def _inference_context(self):
+        if hasattr(self._torch, "inference_mode"):
+            return self._torch.inference_mode()
+        return self._torch.no_grad()
+
     # --------------------------------------------------------------- helpers
     def _grid_hw(self):
         h = self.image_size // VAE_SCALE
@@ -221,7 +226,8 @@ class LuminaNativeEngine:
         h, w = self._grid_hw()
         seq_len = h * w
         img_token_list = [MASK_TOKEN_ID] * seq_len
-        return self._sample(prompt, img_token_list, seed)
+        with self._inference_context():
+            return self._sample(prompt, img_token_list, seed)
 
     def reopen(self, baseline_vq_ids, selected_indices, prompt, seed=0):
         self._load()
@@ -230,20 +236,22 @@ class LuminaNativeEngine:
         for row, col in selected_indices:
             if 0 <= row < h and 0 <= col < w:
                 tokens[row * w + col] = MASK_TOKEN_ID
-        return self._sample(prompt, tokens, seed)
+        with self._inference_context():
+            return self._sample(prompt, tokens, seed)
 
     def decode_to(self, vq_ids, output_path):
         self._load()
         iu = self._lumina["image_utils"]
         device = next(self._model.parameters()).device
         codes = self._torch.tensor(vq_ids, device=device, dtype=self._torch.long).view(1, -1)
-        img = iu.decode_vq_to_image(
-            codes, str(output_path),
-            vae_ckpt=self.checkpoint_path,
-            image_height=self.image_size,
-            image_width=self.image_size,
-            vqvae=self._vqvae,
-        )
+        with self._inference_context():
+            img = iu.decode_vq_to_image(
+                codes, str(output_path),
+                vae_ckpt=self.checkpoint_path,
+                image_height=self.image_size,
+                image_width=self.image_size,
+                vqvae=self._vqvae,
+            )
         if output_path is not None:
             Path(output_path).parent.mkdir(parents=True, exist_ok=True)
             img.convert("RGB").save(str(output_path))
@@ -305,10 +313,11 @@ class LuminaNativeEngine:
         iw, ih = img.size
         vae_scale = 2 ** (len(self._vqvae.config.block_out_channels) - 1)
         _seq_len, _newline_every, token_grid_h, token_grid_w = iu.calculate_vq_params(ih, iw, vae_scale)
-        img_tokens = iu.encode_img_with_breaks(img, vqvae=self._vqvae)
-        img_tokens = iu.add_break_line(img_tokens, token_grid_h, token_grid_w, new_number=NEWLINE_TOKEN_ID)
+        with self._inference_context():
+            img_tokens = iu.encode_img_with_breaks(img, vqvae=self._vqvae)
+            img_tokens = iu.add_break_line(img_tokens, token_grid_h, token_grid_w, new_number=NEWLINE_TOKEN_ID)
 
-        return self._answer_from_mmu_tokens(question, img_tokens, max_new_tokens=max_new_tokens)
+            return self._answer_from_mmu_tokens(question, img_tokens, max_new_tokens=max_new_tokens)
 
     def answer_vq_tokens(self, question, vq_ids, max_new_tokens=384):
         """MMU text generation from existing Lumina VQ tokens.
@@ -325,4 +334,5 @@ class LuminaNativeEngine:
         if len(flat_tokens) != expected:
             raise ValueError(f"Expected {expected} VQ ids for {h}x{w}, got {len(flat_tokens)}")
         img_tokens = iu.add_break_line(flat_tokens, h, w, new_number=NEWLINE_TOKEN_ID)
-        return self._answer_from_mmu_tokens(question, img_tokens, max_new_tokens=max_new_tokens)
+        with self._inference_context():
+            return self._answer_from_mmu_tokens(question, img_tokens, max_new_tokens=max_new_tokens)

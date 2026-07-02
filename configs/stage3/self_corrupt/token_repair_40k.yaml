@@ -1,5 +1,5 @@
 prompt_source: configs/benchmarks/prompts/stage3_token_repair_prompts_10k.txt
-clean_manifest: outputs/stage3_token_repair/clean_tokens/clean_manifest.jsonl
+clean_manifest: outputs/stage3_token_repair/clean_tokens_h200_32x4/clean_manifest.jsonl
 output_dir: outputs/stage3_token_repair/datasets/repair_cells_40k
 positive_rows: 30000
 negative_rows: 10000

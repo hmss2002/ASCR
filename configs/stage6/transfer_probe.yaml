@@ -1,9 +1,10 @@
 mock: false
-grid_size: 4
+grid_size: 8
 token_grid_size: 64
-max_selected_cells: 4
+max_selected_cells: 8
 max_new_tokens: 384
-lora_path: outputs/stage4_self_corrupt/mmu_lora_hard64_curriculum/grid4/vq_tokens/lora_l40s_1024px_gc_adam8bit
+target_schema: repair_cells
+lora_path: outputs/stage4_token_repair/repair_cells_8x8/lora_h200_1024px_adamw
 
 generator:
   repo_path: third_party/Lumina-DiMOO

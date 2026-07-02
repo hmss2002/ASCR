@@ -1,4 +1,5 @@
 import argparse
+from collections import OrderedDict
 from datetime import datetime, timezone
 import importlib
 import json
@@ -22,6 +23,49 @@ SP = {
     "eoi": 126350,
     "padding": 126339,
 }
+
+_IMAGE_TOKEN_CACHE = OrderedDict()
+_TEXT_TOKEN_CACHE = OrderedDict()
+
+
+def _cache_limit(name, default):
+    try:
+        return max(0, int(os.environ.get(name, default)))
+    except (TypeError, ValueError):
+        return int(default)
+
+
+def _cache_get(cache, key):
+    if key not in cache:
+        return None
+    value = cache.pop(key)
+    cache[key] = value
+    return value
+
+
+def _cache_set(cache, key, value, limit):
+    if int(limit) <= 0:
+        return value
+    if key in cache:
+        cache.pop(key)
+    cache[key] = value
+    while len(cache) > int(limit):
+        cache.popitem(last=False)
+    return value
+
+
+def _clear_lumina_lora_caches():
+    _IMAGE_TOKEN_CACHE.clear()
+    _TEXT_TOKEN_CACHE.clear()
+
+
+def _lumina_lora_cache_report():
+    return {
+        "image_token_cache_size": len(_IMAGE_TOKEN_CACHE),
+        "image_token_cache_limit": _cache_limit("ASCR_LORA_IMAGE_CACHE_SIZE", 4096),
+        "text_token_cache_size": len(_TEXT_TOKEN_CACHE),
+        "text_token_cache_limit": _cache_limit("ASCR_LORA_TEXT_CACHE_SIZE", 8192),
+    }
 
 
 def _build_optimizer(torch, optimizer_name, parameters, lr, weight_decay):
@@ -314,6 +358,19 @@ def _progress_every_steps(args):
     return max(0, value)
 
 
+def _validation_every_epochs(args):
+    value = int(getattr(args, "validation_every_epochs", 1) or 0)
+    return max(0, value)
+
+
+def _should_validate_epoch(args, epoch, total_epochs):
+    if _validation_every_epochs(args) <= 0:
+        return False
+    if int(epoch) == int(total_epochs) - 1:
+        return True
+    return (int(epoch) + 1) % _validation_every_epochs(args) == 0
+
+
 def _iter_with_progress(iterable, total, desc, args, enabled=True):
     if not enabled or not _progress_bar_enabled(args):
         return iterable, None
@@ -354,31 +411,19 @@ def _log_training_progress(epoch, step, total_steps, loss, total_loss, count, st
 
 
 def _prepare_lumina_lora_batch(torch, tokenizer, add_break_line, row, args, device=None):
-    with open(row["user_image"], "rb") as handle:
-        image_payload = pickle.load(handle)
-    image_tokens, token_h, token_w = _center_crop_tokens(
-        image_payload["input_ids"],
-        image_payload["height"],
-        image_payload["width"],
-        args.image_size,
-    )
-    image_tokens = add_break_line(image_tokens, token_h, token_w, new_number=SP["newline"])
+    image_tokens = _prepared_image_tokens(row["user_image"], args.image_size, add_break_line)
     instruction = "<system>" + row["system_prompt"] + "</system>" + "<user>" + row["user_prompt"] + "</user>"
-    inst_ids = tokenizer(
+    inst_ids = _cached_token_ids(
+        tokenizer,
         instruction,
-        truncation=True,
-        max_length=int(args.prompt_max_length),
-        padding=False,
-        return_tensors="pt",
-    ).input_ids[0].tolist()
+        int(args.prompt_max_length),
+    )
     inst_ids = inst_ids[:-1] + [SP["boi"]] + image_tokens + [SP["eoi"]] + inst_ids[-1:]
-    answer_ids = tokenizer(
+    answer_ids = _cached_token_ids(
+        tokenizer,
         row["answer_text"] + "</answer>",
-        truncation=True,
-        max_length=int(args.answer_max_length),
-        padding=False,
-        return_tensors="pt",
-    ).input_ids[0].tolist()
+        int(args.answer_max_length),
+    )
     answer_ids, answer_labels = _mask_codes(answer_ids, mode=args.answer_mask_mode)
     pad_len = max(0, int(args.answer_max_length) - len(answer_ids))
     if args.ignore_pad_labels:
@@ -401,6 +446,40 @@ def _prepare_lumina_lora_batch(torch, tokenizer, add_break_line, row, args, devi
         torch.tensor([input_ids], dtype=torch.long, device=device),
         torch.tensor([labels], dtype=torch.long, device=device),
     )
+
+
+def _prepared_image_tokens(user_image, image_size, add_break_line):
+    key = (str(user_image), int(image_size), id(add_break_line))
+    limit = _cache_limit("ASCR_LORA_IMAGE_CACHE_SIZE", 4096)
+    cached = _cache_get(_IMAGE_TOKEN_CACHE, key) if limit > 0 else None
+    if cached is not None:
+        return cached
+    with open(user_image, "rb") as handle:
+        image_payload = pickle.load(handle)
+    image_tokens, token_h, token_w = _center_crop_tokens(
+        image_payload["input_ids"],
+        image_payload["height"],
+        image_payload["width"],
+        image_size,
+    )
+    image_tokens = add_break_line(image_tokens, token_h, token_w, new_number=SP["newline"])
+    return _cache_set(_IMAGE_TOKEN_CACHE, key, image_tokens, limit)
+
+
+def _cached_token_ids(tokenizer, text, max_length):
+    key = (id(tokenizer), str(text), int(max_length))
+    limit = _cache_limit("ASCR_LORA_TEXT_CACHE_SIZE", 8192)
+    cached = _cache_get(_TEXT_TOKEN_CACHE, key) if limit > 0 else None
+    if cached is not None:
+        return cached
+    ids = tokenizer(
+        text,
+        truncation=True,
+        max_length=int(max_length),
+        padding=False,
+        return_tensors="pt",
+    ).input_ids[0].tolist()
+    return _cache_set(_TEXT_TOKEN_CACHE, key, ids, limit)
 
 
 def _is_tensor_like(value):
@@ -582,12 +661,14 @@ def train_lumina_lora_smoke(args):
         if progress_bar is not None:
             progress_bar.close()
         train_loss = total / max(1, len(rows))
-        val_loss = _mean_lora_loss(torch, model, tokenizer, add_break_line, val_rows, args) if val_rows else None
+        should_validate = bool(val_rows) and _should_validate_epoch(args, epoch, int(args.epochs))
+        val_loss = _mean_lora_loss(torch, model, tokenizer, add_break_line, val_rows, args) if should_validate else None
         elapsed_s = time.monotonic() - started_at
         epoch_summaries.append({
             "epoch": epoch,
             "train_loss": train_loss,
             "val_loss": val_loss,
+            "validated": bool(should_validate),
             "elapsed_s": elapsed_s,
             "samples_per_s": len(rows) / max(elapsed_s, 1e-9),
         })
@@ -648,11 +729,13 @@ def train_lumina_lora_smoke(args):
         "device_map": str(args.device_map),
         "gradient_checkpointing": bool(args.gradient_checkpointing),
         "gradient_checkpointing_report": gradient_checkpointing_report,
+        "cache_report": _lumina_lora_cache_report(),
         "lora_parameter_report": lora_parameter_report,
         "resume_from_adapter": str(args.resume_from_adapter) if args.resume_from_adapter else None,
         "checkpoint_every_epochs": int(args.checkpoint_every_epochs or 0),
         "early_stopping_patience": int(args.early_stopping_patience or 0),
         "early_stopping_min_delta": float(args.early_stopping_min_delta),
+        "validation_every_epochs": _validation_every_epochs(args),
         "progress_bar": bool(getattr(args, "progress_bar", True)),
         "progress_every_steps": _progress_every_steps(args),
         "stopped_early": stopped_early,
@@ -693,6 +776,12 @@ def build_parser():
     parser.add_argument("--checkpoint-every-epochs", type=int, default=1)
     parser.add_argument("--early-stopping-patience", type=int, default=3)
     parser.add_argument("--early-stopping-min-delta", type=float, default=0.0)
+    parser.add_argument(
+        "--validation-every-epochs",
+        type=int,
+        default=1,
+        help="Run validation every N epochs and always on the final epoch; use 0 to disable validation.",
+    )
     parser.add_argument(
         "--progress-every-steps",
         type=int,
